@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BurstGrid &mdash; GitHub Actions on Firecracker microVMs</title>
-  <meta name="description" content="Open-source self-hosted runner platform. Each GitHub Actions job boots into a dedicated Firecracker microVM. Resource-aware dispatch, per-tier autoscaling, full isolation." />
+  <meta name="description" content="Open-source self-hosted runner platform for GitHub Actions. Every job boots into a dedicated Firecracker microVM in under 200ms — separate kernel, separate Docker daemon, destroyed on exit. Runs on your own EC2 bare-metal fleet." />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -194,7 +194,7 @@
 <body>
 
 <div class="wip-bar">
-  <strong>Work in progress.</strong> Not tested end-to-end. APIs and config schema will change before a stable release.
+  <strong>Alpha.</strong> Not production-ready &mdash; APIs and config schema will change. Contributions and feedback welcome.
 </div>
 
 <div class="nav-wrap">
@@ -205,8 +205,8 @@
     </a>
     <div class="nav-right">
       <a href="#how-it-works" class="nav-link">How it works</a>
-      <a href="#get-started" class="nav-link">Get started</a>
-      <a href="#features" class="nav-link">Features</a>
+      <a href="#get-started" class="nav-link">Set it up</a>
+      <a href="#features" class="nav-link">Why BurstGrid</a>
       <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener" class="gh-btn">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
@@ -219,14 +219,14 @@
 <div class="section" style="padding-top:88px;padding-bottom:88px;">
   <div class="hero-grid">
     <div>
-      <div class="wip-pill">Alpha &mdash; work in progress</div>
-      <h1>GitHub Actions jobs,<br/>each in its own <em>microVM</em></h1>
+      <div class="wip-pill">Open source &middot; Alpha</div>
+      <h1>One job.<br/>One microVM.<br/><em>Nothing shared.</em></h1>
       <p class="hero-sub">
-        BurstGrid is an open-source self-hosted runner platform. A central TypeScript scheduler receives GitHub webhooks, dispatches jobs to a fleet of EC2 bare-metal hosts over SSE, and each job boots into a dedicated Firecracker VM in under 200&nbsp;ms&mdash;then disappears.
+        BurstGrid dispatches every GitHub Actions job to a fresh Firecracker microVM on your own EC2 bare-metal fleet. Separate kernel, separate Docker daemon, separate everything &mdash; gone the moment the job completes. No shared state. No secret bleed. No per-minute GitHub pricing.
       </p>
       <div class="hero-actions">
-        <a href="https://github.com/gbudjeakp/burstgrid" class="btn btn-accent" target="_blank" rel="noopener">View on GitHub</a>
-        <a href="#how-it-works" class="btn btn-ghost">See the flow</a>
+        <a href="#get-started" class="btn btn-accent">Set it up</a>
+        <a href="https://github.com/gbudjeakp/burstgrid" class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
       </div>
     </div>
 
@@ -237,18 +237,17 @@
         <span class="dot" style="background:#1a2e1e;"></span>
       </div>
       <div class="terminal-body">
-<span class="t-p">$</span> <span class="t-cmd">pnpm dev:scheduler</span>
-<span class="t-inf">[scheduler] listening on :8080</span>
-<span class="t-inf">[scheduler] autoscaler started &mdash; 3 fleets</span>
+<span class="t-p">$</span> <span class="t-cmd">BURSTGRID_MODE=simulate node --import tsx/esm bin/scheduler.ts</span>
+<span class="t-inf">{"msg":"Server listening at http://0.0.0.0:8080"}</span>
+<span class="t-inf">{"msg":"autoscaler started &mdash; 2 fleets"}</span>
 &nbsp;
-<span class="t-cm"># PR opened &rarr; GitHub fires workflow_job webhook</span>
-<span class="t-ok">[webhook]  queued &mdash; acme/monorepo run#9821</span>
-<span class="t-ok">[router]   &rarr; worker-i-0a3f  labels=[linux,large]</span>
+<span class="t-cm"># PR opened on acme/api &rarr; workflow_job webhook arrives</span>
+<span class="t-ok">{"msg":"job enqueued", "repo":"acme/api", "tier":"standard", "size":"large"}</span>
+<span class="t-ok">{"msg":"dispatched", "worker":"i-0a3f2b91", "latencyMs":3}</span>
 &nbsp;
-<span class="t-cm"># worker receives job over SSE, boots VM</span>
-<span class="t-ok">[agent]    booting VM slot-2  (4 vCPU / 4 GiB)</span>
-<span class="t-ok">[agent]    VM ready in 143ms &mdash; runner registered</span>
-<span class="t-ok">[agent]    job completed in 2m 14s &mdash; VM destroyed</span>
+<span class="t-cm"># worker boots VM, runner self-registers with GitHub</span>
+<span class="t-ok">{"msg":"VM ready", "slot":2, "bootMs":147, "vcpus":4, "memMiB":4096}</span>
+<span class="t-ok">{"msg":"job completed", "durationMs":134210, "slot":2, "vmDestroyed":true}</span>
       </div>
     </div>
   </div>
@@ -258,17 +257,20 @@
 
 <!-- How it works -->
 <div class="section section-border" id="how-it-works">
-  <div class="label">How it works</div>
-  <h2>From pull request to runner in four hops</h2>
-  <p class="section-desc">What happens from the moment a developer opens a PR to the moment a self-hosted runner picks up the job.</p>
+  <div class="label">The flow</div>
+  <h2>Webhook to running job in four hops</h2>
+  <p class="section-desc">No polling. No message broker. No Kubernetes. Just a webhook, a queue, a persistent SSE connection, and a VM that exists for exactly as long as the job does.</p>
 
   <div class="flow">
     <div class="flow-step">
       <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">GitHub queues the workflow job and fires a webhook</div>
+        <div class="flow-title">GitHub fires a <code>workflow_job</code> webhook</div>
         <div class="flow-body">
-          When the PR is opened, GitHub evaluates <code>.github/workflows/ci.yml</code>. Any job with <code>runs-on: [self-hosted, ...]</code> is set to <strong>queued</strong> and GitHub immediately POSTs a <code>workflow_job</code> event to the webhook URL configured in the BurstGrid GitHub App.
+          The moment a workflow job is queued, GitHub POSTs a signed <code>workflow_job</code> event to your scheduler.
+          BurstGrid verifies the <code>X-Hub-Signature-256</code> HMAC before doing anything else.
+          If the signature doesn&rsquo;t match, the request is dropped. If the queue is full, it returns <code>503</code> &mdash;
+          GitHub will retry the delivery for up to <strong>72 hours</strong>, so nothing is lost.
         </div>
         <div class="snippet">
           <div class="snippet-tab">POST /v1/webhook &nbsp;&mdash;&nbsp; X-GitHub-Event: workflow_job</div>
@@ -289,9 +291,13 @@
     <div class="flow-step">
       <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Scheduler verifies the payload, mints a runner token, enqueues the job</div>
+        <div class="flow-title">Scheduler mints a runner token and enqueues the job</div>
         <div class="flow-body">
-          BurstGrid verifies the <code>X-Hub-Signature-256</code> header using the webhook secret from the GitHub App. It then authenticates as the App installation and calls the GitHub Runners API to generate a <strong>one-time runner registration token</strong> for the target repo. The job and token go into a priority queue partitioned by tier. If the queue exceeds <code>maxQueueDepth</code>, the scheduler returns <code>503</code>&mdash;GitHub retries for up to 72&nbsp;hours.
+          BurstGrid authenticates as your GitHub App installation and calls the Runners API to generate a
+          <strong>one-time registration token</strong> for the target repo. The token and job metadata go into a
+          priority queue partitioned by tier &mdash; <code>critical</code> jobs always jump ahead of <code>standard</code> ones.
+          Token generation is protected by a circuit breaker: after 5 consecutive GitHub API failures,
+          the scheduler opens the circuit and returns <code>503</code> until the API recovers.
         </div>
         <div class="snippet">
           <div class="snippet-tab">POST /repos/acme/monorepo/actions/runners/registration-token</div>
@@ -307,9 +313,12 @@
     <div class="flow-step">
       <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Scheduler dispatches the assignment to a worker over SSE</div>
+        <div class="flow-title">Router matches the job to a worker and pushes over SSE</div>
         <div class="flow-body">
-          The router checks each connected worker's free vCPU and RAM against the job's size label (<code>burstgrid:size=large</code> &rarr; 4&nbsp;vCPU / 4&nbsp;GiB). The first worker with matching capabilities and enough headroom receives the job as a JSON event on its persistent <code>GET /v1/workers/:id/stream</code> SSE connection. No polling, no database.
+          The router checks the job&rsquo;s size label (<code>burstgrid:size=large</code> &rarr; 4&nbsp;vCPU / 4&nbsp;GiB) against every connected
+          worker&rsquo;s free resources and capability labels. The first worker that fits gets the assignment pushed
+          as a JSON event over its persistent SSE connection &mdash; the same open HTTP response it&rsquo;s been holding
+          since it registered. No database read. No poll. Dispatch latency is typically under 5&nbsp;ms.
         </div>
         <div class="snippet">
           <div class="snippet-tab">SSE &rarr; worker-i-0a3f2b &nbsp;(persistent connection)</div>
@@ -327,9 +336,13 @@
     <div class="flow-step">
       <div class="flow-left"><div class="flow-num on">4</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Worker boots a Firecracker microVM, runner self-registers, job runs</div>
+        <div class="flow-title">Worker boots a Firecracker VM; runner picks up the job</div>
         <div class="flow-body">
-          The agent calls the Firecracker Unix socket API to boot a microVM with the requested resources. The runner token and labels are passed as kernel boot arguments&mdash;the Actions runner inside the VM reads <code>/proc/cmdline</code>, registers with GitHub, and picks up the queued job. On completion the VM is terminated, the slot freed, and the worker sends a heartbeat back with updated resource counts. The rootfs is never reused.
+          The worker agent calls the Firecracker Unix socket API to boot a microVM with exactly the requested
+          vCPU and RAM. The runner token and size labels are injected as kernel boot args &mdash; the init script
+          inside the VM reads <code>/proc/cmdline</code>, calls <code>./config.sh --ephemeral</code> to register with GitHub,
+          then <code>./run.sh</code> to execute the job. When it exits, the VM is killed, the disk is discarded,
+          and the slot is freed. The rootfs is <strong>never reused</strong>.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Firecracker API &rarr; PUT /boot-source</div>
@@ -379,8 +392,9 @@
       <div class="flow-right">
         <div class="flow-title">Deploy the scheduler</div>
         <div class="flow-body">
-          The scheduler is a Node.js process. Run it on any standard EC2 instance (<code>t3.small</code> is enough).
-          It needs outbound HTTPS to <code>api.github.com</code> and inbound access on port 8080 from GitHub&rsquo;s webhook IPs.
+          A single Node.js process. Runs on any standard EC2 instance &mdash; <code>t3.small</code> handles thousands of webhooks per minute.
+          It needs outbound HTTPS to <code>api.github.com</code> and inbound port 8080 from GitHub&rsquo;s webhook IP ranges.
+          No database required to start; add Redis later if you need queue durability across restarts.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Docker</div>
@@ -401,10 +415,11 @@ docker run -p 8080:8080 \
       <div class="flow-right">
         <div class="flow-title">Build your rootfs image</div>
         <div class="flow-body">
-          Each Firecracker VM boots from a read-only ext4 rootfs containing the GitHub Actions runner binary.
-          Your init script reads <code>RUNNER_TOKEN</code> and <code>RUNNER_LABELS</code> from <code>/proc/cmdline</code>,
-          calls <code>./config.sh</code> to register, then <code>./run.sh</code> to execute the job.
-          Optionally read <code>REGISTRY_MIRROR</code> to configure Docker&rsquo;s pull-through cache.
+          Each Firecracker VM boots from a small ext4 image you build once and store in S3 or on each host.
+          Start from a minimal Linux base (Amazon Linux 2 or Ubuntu 22.04), install Docker and the GitHub Actions runner binary,
+          then write an init script that reads <code>RUNNER_TOKEN</code>, <code>RUNNER_LABELS</code>, and optionally
+          <code>REGISTRY_MIRROR</code> from <code>/proc/cmdline</code>.
+          The scheduler injects these at boot &mdash; your init script just reads them and starts the runner.
         </div>
         <div class="snippet">
           <div class="snippet-tab">/etc/init.d/burstgrid-runner (rootfs init script)</div>
@@ -431,9 +446,10 @@ cd /opt/actions-runner
       <div class="flow-right">
         <div class="flow-title">Deploy worker agents on bare-metal EC2</div>
         <div class="flow-body">
-          Workers must run on <strong>bare-metal instances</strong> (e.g. <code>m7i.metal-24xl</code>, <code>m6g.metal</code>)
-          because Firecracker requires KVM. Standard virtualized instances can&rsquo;t run nested VMs.
-          Copy the rootfs image and kernel to each host, then run the worker agent.
+          Firecracker requires KVM, so workers must run on <strong>bare-metal instances</strong> &mdash;
+          <code>m7i.metal-24xl</code>, <code>m6g.metal</code>, and similar. Standard virtualized instances can&rsquo;t run nested VMs.
+          Copy the rootfs image and kernel to each host, set the environment variables below, and start the agent.
+          The agent registers itself with the scheduler, opens an SSE stream, and starts accepting jobs immediately.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Worker agent environment</div>
@@ -456,8 +472,9 @@ cd /opt/actions-runner
         <div class="flow-title">Point your workflows at BurstGrid</div>
         <div class="flow-body">
           Add <code>self-hosted</code> plus a <code>burstgrid:size=</code> label to any job&rsquo;s <code>runs-on</code>.
-          No other workflow changes needed. GPU jobs add a <code>gpu</code> label and are routed to
-          workers that advertise the <code>gpu</code> capability.
+          That&rsquo;s the only workflow change required. The scheduler reads the labels, picks the right worker,
+          and boots a VM sized to match. GPU jobs add a <code>gpu</code> label and land exclusively on
+          workers that advertise that capability &mdash; no routing config needed on your end.
         </div>
         <div class="snippet">
           <div class="snippet-tab">.github/workflows/ci.yml</div>
@@ -483,45 +500,45 @@ cd /opt/actions-runner
 
 <!-- Features -->
 <div class="section section-border" id="features">
-  <div class="label">What's inside</div>
-  <h2>Built for teams who've hit the ceiling</h2>
-  <p class="section-desc">GitHub-hosted runners top out at 4&nbsp;vCPU / 16&nbsp;GiB. BurstGrid hands you the metal.</p>
+  <div class="label">Why BurstGrid</div>
+  <h2>Container isolation isn't enough</h2>
+  <p class="section-desc">When jobs handle secrets, run privileged operations, or modify the Docker daemon, sharing a kernel is a liability. VM-per-job removes the class of problem entirely.</p>
   <div class="feat-grid">
     <div class="feat-cell">
-      <h3>Firecracker isolation</h3>
-      <p>Every job gets its own kernel. No shared namespaces, no container breakout surface. The rootfs is discarded when the runner exits.</p>
+      <h3>Separate kernel per job</h3>
+      <p>Not a container. Not a namespace. A real Firecracker microVM with its own kernel, booted in under 200&nbsp;ms and destroyed on exit. The disk never touches the next job.</p>
     </div>
     <div class="feat-cell">
-      <h3>SSE dispatch</h3>
-      <p>Workers hold a persistent Server-Sent Events connection. Jobs arrive the instant they&rsquo;re queued&mdash;no polling, no long-poll timeouts, no extra infra.</p>
+      <h3>Sub-5 ms dispatch</h3>
+      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued &mdash; no polling, no broker, no cold-start reconnect per job.</p>
     </div>
     <div class="feat-cell">
-      <h3>Resource-aware routing</h3>
-      <p>Sizes from <code>small</code> (1&nbsp;vCPU / 1&nbsp;GiB) to <code>8xlarge</code> (64&nbsp;vCPU / 128&nbsp;GiB). Jobs only dispatch to workers with enough free headroom. No overcommit.</p>
+      <h3>Right-sized, not over-provisioned</h3>
+      <p>Seven sizes from <code>small</code> (1&nbsp;vCPU) to <code>8xlarge</code> (64&nbsp;vCPU&nbsp;/&nbsp;128&nbsp;GiB). Jobs only dispatch to workers with the headroom to match. No overcommit, ever.</p>
     </div>
     <div class="feat-cell">
-      <h3>GPU &amp; bare-metal routing</h3>
-      <p>Label jobs with <code>gpu</code> and register GPU hosts in <code>process</code> mode. The scheduler routes exclusively to workers advertising that capability&mdash;no Firecracker needed on GPU hosts.</p>
+      <h3>GPU jobs go straight to metal</h3>
+      <p>Register GPU hosts in <code>process</code> mode with a <code>gpu</code> capability label. Jobs that need GPU land exclusively on those hosts &mdash; Firecracker isn&rsquo;t in the critical path.</p>
     </div>
     <div class="feat-cell">
-      <h3>Registry pull-through cache</h3>
-      <p>Point workers at a local Docker registry mirror. Pulled layers cache on the host and are reused across all VMs. First pull hits Docker Hub; every job after that is served at LAN speed.</p>
+      <h3>Docker pulls that don&rsquo;t start from zero</h3>
+      <p>Point workers at a local registry mirror. The first VM pulls from Docker Hub and caches on the host. Every VM after that is served at LAN speed. ECR pull-through cache works too.</p>
     </div>
     <div class="feat-cell">
-      <h3>Per-tier autoscaling</h3>
-      <p>Define separate EC2 launch templates per fleet. Each scales independently against its own queue threshold. Workers drain naturally&mdash;no forced termination.</p>
+      <h3>Scale the right fleet, not all of them</h3>
+      <p>Separate EC2 launch templates per size tier. Each one scales independently against its own queue depth. Workers drain naturally &mdash; no forced termination mid-job.</p>
     </div>
     <div class="feat-cell">
-      <h3>Circuit breaker</h3>
-      <p>GitHub API calls trip after 5 consecutive failures, open for 30&nbsp;s. Returns <code>503</code> so GitHub keeps retrying for up to 72&nbsp;hours&mdash;no events lost.</p>
+      <h3>GitHub goes down. Your queue doesn&rsquo;t.</h3>
+      <p>The circuit breaker trips after 5 consecutive API failures and returns <code>503</code> &mdash; GitHub retries webhook deliveries for up to 72&nbsp;hours. No events are dropped.</p>
     </div>
     <div class="feat-cell">
-      <h3>Optional backends</h3>
-      <p>Attach Redis for queue durability and worker persistence, SQS as an additional job source, and DynamoDB for an append-only job history log. All optional, all env-var configured.</p>
+      <h3>Durable when you need it</h3>
+      <p>Attach Redis for queue persistence and worker state, SQS as a webhook alternative, or DynamoDB for an append-only job history log. All opt-in, all env-var configured.</p>
     </div>
     <div class="feat-cell">
-      <h3>OpenTelemetry metrics</h3>
-      <p>Queue depth, dispatch latency, VM boot time, job duration&mdash;all OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
+      <h3>Metrics from day one</h3>
+      <p>Queue depth, dispatch latency, VM boot time, job duration &mdash; all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
     </div>
   </div>
 </div>
@@ -530,7 +547,7 @@ cd /opt/actions-runner
 
 <div class="footer-wrap">
   <footer>
-    <span>BurstGrid &mdash; MIT License</span>
+    <span>BurstGrid &mdash; open source, MIT License</span>
     <div class="footer-links">
       <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/gbudjeakp/burstgrid/issues" target="_blank" rel="noopener">Issues</a>

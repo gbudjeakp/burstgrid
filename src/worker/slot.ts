@@ -15,6 +15,8 @@ export interface SlotConfig {
   imageDir?: string;
   /** Runner executable for 'process' mode (bare-metal / GPU hosts). */
   runnerPath?: string;
+  /** Docker registry mirror URL passed to VMs as a boot arg (e.g. http://10.0.0.1:5000). */
+  registryMirror?: string;
 }
 
 export class Slot {
@@ -39,6 +41,7 @@ export class Slot {
         vcpus,
         runnerToken,
         runnerLabels: labels.join(','),
+        registryMirror: this.cfg.registryMirror,
       };
       this.vm = new FirecrackerVM(vmCfg);
       await this.vm.boot();

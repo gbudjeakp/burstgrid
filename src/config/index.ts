@@ -9,6 +9,10 @@ export interface BurstGridConfig {
     rateLimitMax?: number;
     rateLimitWindow?: string;
   };
+  worker?: {
+    /** Docker pull-through registry mirror URL. Env: BURSTGRID_REGISTRY_MIRROR */
+    registryMirror?: string;
+  };
   autoscaler?: {
     enabled?: boolean;
     evaluationIntervalSec?: number;

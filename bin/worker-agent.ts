@@ -1,5 +1,8 @@
 import os from 'node:os';
 import { WorkerAgent } from '../src/worker/agent.js';
+import { loadConfig } from '../src/config/index.js';
+
+const cfg = loadConfig();
 
 const {
   BURSTGRID_SCHEDULER_URL = 'http://localhost:8080',
@@ -15,6 +18,8 @@ const {
   BURSTGRID_MODE = 'firecracker',
   BURSTGRID_IMAGE_DIR,
   BURSTGRID_RUNNER_PATH,
+  // Pull-through registry mirror — set to http://<host>:5000 to cache Docker Hub pulls
+  BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
 } = process.env;
 
 const controller = new AbortController();
@@ -33,6 +38,7 @@ const agent = new WorkerAgent({
   mode: BURSTGRID_MODE as 'firecracker' | 'process' | 'simulate',
   imageDir: BURSTGRID_IMAGE_DIR,
   runnerPath: BURSTGRID_RUNNER_PATH,
+  registryMirror: BURSTGRID_REGISTRY_MIRROR,
 });
 
 try {

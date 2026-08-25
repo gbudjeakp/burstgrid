@@ -3,7 +3,7 @@ import { JobQueue } from '../queue.js';
 import { ExecutionTier } from '../../types/index.js';
 import type { Job } from '../../types/index.js';
 
-function makeJob(tier: ExecutionTier, id = crypto.randomUUID()): Job {
+function makeJob(tier: ExecutionTier, id: string = crypto.randomUUID()): Job {
   return { id, owner: 'org', repo: 'repo', runId: 1, labels: [], tier, queuedAt: new Date(), runnerToken: 't' };
 }
 

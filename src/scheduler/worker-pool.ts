@@ -1,5 +1,6 @@
 import type { ServerResponse } from 'node:http';
 import type { WorkerRegistration, WorkerHeartbeat, JobAssignment } from '../types/index.js';
+import type { RedisWorkerRegistryBackend } from '../backends/redis.js';
 
 const STALE_TIMEOUT_MS = 30_000;
 
@@ -14,6 +15,12 @@ interface WorkerState extends WorkerRegistration {
 export class WorkerPool {
   private readonly workers = new Map<string, WorkerState>();
   private readonly reapTimer: NodeJS.Timeout;
+  private redisWorkers?: RedisWorkerRegistryBackend;
+
+  /** Attach a Redis backend to persist worker metadata (survives scheduler restarts). */
+  attachRedis(backend: RedisWorkerRegistryBackend): void {
+    this.redisWorkers = backend;
+  }
 
   constructor() {
     this.reapTimer = setInterval(() => this.reapStale(), 15_000);
@@ -22,28 +29,59 @@ export class WorkerPool {
 
   register(reg: WorkerRegistration): void {
     const existing = this.workers.get(reg.workerId);
-    this.workers.set(reg.workerId, {
+    const state: WorkerState = {
       ...reg,
-      freeSlots: reg.totalSlots,
-      freeVcpus: reg.totalVcpus,
+      freeSlots:     reg.totalSlots,
+      freeVcpus:     reg.totalVcpus,
       freeMemoryMiB: reg.totalMemoryMiB,
-      lastSeen: Date.now(),
-      stream: existing?.stream ?? null, // preserve stream across re-registrations
-    });
+      lastSeen:      Date.now(),
+      stream:        existing?.stream ?? null,
+    };
+    this.workers.set(reg.workerId, state);
+    void this.redisWorkers?.upsert({
+      workerId:       state.workerId,
+      instanceId:     state.instanceId,
+      region:         state.region,
+      availabilityZone: state.availabilityZone,
+      totalSlots:     state.totalSlots,
+      totalVcpus:     state.totalVcpus,
+      totalMemoryMiB: state.totalMemoryMiB,
+      capabilities:   state.capabilities,
+      freeSlots:      state.freeSlots,
+      freeVcpus:      state.freeVcpus,
+      freeMemoryMiB:  state.freeMemoryMiB,
+      lastSeen:       state.lastSeen,
+    }).catch(err => console.error('[pool] Redis worker upsert error:', err));
   }
 
   unregister(workerId: string): void {
     this.workers.delete(workerId);
+    void this.redisWorkers?.remove(workerId).catch(err =>
+      console.error('[pool] Redis worker remove error:', err),
+    );
   }
 
   heartbeat(hb: WorkerHeartbeat): void {
     const w = this.workers.get(hb.workerId);
-    if (w) {
-      w.freeSlots = hb.freeSlots;
-      w.freeVcpus = hb.freeVcpus;
-      w.freeMemoryMiB = hb.freeMemoryMiB;
-      w.lastSeen = Date.now();
-    }
+    if (!w) return;
+    w.freeSlots     = hb.freeSlots;
+    w.freeVcpus     = hb.freeVcpus;
+    w.freeMemoryMiB = hb.freeMemoryMiB;
+    w.lastSeen      = Date.now();
+    void this.redisWorkers?.upsert({
+      workerId:       w.workerId,
+      instanceId:     w.instanceId,
+      region:         w.region,
+      availabilityZone: w.availabilityZone,
+      totalSlots:     w.totalSlots,
+      totalVcpus:     w.totalVcpus,
+      totalMemoryMiB: w.totalMemoryMiB,
+      capabilities:   w.capabilities,
+      freeSlots:      w.freeSlots,
+      freeVcpus:      w.freeVcpus,
+      freeMemoryMiB:  w.freeMemoryMiB,
+      lastSeen:       w.lastSeen,
+    }).catch(err => console.error('[pool] Redis heartbeat sync error:', err));
   }
 
   hasWorker(workerId: string): boolean {

@@ -9,6 +9,7 @@ import { registerWebhookRoute } from '../src/github/webhook.js';
 import { Autoscaler, type TierFleet } from '../src/fleet/autoscaler.js';
 import { loadConfig } from '../src/config/index.js';
 import { initTelemetry, registerSchedulerObservers } from '../src/telemetry/index.js';
+import { createBackends } from '../src/backends/index.js';
 
 await initTelemetry('burstgrid-scheduler');
 
@@ -27,11 +28,27 @@ const {
   GITHUB_TOKEN,
 } = process.env;
 
+// Env vars override YAML config for backend connection strings
+if (cfg.backends?.redis?.url)     process.env.BURSTGRID_REDIS_URL          ??= cfg.backends.redis.url;
+if (cfg.backends?.sqs?.queueUrl)  process.env.BURSTGRID_SQS_QUEUE_URL      ??= cfg.backends.sqs.queueUrl;
+if (cfg.backends?.sqs?.region)    process.env.BURSTGRID_SQS_REGION          ??= cfg.backends.sqs.region;
+if (cfg.backends?.dynamodb?.tableName) process.env.BURSTGRID_DYNAMODB_TABLE ??= cfg.backends.dynamodb.tableName;
+if (cfg.backends?.dynamodb?.region)    process.env.BURSTGRID_DYNAMODB_REGION??= cfg.backends.dynamodb.region;
+
 const maxQueueDepth = Number(BURSTGRID_MAX_QUEUE_DEPTH ?? cfg.scheduler?.maxQueueDepth ?? 500);
 
 const queue = new JobQueue();
-const pool = new WorkerPool();
-new Router(queue, pool);
+const pool  = new WorkerPool();
+const router = new Router(queue, pool);
+
+const backends = createBackends(queue);
+
+if (backends.redisQueue)   queue.attachRedis(backends.redisQueue);
+if (backends.redisWorkers) pool.attachRedis(backends.redisWorkers);
+if (backends.jobHistory)   router.attachHistory(backends.jobHistory);
+
+// Restore any jobs that were queued before the last restart
+await queue.restoreFromRedis();
 
 registerSchedulerObservers(
   () => queue.depth,
@@ -83,6 +100,7 @@ else console.info('[scheduler] autoscaler disabled via config');
 const shutdown = async () => {
   autoscaler.stop();
   await app.close();
+  await backends.close();
   process.exit(0);
 };
 process.once('SIGINT', shutdown);

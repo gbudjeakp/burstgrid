@@ -3,7 +3,7 @@ import {
   ReceiveMessageCommand,
   DeleteMessageCommand,
 } from '@aws-sdk/client-sqs';
-import { ExecutionTier, type Job } from '../types/index.js';
+import { type Job } from '../types/index.js';
 import { selectTier } from '../scheduler/router.js';
 import type { JobQueue } from '../scheduler/queue.js';
 

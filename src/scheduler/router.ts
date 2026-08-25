@@ -2,8 +2,8 @@ import type { JobQueue } from './queue.js';
 import type { WorkerPool } from './worker-pool.js';
 import { ExecutionTier, vmSizeFromLabels } from '../types/index.js';
 import { recordJobDispatched } from '../telemetry/index.js';
+import type { IJobHistoryBackend } from '../backends/types.js';
 
-// Warn about jobs that have been queued longer than this without dispatch
 const STALE_JOB_WARN_MS = 10 * 60 * 1_000;
 const TIER_LABEL_MAP: [string, ExecutionTier][] = [
   ['burstgrid:critical', ExecutionTier.Critical],
@@ -20,6 +20,12 @@ export function selectTier(labels: string[]): ExecutionTier {
 
 export class Router {
   private readonly timer: NodeJS.Timeout;
+  private jobHistory?: IJobHistoryBackend;
+
+  /** Attach a job history backend (e.g. DynamoDB) to record dispatch events. */
+  attachHistory(backend: IJobHistoryBackend): void {
+    this.jobHistory = backend;
+  }
 
   constructor(
     private readonly queue: JobQueue,
@@ -66,6 +72,18 @@ export class Router {
       }
 
       recordJobDispatched(job.tier, job.queuedAt);
+      void this.jobHistory?.record({
+        jobId:             job.id,
+        status:            'dispatched',
+        workerId:          workerId,
+        owner:             job.owner,
+        repo:              job.repo,
+        runId:             job.runId,
+        tier:              job.tier,
+        labels:            job.labels,
+        timestamp:         new Date(),
+        dispatchLatencyMs: Date.now() - job.queuedAt.getTime(),
+      }).catch(err => console.error('[router] history record error:', err));
     }
   }
 }

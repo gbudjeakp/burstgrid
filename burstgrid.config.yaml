@@ -42,3 +42,27 @@ autoscaler:
       maxWorkers: 5
       slotsPerWorker: 1
       scaleUpThreshold: 1
+
+# ── Optional backends ──────────────────────────────────────────────────────────
+# All fields are also settable via env vars (env takes precedence).
+
+backends:
+  # Redis (ElastiCache) — enables job queue durability and worker registry persistence.
+  # If set, the queue survives scheduler restarts and workers are tracked in Redis.
+  # Env: BURSTGRID_REDIS_URL
+  # redis:
+  #   url: redis://your-elasticache.abc123.use1.cache.amazonaws.com:6379
+
+  # SQS — poll a queue for incoming jobs in addition to (or instead of) webhooks.
+  # Useful for fan-out architectures where GitHub webhooks land in SQS via Lambda or SNS.
+  # Env: BURSTGRID_SQS_QUEUE_URL, BURSTGRID_SQS_REGION
+  # sqs:
+  #   queueUrl: https://sqs.us-east-1.amazonaws.com/123456789012/burstgrid-jobs
+  #   region: us-east-1
+
+  # DynamoDB — append-only job event log (queued, dispatched, completed, failed).
+  # Table schema: PK=JOB#<id> (S), SK=<ISO timestamp>#<status> (S)
+  # Env: BURSTGRID_DYNAMODB_TABLE, BURSTGRID_DYNAMODB_REGION
+  # dynamodb:
+  #   tableName: burstgrid-jobs
+  #   region: us-east-1

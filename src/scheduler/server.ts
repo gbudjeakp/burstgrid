@@ -61,7 +61,7 @@ export function registerSchedulerRoutes(
   app.post<{ Params: { id: string }; Body: JobUpdate }>(
     '/v1/jobs/:id/status',
     async (req, reply) => {
-      req.log.info({ jobId: req.params.id, ...req.body }, 'job status update');
+      req.log.info({ jobId: req.params.id, status: req.body.status, workerId: req.body.workerId }, 'job status update');
       return reply.status(200).send();
     },
   );

@@ -136,7 +136,7 @@ describe('WorkerPool', () => {
     });
 
     it('is a no-op for unregistered workers', () => {
-      expect(() => pool.heartbeat({ workerId: 'ghost', freeSlots: 1, usedSlots: 0 })).not.toThrow();
+      expect(() => pool.heartbeat({ workerId: 'ghost', freeSlots: 1, usedSlots: 0, freeVcpus: 1, freeMemoryMiB: 1024 })).not.toThrow();
     });
   });
 

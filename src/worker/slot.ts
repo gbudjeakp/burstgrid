@@ -1,39 +1,81 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import path from 'node:path';
 import { FirecrackerVM, type VMConfig } from './firecracker.js';
 import { vmSizeFromLabels } from '../types/index.js';
 
+/** How the slot executes jobs on this host. */
+export type SlotMode = 'firecracker' | 'process' | 'simulate';
+
 export interface SlotConfig {
   jobId: string;
+  mode: SlotMode;
   vmImagePath: string;
   kernelPath: string;
+  /** Root directory of pre-baked rootfs images; resolved via burstgrid:image=<name> labels. */
+  imageDir?: string;
+  /** Runner executable for 'process' mode (bare-metal / GPU hosts). */
+  runnerPath?: string;
 }
 
 export class Slot {
   private vm: FirecrackerVM | null = null;
+  private proc: ChildProcess | null = null;
+  private procExit: Promise<void> | null = null;
 
   constructor(private readonly cfg: SlotConfig) {}
 
   async start(runnerToken: string, labels: string[]): Promise<void> {
+    if (this.cfg.mode === 'simulate') return;
+
     const { memoryMiB, vcpus } = vmSizeFromLabels(labels);
-    const vmCfg: VMConfig = {
-      vmId: `bg-${this.cfg.jobId.slice(0, 8)}`,
-      kernelPath: this.cfg.kernelPath,
-      rootfsPath: this.cfg.vmImagePath,
-      memoryMiB,
-      vcpus,
-      runnerToken,
-      runnerLabels: labels.join(','),
-    };
-    this.vm = new FirecrackerVM(vmCfg);
-    await this.vm.boot();
+
+    if (this.cfg.mode === 'firecracker') {
+      const rootfsPath = resolveRootfs(labels, this.cfg.imageDir, this.cfg.vmImagePath);
+      const vmCfg: VMConfig = {
+        vmId: `bg-${this.cfg.jobId.slice(0, 8)}`,
+        kernelPath: this.cfg.kernelPath,
+        rootfsPath,
+        memoryMiB,
+        vcpus,
+        runnerToken,
+        runnerLabels: labels.join(','),
+      };
+      this.vm = new FirecrackerVM(vmCfg);
+      await this.vm.boot();
+      return;
+    }
+
+    // process mode: spawn the runner script directly without a VM (bare-metal / GPU hosts)
+    const child = spawn(this.cfg.runnerPath ?? './run.sh', [], {
+      stdio: 'inherit',
+      env: { ...process.env, RUNNER_TOKEN: runnerToken, RUNNER_LABELS: labels.join(',') },
+    });
+    this.proc = child;
+    this.procExit = new Promise((resolve, reject) => {
+      child.on('exit', code => (code === 0 ? resolve() : reject(new Error(`runner exited ${code}`))));
+      child.on('error', reject);
+    });
   }
 
   async wait(): Promise<void> {
-    if (!this.vm) throw new Error('slot not started');
-    return this.vm.wait();
+    if (this.cfg.mode === 'simulate') { await sleep(2_000); return; }
+    if (this.vm) return this.vm.wait();
+    if (this.procExit) return this.procExit;
+    throw new Error('slot not started');
   }
 
   async destroy(): Promise<void> {
-    await this.vm?.shutdown();
-    this.vm = null;
+    if (this.vm) { await this.vm.shutdown(); this.vm = null; }
+    if (this.proc) { this.proc.kill('SIGKILL'); this.proc = null; this.procExit = null; }
   }
 }
+
+/** Resolve rootfs path: image label wins over the default path. */
+function resolveRootfs(labels: string[], imageDir: string | undefined, fallback: string): string {
+  if (!imageDir) return fallback;
+  const tag = labels.find(l => l.toLowerCase().startsWith('burstgrid:image='));
+  if (!tag) return fallback;
+  return path.join(imageDir, `${tag.slice('burstgrid:image='.length)}.img`);
+}
+
+const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));

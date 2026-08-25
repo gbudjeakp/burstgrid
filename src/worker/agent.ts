@@ -1,7 +1,6 @@
 import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate } from '../types/index.js';
 import { JobStatus as Status } from '../types/index.js';
 import { Slot } from './slot.js';
-import os from 'node:os';
 import { recordJobDuration } from '../telemetry/index.js';
 
 export interface AgentConfig {

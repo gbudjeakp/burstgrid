@@ -1,0 +1,47 @@
+name: Terraform
+
+on:
+  pull_request:
+    paths: [deploy/terraform/**]
+  push:
+    branches: [main]
+    paths: [deploy/terraform/**]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: fmt / validate / tflint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/terraform
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '~1.9'
+
+      - name: Terraform format check
+        run: terraform fmt -check -recursive
+
+      # init without a real backend so validate works in CI without AWS creds
+      - name: Terraform init (local backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - uses: terraform-linters/setup-tflint@v4
+
+      - name: tflint init
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+      - name: tflint
+        run: tflint --format compact

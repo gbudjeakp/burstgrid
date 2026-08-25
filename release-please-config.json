@@ -1,0 +1,15 @@
+{
+  "release-type": "node",
+  "packages": {
+    ".": {}
+  },
+  "changelog-sections": [
+    { "type": "feat",     "section": "Features"         },
+    { "type": "fix",      "section": "Bug Fixes"        },
+    { "type": "perf",     "section": "Performance"      },
+    { "type": "refactor", "section": "Code Refactoring" },
+    { "type": "docs",     "section": "Documentation",  "hidden": true },
+    { "type": "chore",    "section": "Miscellaneous",  "hidden": true },
+    { "type": "wip",      "section": "Miscellaneous",  "hidden": true }
+  ]
+}

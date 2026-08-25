@@ -1,0 +1,44 @@
+# BurstGrid configuration file
+# All fields are optional — env vars take precedence where documented.
+# Place this file at the project root (or set BURSTGRID_CONFIG to its path).
+
+scheduler:
+  maxQueueDepth: 500        # 503 returned above this; GitHub retries for 72 h
+  rateLimitMax: 1000        # max webhook requests per window
+  rateLimitWindow: "1 minute"
+
+autoscaler:
+  enabled: true             # set to false to disable all EC2 auto-scaling
+  evaluationIntervalSec: 30 # how often to check queue depth vs. capacity
+
+  fleets:
+    # Default fleet — handles all jobs without a burstgrid:size= label
+    - name: standard
+      sizeTag: ""
+      launchTemplateId: lt-xxxxxxxxxxxxxxxxx  # BURSTGRID_LAUNCH_TEMPLATE_ID
+      subnetIds:
+        - subnet-xxxxxxxxxxxxxxxxx             # BURSTGRID_SUBNET_IDS
+        - subnet-yyyyyyyyyyyyyyyyy
+      maxWorkers: 50
+      slotsPerWorker: 8
+      scaleUpThreshold: 4
+
+    # Large fleet — c7i.2xlarge (8 vCPU / 16 GiB), 4 slots per host
+    - name: large
+      sizeTag: burstgrid:size=large
+      launchTemplateId: lt-yyyyyyyyyyyyyyyyy
+      subnetIds:
+        - subnet-xxxxxxxxxxxxxxxxx
+      maxWorkers: 10
+      slotsPerWorker: 4
+      scaleUpThreshold: 2
+
+    # XLarge fleet — c7i.8xlarge (32 vCPU / 64 GiB), 1 slot per host (e.g. big memory jobs)
+    - name: xlarge
+      sizeTag: burstgrid:size=xlarge
+      launchTemplateId: lt-zzzzzzzzzzzzzzzzz
+      subnetIds:
+        - subnet-xxxxxxxxxxxxxxxxx
+      maxWorkers: 5
+      slotsPerWorker: 1
+      scaleUpThreshold: 1

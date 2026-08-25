@@ -1,0 +1,123 @@
+# OpenTelemetry Collector Contrib configuration for BurstGrid
+# https://github.com/open-telemetry/opentelemetry-collector-contrib
+#
+# Deploy one collector per worker host (sidecar or system service).
+# Run a second instance on the scheduler host (or point OTEL_EXPORTER_OTLP_ENDPOINT
+# at a central collector instead).
+#
+# Start: otelcol-contrib --config collector.yaml
+#
+# Environment variables (set in /etc/otelcol-contrib/otelcol.env or export):
+#   GRAFANA_OTLP_ENDPOINT   e.g. https://otlp-gateway-prod-us-east-0.grafana.net/otlp
+#   GRAFANA_INSTANCE_ID     numeric Grafana Cloud instance ID
+#   GRAFANA_API_KEY         Grafana Cloud API key with MetricsPublisher role
+#   DD_API_KEY              Datadog API key
+#   DD_SITE                 e.g. datadoghq.com or datadoghq.eu
+#   PROMETHEUS_REMOTE_WRITE_URL  e.g. http://prometheus:9090/api/v1/write
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+  basicauth/grafana:
+    client_auth:
+      username: ${env:GRAFANA_INSTANCE_ID}
+      password: ${env:GRAFANA_API_KEY}
+
+# ── Receivers ─────────────────────────────────────────────────────────────────
+
+receivers:
+  # BurstGrid scheduler and worker agents push metrics here via OTLP.
+  # Set OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 on each process.
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+  # EC2 host metrics — CPU, memory, disk, and network on the worker host itself.
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu:
+        metrics:
+          system.cpu.utilization:
+            enabled: true
+      memory:
+        metrics:
+          system.memory.utilization:
+            enabled: true
+      disk:
+      network:
+        include:
+          interfaces: [eth0, tap0]      # TAP interfaces are Firecracker VM network links
+          match_type: regexp
+      load:
+      processes:
+
+# ── Processors ────────────────────────────────────────────────────────────────
+
+processors:
+  # Prevent the collector itself from OOMing under load spikes
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 75
+    spike_limit_percentage: 15
+
+  # Automatically tag all metrics with EC2 instance metadata
+  resourcedetection/ec2:
+    detectors: [ec2, env]
+    timeout: 5s
+    ec2:
+      tags:
+        - ^aws:autoscaling:groupName$    # which autoscaling group launched this host
+        - ^burstgrid:.*$                 # any BurstGrid-specific instance tags
+
+  # Add consistent service namespace across all telemetry
+  resource:
+    attributes:
+      - key: service.namespace
+        value: burstgrid
+        action: upsert
+
+  # Batch before exporting to reduce API calls
+  batch:
+    timeout: 10s
+    send_batch_size: 1000
+
+# ── Exporters ────────────────────────────────────────────────────────────────
+
+exporters:
+  # ── Grafana Cloud (recommended for getting started) ──────────────────────
+  otlphttp/grafana:
+    endpoint: ${env:GRAFANA_OTLP_ENDPOINT}
+    auth:
+      authenticator: basicauth/grafana
+
+  # ── Datadog ──────────────────────────────────────────────────────────────
+  datadog:
+    api:
+      key: ${env:DD_API_KEY}
+      site: ${env:DD_SITE}
+
+  # ── Self-hosted Prometheus / Mimir / Thanos ──────────────────────────────
+  prometheusremotewrite:
+    endpoint: ${env:PROMETHEUS_REMOTE_WRITE_URL}
+    tls:
+      insecure: true                    # set false and add ca_file for TLS
+
+  # ── Local stdout (for development) ───────────────────────────────────────
+  debug:
+    verbosity: basic
+
+# ── Pipelines ─────────────────────────────────────────────────────────────────
+# Uncomment the exporter(s) matching your backend.
+
+service:
+  extensions: [health_check, basicauth/grafana]
+  pipelines:
+    metrics:
+      receivers:   [otlp, hostmetrics]
+      processors:  [memory_limiter, resourcedetection/ec2, resource, batch]
+      exporters:   [otlphttp/grafana]   # ← swap for: datadog / prometheusremotewrite / debug

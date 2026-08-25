@@ -1,0 +1,79 @@
+export enum ExecutionTier {
+  Standard = 'standard',
+  Critical = 'critical',
+  HighDensity = 'high-density',
+  Overflow = 'overflow',
+}
+
+export enum JobStatus {
+  Queued = 'queued',
+  Claimed = 'claimed',
+  Running = 'running',
+  Completed = 'completed',
+  Failed = 'failed',
+}
+
+export interface Job {
+  id: string;
+  owner: string;
+  repo: string;
+  runId: number;
+  labels: string[];
+  tier: ExecutionTier;
+  queuedAt: Date;
+  runnerToken: string;
+}
+
+export interface WorkerRegistration {
+  workerId: string;
+  instanceId: string;
+  region: string;
+  availabilityZone: string;
+  totalSlots: number;
+  /** Total vCPUs on the host (sum of all possible VM allocations). */
+  totalVcpus: number;
+  /** Total host memory in MiB. */
+  totalMemoryMiB: number;
+  /** Labels this worker can serve (e.g. ['linux', 'x86_64', 'docker']) */
+  capabilities: string[];
+}
+
+export interface WorkerHeartbeat {
+  workerId: string;
+  freeSlots: number;
+  usedSlots: number;
+  freeVcpus: number;
+  freeMemoryMiB: number;
+}
+
+export interface JobAssignment {
+  jobId: string;
+  owner: string;
+  repo: string;
+  runId: number;
+  runnerToken: string;
+  labels: string[];
+  tier: ExecutionTier;
+  vcpus: number;
+  memoryMiB: number;
+}
+
+export const VM_SIZES: Record<string, { vcpus: number; memoryMiB: number }> = {
+  small:  { vcpus: 1, memoryMiB: 1_024 },
+  medium: { vcpus: 2, memoryMiB: 2_048 },
+  large:  { vcpus: 4, memoryMiB: 4_096 },
+  xlarge: { vcpus: 8, memoryMiB: 8_192 },
+};
+
+export function vmSizeFromLabels(labels: string[]): { vcpus: number; memoryMiB: number } {
+  const tag = labels.find(l => l.toLowerCase().startsWith('burstgrid:size='));
+  const key = tag?.slice('burstgrid:size='.length).toLowerCase() ?? 'medium';
+  return VM_SIZES[key] ?? VM_SIZES.medium;
+}
+
+export interface JobUpdate {
+  jobId: string;
+  workerId: string;
+  status: JobStatus;
+  error?: string;
+}

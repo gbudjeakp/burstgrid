@@ -1,4 +1,15 @@
 services:
+  # Pull-through cache for Docker Hub — VMs configure this as their registry mirror.
+  # Add more proxy instances for ECR/GHCR/GCR if needed (registry:2 supports one upstream each).
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    environment:
+      REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+    volumes:
+      - registry-cache:/var/lib/registry
+
   scheduler:
     build:
       context: .
@@ -29,6 +40,7 @@ services:
       BURSTGRID_VCPUS: "8"
       BURSTGRID_MEMORY_MIB: "16384"
       BURSTGRID_CAPABILITIES: linux,x86_64,docker
+      BURSTGRID_REGISTRY_MIRROR: http://registry:5000
     depends_on:
       scheduler:
         condition: service_healthy
@@ -45,6 +57,10 @@ services:
   #     BURSTGRID_VCPUS: "32"
   #     BURSTGRID_MEMORY_MIB: "65536"
   #     BURSTGRID_CAPABILITIES: linux,x86_64,docker,gpu
+  #     BURSTGRID_REGISTRY_MIRROR: http://registry:5000
   #   depends_on:
   #     scheduler:
   #       condition: service_healthy
+
+volumes:
+  registry-cache:

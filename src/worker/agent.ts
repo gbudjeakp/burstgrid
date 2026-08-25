@@ -19,6 +19,8 @@ export interface AgentConfig {
   imageDir?: string;
   /** Runner script path for 'process' mode. */
   runnerPath?: string;
+  /** Docker pull-through registry mirror URL forwarded to each VM. */
+  registryMirror?: string;
 }
 
 export class WorkerAgent {
@@ -130,6 +132,7 @@ export class WorkerAgent {
       kernelPath: this.cfg.kernelPath,
       imageDir: this.cfg.imageDir,
       runnerPath: this.cfg.runnerPath,
+      registryMirror: this.cfg.registryMirror,
     });
 
     try {

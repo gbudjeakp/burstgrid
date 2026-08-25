@@ -7,6 +7,10 @@ services:
       - "5000:5000"
     environment:
       REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+      # Layers not accessed within 7 days are eligible for GC
+      REGISTRY_PROXY_TTL: 168h
+      # Required to allow garbage-collect to actually delete blobs
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
     volumes:
       - registry-cache:/var/lib/registry
 

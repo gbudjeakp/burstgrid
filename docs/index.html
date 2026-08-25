@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BurstGrid — Self-Hosted GitHub Actions on Firecracker</title>
+  <meta name="description" content="Open-source CI runner scheduling platform: Firecracker microVMs, per-job isolation, resource-aware dispatch, and AWS autoscaling for GitHub Actions." />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --border:    #30363d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #f78166;
+      --accent-2:  #ff9a6e;
+      --green:     #3fb950;
+      --code-bg:   #1c2128;
+      --wip-bg:    #2d1a00;
+      --wip-border:#f78166;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 16px;
+    }
+
+    /* ── WIP banner ──────────────────────────────────────────────────────── */
+    .wip-strip {
+      background: var(--wip-bg);
+      border-bottom: 1px solid var(--wip-border);
+      padding: 10px 20px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--accent-2);
+      letter-spacing: 0.01em;
+    }
+    .wip-strip strong { color: var(--accent); }
+
+    /* ── Nav ─────────────────────────────────────────────────────────────── */
+    nav {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .logo-mark {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: 6px;
+      font-size: 15px;
+      line-height: 1;
+    }
+    .nav-links { display: flex; gap: 20px; align-items: center; }
+    .nav-links a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.15s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 16px;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: opacity 0.15s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #0d1117; }
+    .btn-secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+
+    /* ── Hero ────────────────────────────────────────────────────────────── */
+    .hero {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 80px 24px 64px;
+      text-align: center;
+    }
+    .wip-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--wip-bg);
+      border: 1px solid var(--wip-border);
+      border-radius: 20px;
+      padding: 5px 14px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 28px;
+    }
+    .wip-badge::before {
+      content: '';
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    h1 {
+      font-size: clamp(36px, 6vw, 56px);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      margin-bottom: 24px;
+      background: linear-gradient(135deg, var(--text) 60%, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .tagline {
+      font-size: clamp(16px, 2.5vw, 20px);
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 36px;
+    }
+    .hero-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+    /* ── Status box ──────────────────────────────────────────────────────── */
+    .status-box {
+      max-width: 760px;
+      margin: 0 auto 64px;
+      padding: 0 24px;
+    }
+    .status-card {
+      background: var(--wip-bg);
+      border: 1px solid var(--wip-border);
+      border-radius: 10px;
+      padding: 24px 28px;
+    }
+    .status-card h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 12px;
+    }
+    .status-card p {
+      color: var(--muted);
+      font-size: 14px;
+      margin-bottom: 16px;
+    }
+    .status-card p:last-child { margin-bottom: 0; }
+    .status-card strong { color: var(--text); }
+
+    /* ── Section ─────────────────────────────────────────────────────────── */
+    section {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 72px;
+    }
+    .section-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    h2.section-title {
+      font-size: clamp(22px, 3.5vw, 30px);
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .section-sub {
+      color: var(--muted);
+      font-size: 15px;
+      margin-bottom: 40px;
+      max-width: 540px;
+    }
+
+    /* ── Feature grid ────────────────────────────────────────────────────── */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 22px 24px;
+      transition: border-color 0.15s;
+    }
+    .feature-card:hover { border-color: var(--accent); }
+    .feature-icon { font-size: 22px; margin-bottom: 12px; }
+    .feature-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 8px; }
+    .feature-card p { font-size: 13.5px; color: var(--muted); line-height: 1.55; }
+
+    /* ── Architecture ────────────────────────────────────────────────────── */
+    .arch-diagram {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 28px 32px;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      color: var(--muted);
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.7;
+      margin-top: 8px;
+    }
+    .arch-diagram .hl { color: var(--accent); }
+    .arch-diagram .dim { color: #4a5568; }
+
+    /* ── Code snippet ────────────────────────────────────────────────────── */
+    .code-wrap {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .code-dots { display: flex; gap: 6px; }
+    .code-dots span {
+      width: 11px; height: 11px; border-radius: 50%;
+    }
+    .dot-red { background: #ff5f57; }
+    .dot-yellow { background: #febc2e; }
+    .dot-green { background: #28c840; }
+    pre {
+      padding: 20px 24px;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.7;
+      overflow-x: auto;
+    }
+    .kw { color: #ff79c6; }
+    .str { color: #f1fa8c; }
+    .cm { color: #6272a4; }
+    .num { color: #bd93f9; }
+    .prop { color: #8be9fd; }
+
+    /* ── Tier table ──────────────────────────────────────────────────────── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text);
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--surface); }
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-red    { background: #2d0f0f; color: #f78166; border: 1px solid #6b2020; }
+    .badge-blue   { background: #0d1a2d; color: #58a6ff; border: 1px solid #1a3a6b; }
+    .badge-purple { background: #1a0d2d; color: #c084fc; border: 1px solid #3b1a6b; }
+    .badge-green  { background: #0d2d12; color: #3fb950; border: 1px solid #1a6b2a; }
+
+    /* ── Footer ──────────────────────────────────────────────────────────── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    /* ── Responsive ──────────────────────────────────────────────────────── */
+    @media (max-width: 600px) {
+      nav { flex-direction: column; gap: 14px; }
+      .hero { padding: 48px 20px 40px; }
+      .arch-diagram { font-size: 11px; padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- WIP strip -->
+  <div class="wip-strip">
+    <strong>⚠ Work in progress</strong> — BurstGrid has not been tested in production. Do not use this in anger yet.
+  </div>
+
+  <!-- Nav -->
+  <nav>
+    <a href="#" class="nav-logo">
+      <span class="logo-mark">⚡</span>
+      BurstGrid
+    </a>
+    <div class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#architecture">Architecture</a>
+      <a href="#config">Config</a>
+      <a href="https://github.com/sgbudje/burstgrid" target="_blank" rel="noopener">GitHub ↗</a>
+      <a href="https://github.com/sgbudje/burstgrid" class="btn btn-primary" target="_blank" rel="noopener">
+        <!-- star icon -->
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 .25a.75.75 0 0 1 .673.418l1.882 3.815 4.21.612a.75.75 0 0 1 .416 1.279l-3.046 2.97.719 4.192a.751.751 0 0 1-1.088.791L8 12.347l-3.766 1.98a.75.75 0 0 1-1.088-.79l.72-4.194L.818 6.374a.75.75 0 0 1 .416-1.28l4.21-.611L7.327.668A.75.75 0 0 1 8 .25Z"/></svg>
+        Star on GitHub
+      </a>
+    </div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="wip-badge">Work in Progress — Alpha</div>
+    <h1>Self-hosted GitHub Actions<br/>on Firecracker microVMs</h1>
+    <p class="tagline">
+      BurstGrid is an open-source CI runner platform. Each job runs in an isolated Firecracker microVM, dispatched by a central TypeScript scheduler over SSE, with per-tier EC2 autoscaling.
+    </p>
+    <div class="hero-actions">
+      <a href="https://github.com/sgbudje/burstgrid" class="btn btn-primary" target="_blank" rel="noopener">View on GitHub</a>
+      <a href="#architecture" class="btn btn-secondary">See how it works</a>
+    </div>
+  </div>
+
+  <!-- Status box -->
+  <div class="status-box">
+    <div class="status-card">
+      <h2>⚠ Current Status</h2>
+      <p>
+        BurstGrid is in <strong>early development</strong>. The architecture, scheduler, autoscaler, and telemetry pipeline are designed and coded, but <strong>none of this has been run end-to-end in a real AWS environment</strong>. There are no Firecracker boot tests, no live webhook tests, and no production traffic validation yet.
+      </p>
+      <p>
+        We're open-sourcing the design early so teams building similar infrastructure can follow along and contribute. Expect breaking changes. The API surface, config schema, and deployment model are all subject to change before a stable release.
+      </p>
+    </div>
+  </div>
+
+  <!-- Features -->
+  <section id="features">
+    <div class="section-label">Why BurstGrid</div>
+    <h2 class="section-title">Built for teams who've outgrown hosted runners</h2>
+    <p class="section-sub">GitHub-hosted runners cap out at 4 vCPU / 16 GB RAM. BurstGrid puts you in control of the metal.</p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔥</div>
+        <h3>Firecracker microVMs</h3>
+        <p>Every job boots into a fresh Firecracker VM in &lt;200ms. Full kernel isolation, no container breakout risk, rootfs discarded on completion.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📡</div>
+        <h3>SSE dispatch</h3>
+        <p>Workers hold a persistent Server-Sent Events connection to the scheduler. No polling, no long-poll timeouts — jobs arrive over the wire the moment they're queued.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚖️</div>
+        <h3>Resource-aware scheduling</h3>
+        <p>Label jobs with <code>burstgrid:size=large</code> to request specific vCPU + RAM. The scheduler only assigns jobs to workers with enough free resources.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <h3>Per-tier autoscaling</h3>
+        <p>Define separate EC2 launch templates for standard, large, and xlarge job tiers. Each fleet scales independently based on queue depth.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">🛡️</div>
+        <h3>Circuit breaker + retry</h3>
+        <p>GitHub API calls are wrapped in a circuit breaker (5-failure threshold, 30s cooldown) with exponential backoff. The scheduler returns 503 so GitHub retries for up to 72 hours.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>OpenTelemetry metrics</h3>
+        <p>Queue depth, dispatch latency, VM boot time, and job duration are all emitted as OTLP metrics. Drop the included OTel Collector config on each host and point it at Grafana, Datadog, or Prometheus.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Architecture -->
+  <section id="architecture">
+    <div class="section-label">Architecture</div>
+    <h2 class="section-title">How it works</h2>
+    <p class="section-sub">A lightweight TypeScript scheduler sits in front of a fleet of metal EC2 workers, each running multiple isolated microVMs.</p>
+    <div class="arch-diagram"><span class="cm">GitHub → webhook → Scheduler</span>
+                                             │
+                       ┌─────────────────────┼─────────────────────┐
+                       ▼                     ▼                     ▼
+              <span class="hl">Worker (metal EC2)</span>    <span class="hl">Worker (metal EC2)</span>    <span class="hl">Worker (metal EC2)</span>
+              ┌───────────────┐      ┌───────────────┐      ┌───────────────┐
+              │ SSE stream ←──┼──job │ SSE stream ←──┼──job │ SSE stream    │
+              │               │      │               │      │               │
+              │ VM slot  VM slot      │ VM slot  VM slot      │     ...       │
+              │  [job]  [job]  │      │  [job]   [ ]  │      │               │
+              └───────────────┘      └───────────────┘      └───────────────┘
+                   │   │                  │
+               <span class="hl">Firecracker microVMs</span>         <span class="dim">rootfs reset after each job</span>
+               <span class="dim">booted per job (&lt;200ms)
+               vsock → host OTel Collector → Grafana / Datadog</span></div>
+  </section>
+
+  <!-- Execution tiers -->
+  <section id="tiers">
+    <div class="section-label">Job Sizing</div>
+    <h2 class="section-title">Pick the right VM for the job</h2>
+    <p class="section-sub">Add a label to your workflow to route a job to the right fleet.</p>
+    <div class="code-wrap" style="margin-bottom: 32px;">
+      <div class="code-header">
+        <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
+        <span>.github/workflows/ci.yml</span>
+      </div>
+      <pre><span class="prop">runs-on</span>: <span class="str">[self-hosted, linux, burstgrid:size=large]</span>
+
+<span class="cm"># or for a monorepo lint job that needs the full machine:</span>
+<span class="prop">runs-on</span>: <span class="str">[self-hosted, linux, burstgrid:size=xlarge]</span></pre>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Size label</th>
+          <th>vCPU</th>
+          <th>RAM</th>
+          <th>Typical EC2 host</th>
+          <th>Slots/host</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-green">small</span></td>
+          <td>1</td>
+          <td>1 GiB</td>
+          <td>m6i.metal (8+ slots)</td>
+          <td>8–32</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">medium</span></td>
+          <td>2</td>
+          <td>2 GiB</td>
+          <td>m6i.metal</td>
+          <td>8–16</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-purple">large</span></td>
+          <td>4</td>
+          <td>4 GiB</td>
+          <td>c7i.2xlarge.metal</td>
+          <td>4</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-red">xlarge</span></td>
+          <td>8</td>
+          <td>8 GiB</td>
+          <td>c7i.8xlarge.metal</td>
+          <td>1–4</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Config -->
+  <section id="config">
+    <div class="section-label">Configuration</div>
+    <h2 class="section-title">One YAML file to rule them all</h2>
+    <p class="section-sub">Drop <code>burstgrid.config.yaml</code> at the project root. Every field is optional — env vars take precedence.</p>
+    <div class="code-wrap">
+      <div class="code-header">
+        <div class="code-dots"><span class="dot-red"></span><span class="dot-yellow"></span><span class="dot-green"></span></div>
+        <span>burstgrid.config.yaml</span>
+      </div>
+      <pre><span class="prop">scheduler</span>:
+  <span class="prop">maxQueueDepth</span>: <span class="num">500</span>      <span class="cm"># 503 above this; GitHub retries for 72 h</span>
+
+<span class="prop">autoscaler</span>:
+  <span class="prop">enabled</span>: <span class="kw">true</span>
+  <span class="prop">evaluationIntervalSec</span>: <span class="num">30</span>
+  <span class="prop">fleets</span>:
+    - <span class="prop">name</span>: <span class="str">standard</span>
+      <span class="prop">launchTemplateId</span>: <span class="str">lt-xxxxxxxxxxxxxxxxx</span>
+      <span class="prop">maxWorkers</span>: <span class="num">50</span>
+      <span class="prop">slotsPerWorker</span>: <span class="num">8</span>
+      <span class="prop">scaleUpThreshold</span>: <span class="num">4</span>
+    - <span class="prop">name</span>: <span class="str">xlarge</span>
+      <span class="prop">sizeTag</span>: <span class="str">burstgrid:size=xlarge</span>
+      <span class="prop">launchTemplateId</span>: <span class="str">lt-yyyyyyyyyyyyyyyyy</span>
+      <span class="prop">maxWorkers</span>: <span class="num">5</span>
+      <span class="prop">slotsPerWorker</span>: <span class="num">1</span>
+      <span class="prop">scaleUpThreshold</span>: <span class="num">1</span></pre>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p>
+      BurstGrid is open source under the
+      <a href="https://github.com/sgbudje/burstgrid/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>.
+      &nbsp;·&nbsp;
+      <a href="https://github.com/sgbudje/burstgrid/issues" target="_blank" rel="noopener">Issues</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/sgbudje/burstgrid" target="_blank" rel="noopener">GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>

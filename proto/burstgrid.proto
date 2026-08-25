@@ -1,0 +1,96 @@
+// Protocol definition for a future gRPC migration path.
+// Currently BurstGrid uses HTTP long-poll (no codegen required).
+// When the fleet grows and bidirectional streaming becomes worth the operational
+// cost, replace the long-poll transport with this gRPC service.
+//
+// Generate with: buf generate
+
+syntax = "proto3";
+package burstgrid.v1;
+option go_package = "github.com/burstgrid/burstgrid/pkg/proto/gen/burstgrid/v1";
+
+service Scheduler {
+  // Workers maintain a persistent bidirectional stream for heartbeats and job dispatch.
+  rpc Connect(stream WorkerMessage) returns (stream SchedulerMessage);
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+}
+
+message WorkerMessage {
+  oneof payload {
+    WorkerRegistration registration = 1;
+    WorkerHeartbeat    heartbeat    = 2;
+    JobStatusUpdate    job_update   = 3;
+  }
+}
+
+message SchedulerMessage {
+  oneof payload {
+    JobAssignment assignment = 1;
+    WorkerCommand command    = 2;
+  }
+}
+
+message WorkerRegistration {
+  string worker_id          = 1;
+  string instance_id        = 2;
+  string region             = 3;
+  string availability_zone  = 4;
+  int32  total_slots        = 5;
+  repeated string capabilities = 6;
+}
+
+message WorkerHeartbeat {
+  string worker_id     = 1;
+  int32  free_slots    = 2;
+  int32  used_slots    = 3;
+  int64  timestamp_ms  = 4;
+}
+
+message JobAssignment {
+  string         job_id       = 1;
+  string         owner        = 2;
+  string         repo         = 3;
+  int64          run_id       = 4;
+  string         runner_token = 5;
+  repeated string labels      = 6;
+  ExecutionTier  tier         = 7;
+}
+
+message JobStatusUpdate {
+  string    job_id      = 1;
+  string    worker_id   = 2;
+  JobStatus status      = 3;
+  string    error       = 4;
+  int64     timestamp_ms = 5;
+}
+
+message WorkerCommand {
+  CommandType type = 1;
+}
+
+message StatusRequest {}
+message StatusResponse {
+  int32 connected_workers = 1;
+  int32 total_free_slots  = 2;
+  int32 queued_jobs       = 3;
+}
+
+enum ExecutionTier {
+  TIER_STANDARD     = 0;
+  TIER_CRITICAL     = 1;
+  TIER_HIGH_DENSITY = 2;
+  TIER_OVERFLOW     = 3;
+}
+
+enum JobStatus {
+  JOB_QUEUED     = 0;
+  JOB_CLAIMED    = 1;
+  JOB_RUNNING    = 2;
+  JOB_COMPLETED  = 3;
+  JOB_FAILED     = 4;
+}
+
+enum CommandType {
+  CMD_DRAIN    = 0;
+  CMD_SHUTDOWN = 1;
+}

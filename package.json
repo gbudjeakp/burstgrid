@@ -1,0 +1,36 @@
+{
+  "name": "burstgrid",
+  "version": "0.1.0",
+  "description": "CI runner scheduling and execution platform — diversified EC2 worker fleet with Firecracker microVM isolation",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.0.0",
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "build": "tsup",
+    "dev:scheduler": "tsx bin/scheduler.ts",
+    "dev:agent": "tsx bin/worker-agent.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "infra:init": "cd deploy/terraform && terraform init",
+    "infra:plan": "cd deploy/terraform && terraform plan",
+    "infra:apply": "cd deploy/terraform && terraform apply"
+  },
+  "dependencies": {
+    "@aws-sdk/client-ec2": "^3.600.0",
+    "@fastify/rate-limit": "^9.0.0",
+    "@octokit/app": "^15.0.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.57.0",
+    "@opentelemetry/sdk-metrics": "^1.30.0",
+    "fastify": "^5.0.0",
+    "yaml": "^2.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.2.0",
+    "tsx": "^4.16.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}

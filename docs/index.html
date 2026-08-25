@@ -169,6 +169,7 @@
       gap: 1px; background: var(--border);
       border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
     }
+    @media (max-width: 800px) { .feat-grid { grid-template-columns: 1fr; } }
     .feat-cell { background: var(--bg); padding: 24px 26px; }
     .feat-cell h3 { font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
     .feat-cell p { font-size: 13px; color: #a1a1aa; line-height: 1.6; }
@@ -184,7 +185,6 @@
     @media (max-width: 800px) {
       .hero-grid { grid-template-columns: 1fr; gap: 36px; }
       .two-col { grid-template-columns: 1fr; }
-      .feat-grid { grid-template-columns: 1fr; }
       nav { padding: 0 20px; }
       .nav-link { display: none; }
       .section { padding: 52px 20px; }
@@ -205,7 +205,7 @@
     </a>
     <div class="nav-right">
       <a href="#how-it-works" class="nav-link">How it works</a>
-      <a href="#github-app" class="nav-link">GitHub App</a>
+      <a href="#get-started" class="nav-link">Get started</a>
       <a href="#features" class="nav-link">Features</a>
       <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener" class="gh-btn">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -347,47 +347,135 @@
 
 <hr class="rule" />
 
-<!-- GitHub App -->
-<div class="section section-border" id="github-app">
-  <div class="label">Setup</div>
-  <h2>Yes, BurstGrid needs a GitHub App</h2>
-  <p class="section-desc">
-    The App provides a signed webhook channel and an installation token so the scheduler can call the Runners API to mint the per-repo registration tokens that let VMs self-register with GitHub.
-  </p>
+<!-- Get started -->
+<div class="section section-border" id="get-started">
+  <div class="label">Get started</div>
+  <h2>From zero to running jobs</h2>
+  <p class="section-desc">Five steps to deploy BurstGrid against your own GitHub organization. Steps 1&ndash;2 run in minutes; steps 3&ndash;4 take longer the first time you build a rootfs.</p>
 
-  <div class="two-col">
-    <div class="card">
-      <h3>Permissions required</h3>
-      <ul class="perm-list">
-        <li><span class="pb pb-rw">Read &amp; write</span><span><strong>Administration</strong> &mdash; create and delete self-hosted runners on repos/orgs</span></li>
-        <li><span class="pb pb-ro">Read</span><span><strong>Actions</strong> &mdash; read workflow run details</span></li>
-        <li><span class="pb pb-ro">Read</span><span><strong>Metadata</strong> &mdash; required by GitHub for all Apps</span></li>
-        <li><span class="pb pb-wh">Webhook</span><span>Subscribe to <strong>workflow_job</strong> events &mdash; queued, in_progress, completed</span></li>
-      </ul>
-    </div>
-    <div class="card">
-      <h3>Environment variables</h3>
-      <table class="env-table">
-        <thead><tr><th>Variable</th><th>What it is</th></tr></thead>
-        <tbody>
-          <tr><td>GITHUB_APP_ID</td><td>Numeric App ID from the App settings page</td></tr>
-          <tr><td>GITHUB_PRIVATE_KEY</td><td>PEM private key &mdash; signs JWTs for API auth</td></tr>
-          <tr><td>GITHUB_WEBHOOK_SECRET</td><td>Set when creating the App &mdash; used to verify <code>X-Hub-Signature-256</code></td></tr>
-          <tr><td>GITHUB_INSTALLATION_ID</td><td>Installation ID for the org the App is installed on</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
+  <div class="flow">
 
-  <div class="card">
-    <h3 style="font-size:12.5px;font-weight:500;color:#a1a1aa;margin-bottom:12px;">Create the App in five steps</h3>
-    <div class="steps">
-<span style="color:#52525b;">1.</span> <span>Settings &rarr; Developer Settings &rarr; GitHub Apps &rarr; New GitHub App</span>
-<span style="color:#52525b;">2.</span> Set webhook URL to <code>https://your-scheduler/v1/webhook</code> and generate a webhook secret
-<span style="color:#52525b;">3.</span> Grant the permissions above and subscribe to <strong>workflow_job</strong> events
-<span style="color:#52525b;">4.</span> Generate a private key &mdash; download the <code>.pem</code> and set it as <code>GITHUB_PRIVATE_KEY</code>
-<span style="color:#52525b;">5.</span> Install the App on your org &mdash; note the installation ID in the URL
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Create a GitHub App</div>
+        <div class="flow-body">
+          Go to <strong>Settings &rarr; Developer Settings &rarr; GitHub Apps &rarr; New GitHub App</strong>.
+          Set the webhook URL to <code>https://your-scheduler/webhook/github</code> and generate a secret.
+          Grant <strong>Administration: read&nbsp;&amp;&nbsp;write</strong> and <strong>Actions: read</strong>, then subscribe to <strong>workflow_job</strong> events.
+          Download the private key PEM and install the App on your org.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Scheduler environment variables</div>
+          <div class="snippet-body"><span class="s-key">GITHUB_APP_ID</span>=<span class="s-str">123456</span>
+<span class="s-key">GITHUB_PRIVATE_KEY_PATH</span>=<span class="s-str">/run/secrets/burstgrid.pem</span>
+<span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">your-webhook-secret</span></div>
+        </div>
+      </div>
     </div>
+
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Deploy the scheduler</div>
+        <div class="flow-body">
+          The scheduler is a Node.js process. Run it on any standard EC2 instance (<code>t3.small</code> is enough).
+          It needs outbound HTTPS to <code>api.github.com</code> and inbound access on port 8080 from GitHub&rsquo;s webhook IPs.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Docker</div>
+          <div class="snippet-body"><span class="s-cm"># Build from source</span>
+docker build --target scheduler -t burstgrid-scheduler .
+docker run -p 8080:8080 \
+  -e <span class="s-key">GITHUB_APP_ID</span>=<span class="s-num">123456</span> \
+  -e <span class="s-key">GITHUB_PRIVATE_KEY_PATH</span>=<span class="s-str">/run/secrets/key.pem</span> \
+  -e <span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">secret</span> \
+  -v /path/to/key.pem:/run/secrets/key.pem:ro \
+  burstgrid-scheduler</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Build your rootfs image</div>
+        <div class="flow-body">
+          Each Firecracker VM boots from a read-only ext4 rootfs containing the GitHub Actions runner binary.
+          Your init script reads <code>RUNNER_TOKEN</code> and <code>RUNNER_LABELS</code> from <code>/proc/cmdline</code>,
+          calls <code>./config.sh</code> to register, then <code>./run.sh</code> to execute the job.
+          Optionally read <code>REGISTRY_MIRROR</code> to configure Docker&rsquo;s pull-through cache.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">/etc/init.d/burstgrid-runner (rootfs init script)</div>
+          <div class="snippet-body"><span class="s-cm">#!/bin/bash</span>
+<span class="s-cm"># Parse kernel cmdline args written by the scheduler</span>
+TOKEN=$(grep -oP <span class="s-str">'RUNNER_TOKEN=\K\S+'</span> /proc/cmdline)
+LABELS=$(grep -oP <span class="s-str">'RUNNER_LABELS=\K\S+'</span> /proc/cmdline)
+MIRROR=$(grep -oP <span class="s-str">'REGISTRY_MIRROR=\K\S+'</span> /proc/cmdline || true)
+
+<span class="s-cm"># Configure Docker pull-through cache if mirror is set</span>
+[ -n <span class="s-str">"$MIRROR"</span> ] &amp;&amp; echo <span class="s-str">"{\"registry-mirrors\":[\"$MIRROR\"]}"</span> &gt; /etc/docker/daemon.json
+service docker start
+
+<span class="s-cm"># Register and run the GitHub Actions runner (ephemeral)</span>
+cd /opt/actions-runner
+./config.sh --url <span class="s-str">"$REPO_URL"</span> --token <span class="s-str">"$TOKEN"</span> --labels <span class="s-str">"$LABELS"</span> --ephemeral --unattended
+./run.sh</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-num on">4</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Deploy worker agents on bare-metal EC2</div>
+        <div class="flow-body">
+          Workers must run on <strong>bare-metal instances</strong> (e.g. <code>m7i.metal-24xl</code>, <code>m6g.metal</code>)
+          because Firecracker requires KVM. Standard virtualized instances can&rsquo;t run nested VMs.
+          Copy the rootfs image and kernel to each host, then run the worker agent.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Worker agent environment</div>
+          <div class="snippet-body"><span class="s-key">BURSTGRID_SCHEDULER_URL</span>=<span class="s-str">http://10.0.1.50:8080</span>
+<span class="s-key">BURSTGRID_WORKER_ID</span>=<span class="s-str">$(curl -s http://169.254.169.254/latest/meta-data/instance-id)</span>
+<span class="s-key">BURSTGRID_VM_IMAGE</span>=<span class="s-str">/var/lib/burstgrid/runner.img</span>
+<span class="s-key">BURSTGRID_KERNEL</span>=<span class="s-str">/var/lib/burstgrid/vmlinux</span>
+<span class="s-key">BURSTGRID_SLOTS</span>=<span class="s-num">8</span>       <span class="s-cm"># concurrent VMs per host</span>
+<span class="s-key">BURSTGRID_VCPUS</span>=<span class="s-num">48</span>      <span class="s-cm"># match your instance type</span>
+<span class="s-key">BURSTGRID_MEMORY_MIB</span>=<span class="s-num">98304</span>  <span class="s-cm"># 96 GiB</span>
+<span class="s-key">BURSTGRID_CAPABILITIES</span>=<span class="s-str">linux,x86_64,docker</span>
+<span class="s-key">BURSTGRID_REGISTRY_MIRROR</span>=<span class="s-str">http://10.0.1.50:5000</span>  <span class="s-cm"># optional</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step">
+      <div class="flow-left"><div class="flow-num on">5</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Point your workflows at BurstGrid</div>
+        <div class="flow-body">
+          Add <code>self-hosted</code> plus a <code>burstgrid:size=</code> label to any job&rsquo;s <code>runs-on</code>.
+          No other workflow changes needed. GPU jobs add a <code>gpu</code> label and are routed to
+          workers that advertise the <code>gpu</code> capability.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">.github/workflows/ci.yml</div>
+          <div class="snippet-body"><span class="s-key">jobs</span>:
+  <span class="s-key">test</span>:
+    <span class="s-key">runs-on</span>: [<span class="s-str">self-hosted</span>, <span class="s-str">linux</span>, <span class="s-str">burstgrid:size=large</span>]
+    <span class="s-key">steps</span>:
+      - <span class="s-key">uses</span>: <span class="s-str">actions/checkout@v4</span>
+      - <span class="s-key">run</span>: <span class="s-str">pnpm test</span>
+
+  <span class="s-key">train</span>:
+    <span class="s-key">runs-on</span>: [<span class="s-str">self-hosted</span>, <span class="s-str">linux</span>, <span class="s-str">gpu</span>, <span class="s-str">burstgrid:size=4xlarge</span>]
+    <span class="s-key">steps</span>:
+      - <span class="s-key">run</span>: <span class="s-str">python train.py</span></div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -401,27 +489,39 @@
   <div class="feat-grid">
     <div class="feat-cell">
       <h3>Firecracker isolation</h3>
-      <p>Every job gets its own kernel. No shared namespaces, no container breakout surface. The rootfs is discarded the moment the runner exits.</p>
+      <p>Every job gets its own kernel. No shared namespaces, no container breakout surface. The rootfs is discarded when the runner exits.</p>
     </div>
     <div class="feat-cell">
       <h3>SSE dispatch</h3>
-      <p>Workers hold a persistent Server-Sent Events connection. Jobs arrive the instant they're queued&mdash;no polling, no long-poll timeouts, no extra infra.</p>
+      <p>Workers hold a persistent Server-Sent Events connection. Jobs arrive the instant they&rsquo;re queued&mdash;no polling, no long-poll timeouts, no extra infra.</p>
     </div>
     <div class="feat-cell">
       <h3>Resource-aware routing</h3>
-      <p>Label jobs with <code>burstgrid:size=large</code>. The scheduler only assigns to workers with enough free vCPU and RAM. No overcommit.</p>
+      <p>Sizes from <code>small</code> (1&nbsp;vCPU / 1&nbsp;GiB) to <code>8xlarge</code> (64&nbsp;vCPU / 128&nbsp;GiB). Jobs only dispatch to workers with enough free headroom. No overcommit.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>GPU &amp; bare-metal routing</h3>
+      <p>Label jobs with <code>gpu</code> and register GPU hosts in <code>process</code> mode. The scheduler routes exclusively to workers advertising that capability&mdash;no Firecracker needed on GPU hosts.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Registry pull-through cache</h3>
+      <p>Point workers at a local Docker registry mirror. Pulled layers cache on the host and are reused across all VMs. First pull hits Docker Hub; every job after that is served at LAN speed.</p>
     </div>
     <div class="feat-cell">
       <h3>Per-tier autoscaling</h3>
-      <p>Define separate EC2 launch templates for <code>standard</code>, <code>large</code>, and <code>xlarge</code> fleets. Each scales independently against its own queue threshold.</p>
+      <p>Define separate EC2 launch templates per fleet. Each scales independently against its own queue threshold. Workers drain naturally&mdash;no forced termination.</p>
     </div>
     <div class="feat-cell">
       <h3>Circuit breaker</h3>
-      <p>GitHub API calls trip after 5 consecutive failures and stay open for 30&nbsp;s. Returns <code>503</code> so GitHub keeps retrying for up to 72&nbsp;hours.</p>
+      <p>GitHub API calls trip after 5 consecutive failures, open for 30&nbsp;s. Returns <code>503</code> so GitHub keeps retrying for up to 72&nbsp;hours&mdash;no events lost.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Optional backends</h3>
+      <p>Attach Redis for queue durability and worker persistence, SQS as an additional job source, and DynamoDB for an append-only job history log. All optional, all env-var configured.</p>
     </div>
     <div class="feat-cell">
       <h3>OpenTelemetry metrics</h3>
-      <p>Queue depth, dispatch latency, VM boot time, and job duration&mdash;all OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
+      <p>Queue depth, dispatch latency, VM boot time, job duration&mdash;all OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
     </div>
   </div>
 </div>

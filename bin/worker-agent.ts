@@ -11,6 +11,10 @@ const {
   BURSTGRID_CAPABILITIES = 'linux,x86_64,docker',
   BURSTGRID_VM_IMAGE = '/var/lib/burstgrid/runner.img',
   BURSTGRID_KERNEL = '/var/lib/burstgrid/vmlinux',
+  // 'firecracker' (default), 'process' (bare-metal/GPU), or 'simulate' (local dev)
+  BURSTGRID_MODE = 'firecracker',
+  BURSTGRID_IMAGE_DIR,
+  BURSTGRID_RUNNER_PATH,
 } = process.env;
 
 const controller = new AbortController();
@@ -26,6 +30,9 @@ const agent = new WorkerAgent({
   capabilities: BURSTGRID_CAPABILITIES.split(',').map(s => s.trim()).filter(Boolean),
   vmImagePath: BURSTGRID_VM_IMAGE,
   kernelPath: BURSTGRID_KERNEL,
+  mode: BURSTGRID_MODE as 'firecracker' | 'process' | 'simulate',
+  imageDir: BURSTGRID_IMAGE_DIR,
+  runnerPath: BURSTGRID_RUNNER_PATH,
 });
 
 try {

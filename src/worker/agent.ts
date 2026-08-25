@@ -1,6 +1,6 @@
 import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate } from '../types/index.js';
 import { JobStatus as Status } from '../types/index.js';
-import { Slot } from './slot.js';
+import { Slot, type SlotMode } from './slot.js';
 import { recordJobDuration } from '../telemetry/index.js';
 
 export interface AgentConfig {
@@ -13,6 +13,12 @@ export interface AgentConfig {
   capabilities: string[];
   vmImagePath: string;
   kernelPath: string;
+  /** Execution mode: 'firecracker' (default), 'process' (bare-metal/GPU), or 'simulate' (local dev). */
+  mode?: SlotMode;
+  /** Directory of pre-baked rootfs images for burstgrid:image=<name> label resolution. */
+  imageDir?: string;
+  /** Runner script path for 'process' mode. */
+  runnerPath?: string;
 }
 
 export class WorkerAgent {
@@ -119,8 +125,11 @@ export class WorkerAgent {
     this.usedMemoryMiB += job.memoryMiB;
     const slot = new Slot({
       jobId: job.jobId,
+      mode: this.cfg.mode ?? 'firecracker',
       vmImagePath: this.cfg.vmImagePath,
       kernelPath: this.cfg.kernelPath,
+      imageDir: this.cfg.imageDir,
+      runnerPath: this.cfg.runnerPath,
     });
 
     try {

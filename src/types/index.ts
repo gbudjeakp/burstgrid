@@ -59,10 +59,13 @@ export interface JobAssignment {
 }
 
 export const VM_SIZES: Record<string, { vcpus: number; memoryMiB: number }> = {
-  small:  { vcpus: 1, memoryMiB: 1_024 },
-  medium: { vcpus: 2, memoryMiB: 2_048 },
-  large:  { vcpus: 4, memoryMiB: 4_096 },
-  xlarge: { vcpus: 8, memoryMiB: 8_192 },
+  small:    { vcpus: 1,  memoryMiB: 1_024   },
+  medium:   { vcpus: 2,  memoryMiB: 2_048   },
+  large:    { vcpus: 4,  memoryMiB: 4_096   },
+  xlarge:   { vcpus: 8,  memoryMiB: 8_192   },
+  '2xlarge': { vcpus: 16, memoryMiB: 32_768  },
+  '4xlarge': { vcpus: 32, memoryMiB: 65_536  },
+  '8xlarge': { vcpus: 64, memoryMiB: 131_072 },
 };
 
 export function vmSizeFromLabels(labels: string[]): { vcpus: number; memoryMiB: number } {

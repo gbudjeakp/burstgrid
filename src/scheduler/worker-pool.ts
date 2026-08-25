@@ -112,9 +112,7 @@ export class WorkerPool {
 
   bestWorker(requiredLabels: string[], vcpus: number, memoryMiB: number): string | null {
     // Strip size and self-hosted labels — size is checked via resource availability
-    const capLabels = requiredLabels.filter(
-      l => !l.toLowerCase().startsWith('burstgrid:size=') && l.toLowerCase() !== 'self-hosted'
-    );
+    const capLabels = requiredLabels.filter(l => !isSchedulerLabel(l));
     let bestId: string | null = null;
     let bestFree = 0;
     for (const [id, w] of this.workers) {
@@ -155,9 +153,7 @@ export class WorkerPool {
    * to run a job of this size. Used to detect misconfigured oversized jobs.
    */
   canAnyWorkerEverHandle(vcpus: number, memoryMiB: number, labels: string[]): boolean {
-    const capLabels = labels.filter(
-      l => !l.toLowerCase().startsWith('burstgrid:size=') && l.toLowerCase() !== 'self-hosted'
-    );
+    const capLabels = labels.filter(l => !isSchedulerLabel(l));
     for (const w of this.workers.values()) {
       if (w.totalVcpus >= vcpus && w.totalMemoryMiB >= memoryMiB && hasAll(w.capabilities, capLabels)) {
         return true;
@@ -180,4 +176,10 @@ export class WorkerPool {
 function hasAll(have: string[], want: string[]): boolean {
   const set = new Set(have);
   return want.every(l => set.has(l));
+}
+
+// Labels consumed by the scheduler itself — not forwarded to capability matching
+function isSchedulerLabel(l: string): boolean {
+  const lo = l.toLowerCase();
+  return lo.startsWith('burstgrid:size=') || lo.startsWith('burstgrid:image=') || lo === 'self-hosted';
 }

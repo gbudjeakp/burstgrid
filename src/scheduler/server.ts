@@ -1,7 +1,9 @@
+import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import type { WorkerPool } from './worker-pool.js';
 import type { JobQueue } from './queue.js';
-import type { WorkerRegistration, WorkerHeartbeat, JobUpdate } from '../types/index.js';
+import { selectTier } from './router.js';
+import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job } from '../types/index.js';
 
 export function registerSchedulerRoutes(
   app: FastifyInstance,
@@ -73,4 +75,26 @@ export function registerSchedulerRoutes(
   }));
 
   app.get('/health', async (_, reply) => reply.status(200).send({ ok: true }));
+
+  // Dev-only: inject a job directly without a real GitHub webhook or runner token
+  if (process.env.NODE_ENV !== 'production') {
+    interface InjectBody { owner: string; repo: string; runId?: number; labels?: string[]; runnerToken?: string }
+    app.post<{ Body: InjectBody }>('/v1/jobs/inject', async (req, reply) => {
+      const { owner, repo, runId = 0, labels = ['linux', 'x86_64'], runnerToken = 'dev-token' } = req.body;
+      if (!owner || !repo) return reply.status(400).send({ error: 'owner and repo required' });
+      const job: Job = {
+        id: crypto.randomUUID(),
+        owner,
+        repo,
+        runId,
+        labels,
+        tier: selectTier(labels),
+        queuedAt: new Date(),
+        runnerToken,
+      };
+      queue.enqueue(job);
+      req.log.info({ jobId: job.id, owner, repo, labels }, 'job injected (dev)');
+      return reply.status(202).send({ jobId: job.id });
+    });
+  }
 }

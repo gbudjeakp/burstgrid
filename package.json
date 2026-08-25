@@ -22,7 +22,7 @@
     "@aws-sdk/client-ec2": "^3.600.0",
     "@aws-sdk/client-sqs": "^3.600.0",
     "@aws-sdk/util-dynamodb": "^3.600.0",
-    "@fastify/rate-limit": "^9.0.0",
+    "@fastify/rate-limit": "^10.0.0",
     "@octokit/app": "^15.0.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.57.0",

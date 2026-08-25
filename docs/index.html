@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BurstGrid &mdash; GitHub Actions on Firecracker microVMs</title>
-  <meta name="description" content="Open-source self-hosted runner platform for GitHub Actions. Every job boots into a dedicated Firecracker microVM in under 200ms — separate kernel, separate Docker daemon, destroyed on exit. Runs on your own EC2 bare-metal fleet." />
+  <meta name="description" content="Open-source self-hosted runner platform for GitHub Actions. Every job boots into a dedicated Firecracker microVM in under 200ms, separate kernel, separate Docker daemon, destroyed on exit. Runs on your own EC2 bare-metal fleet." />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,7 +45,7 @@
     .wip-bar strong { color: var(--accent); font-weight: 600; }
 
     /* Nav */
-    .nav-wrap { border-bottom: 1px solid var(--border); }
+    .nav-wrap { border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; background: var(--bg); }
     nav {
       max-width: 1080px; margin: 0 auto; padding: 0 28px;
       height: 56px; display: flex; align-items: center; justify-content: space-between;
@@ -175,6 +175,44 @@
     .feat-cell p { font-size: 13px; color: #a1a1aa; line-height: 1.6; }
     .feat-cell p code { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
 
+    /* Docs layout */
+    .docs-layout { display: grid; grid-template-columns: 220px 1fr; }
+    .sidebar {
+      position: sticky; top: 56px; align-self: start;
+      height: calc(100vh - 56px); overflow-y: auto;
+      border-right: 1px solid var(--border); padding: 24px 0;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .sidebar::-webkit-scrollbar { width: 3px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+    .sidebar-brand {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 13px; font-weight: 600; color: var(--text);
+      padding: 0 20px 18px; border-bottom: 1px solid var(--border); margin-bottom: 18px;
+    }
+    .sidebar-brand-icon {
+      width: 22px; height: 22px; background: var(--accent); border-radius: 5px;
+      display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
+    }
+    .sidebar-group { margin-bottom: 20px; }
+    .sidebar-group-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--dim); padding: 0 20px 5px;
+    }
+    .sidebar-link {
+      display: block; padding: 5px 20px; font-size: 13px;
+      color: var(--sub); line-height: 1.45;
+      border-left: 2px solid transparent; transition: color 0.1s, border-color 0.1s;
+    }
+    .sidebar-link:hover { color: var(--text); }
+    .sidebar-link.active { color: var(--text); border-left-color: var(--accent); }
+    .sidebar-link.sub { padding-left: 30px; font-size: 12px; }
+    .docs-main { min-width: 0; }
+    @media (max-width: 900px) {
+      .docs-layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
+
     /* Footer */
     .footer-wrap { border-top: 1px solid var(--border); }
     footer { max-width: 1080px; margin: 0 auto; padding: 26px 28px; display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: #52525b; }
@@ -253,7 +291,41 @@
   </div>
 </div>
 
-<hr class="rule" />
+<div class="docs-layout">
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <span class="sidebar-brand-icon">&#9889;</span>
+      BurstGrid
+    </div>
+    <nav>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Overview</div>
+        <a href="#" class="sidebar-link">Introduction</a>
+        <a href="#how-it-works" class="sidebar-link">Architecture</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">The flow</div>
+        <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
+        <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
+        <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
+        <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Set it up</div>
+        <a href="#get-started" class="sidebar-link">Setup guide</a>
+        <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
+        <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
+        <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
+        <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
+        <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Why BurstGrid</div>
+        <a href="#features" class="sidebar-link">Features</a>
+      </div>
+    </nav>
+  </aside>
+  <div class="docs-main">
 
 <!-- How it works -->
 <div class="section section-border" id="how-it-works">
@@ -262,7 +334,7 @@
   <p class="section-desc">No polling. No message broker. No Kubernetes. Just a webhook, a queue, a persistent SSE connection, and a VM that exists for exactly as long as the job does.</p>
 
   <div class="flow">
-    <div class="flow-step">
+    <div class="flow-step" id="flow-webhook">
       <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">GitHub fires a <code>workflow_job</code> webhook</div>
@@ -288,7 +360,7 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="flow-token">
       <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Scheduler mints a runner token and enqueues the job</div>
@@ -310,7 +382,7 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="flow-dispatch">
       <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Router matches the job to a worker and pushes over SSE</div>
@@ -333,7 +405,7 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="flow-boot">
       <div class="flow-left"><div class="flow-num on">4</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Worker boots a Firecracker VM; runner picks up the job</div>
@@ -361,14 +433,14 @@
 <hr class="rule" />
 
 <!-- Get started -->
-<div class="section section-border" id="get-started">
+<div class="section" id="get-started">
   <div class="label">Get started</div>
   <h2>From zero to running jobs</h2>
   <p class="section-desc">Five steps to deploy BurstGrid against your own GitHub organization. Steps 1&ndash;2 run in minutes; steps 3&ndash;4 take longer the first time you build a rootfs.</p>
 
   <div class="flow">
 
-    <div class="flow-step">
+    <div class="flow-step" id="step-github-app">
       <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Create a GitHub App</div>
@@ -387,7 +459,7 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="step-scheduler">
       <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Deploy the scheduler</div>
@@ -410,7 +482,7 @@ docker run -p 8080:8080 \
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="step-rootfs">
       <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Build your rootfs image</div>
@@ -441,7 +513,7 @@ cd /opt/actions-runner
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="step-workers">
       <div class="flow-left"><div class="flow-num on">4</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Deploy worker agents on bare-metal EC2</div>
@@ -466,7 +538,7 @@ cd /opt/actions-runner
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="step-workflows">
       <div class="flow-left"><div class="flow-num on">5</div><div class="flow-line"></div></div>
       <div class="flow-right">
         <div class="flow-title">Point your workflows at BurstGrid</div>
@@ -499,7 +571,7 @@ cd /opt/actions-runner
 <hr class="rule" />
 
 <!-- Features -->
-<div class="section section-border" id="features">
+<div class="section" id="features">
   <div class="label">Why BurstGrid</div>
   <h2>Container isolation isn't enough</h2>
   <p class="section-desc">When jobs handle secrets, run privileged operations, or modify the Docker daemon, sharing a kernel is a liability. VM-per-job removes the class of problem entirely.</p>
@@ -543,6 +615,9 @@ cd /opt/actions-runner
   </div>
 </div>
 
+  </div><!-- .docs-main -->
+</div><!-- .docs-layout -->
+
 <hr class="rule" />
 
 <div class="footer-wrap">
@@ -556,5 +631,24 @@ cd /opt/actions-runner
   </footer>
 </div>
 
+<script>
+  (function () {
+    const links = document.querySelectorAll('.sidebar-link[href^="#"]');
+    function update() {
+      let active = '';
+      for (const link of links) {
+        const href = link.getAttribute('href');
+        if (href === '#') { if (window.scrollY < 120) { active = '#'; } continue; }
+        const el = document.getElementById(href.slice(1));
+        if (el && el.getBoundingClientRect().top <= 72) active = href;
+      }
+      for (const link of links) {
+        link.classList.toggle('active', link.getAttribute('href') === active);
+      }
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  })();
+</script>
 </body>
 </html>

@@ -1,0 +1,70 @@
+services:
+  # Pull-through cache for Docker Hub — VMs configure this as their registry mirror.
+  # Add more proxy instances for ECR/GHCR/GCR if needed (registry:2 supports one upstream each).
+  registry:
+    image: registry:2
+    ports:
+      - "5000:5000"
+    environment:
+      REGISTRY_PROXY_REMOTEURL: https://registry-1.docker.io
+      # Layers not accessed within 7 days are eligible for GC
+      REGISTRY_PROXY_TTL: 168h
+      # Required to allow garbage-collect to actually delete blobs
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    volumes:
+      - registry-cache:/var/lib/registry
+
+  scheduler:
+    build:
+      context: .
+      target: scheduler
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: development
+      BURSTGRID_WEBHOOK_SECRET: ""
+      BURSTGRID_ADDR: "0.0.0.0"
+      BURSTGRID_PORT: "8080"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  worker:
+    build:
+      context: .
+      target: worker
+    environment:
+      BURSTGRID_MODE: simulate
+      BURSTGRID_SCHEDULER_URL: http://scheduler:8080
+      BURSTGRID_WORKER_ID: local-worker-1
+      BURSTGRID_SLOTS: "4"
+      BURSTGRID_VCPUS: "8"
+      BURSTGRID_MEMORY_MIB: "16384"
+      BURSTGRID_CAPABILITIES: linux,x86_64,docker
+      BURSTGRID_REGISTRY_MIRROR: http://registry:5000
+    depends_on:
+      scheduler:
+        condition: service_healthy
+
+  # GPU bare-metal worker example — uses 'process' mode, no Firecracker
+  # worker-gpu:
+  #   build: { context: ., target: worker }
+  #   environment:
+  #     BURSTGRID_MODE: process
+  #     BURSTGRID_RUNNER_PATH: /opt/actions-runner/run.sh
+  #     BURSTGRID_SCHEDULER_URL: http://scheduler:8080
+  #     BURSTGRID_WORKER_ID: gpu-worker-1
+  #     BURSTGRID_SLOTS: "2"
+  #     BURSTGRID_VCPUS: "32"
+  #     BURSTGRID_MEMORY_MIB: "65536"
+  #     BURSTGRID_CAPABILITIES: linux,x86_64,docker,gpu
+  #     BURSTGRID_REGISTRY_MIRROR: http://registry:5000
+  #   depends_on:
+  #     scheduler:
+  #       condition: service_healthy
+
+volumes:
+  registry-cache:

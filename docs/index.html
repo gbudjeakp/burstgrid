@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>BurstGrid &mdash; GitHub Actions on Firecracker microVMs</title>
-  <meta name="description" content="Open-source self-hosted runner platform. Each GitHub Actions job boots into a dedicated Firecracker microVM. Resource-aware dispatch, per-tier autoscaling, full isolation." />
+  <meta name="description" content="Open-source self-hosted runner platform for GitHub Actions. Every job boots into a dedicated Firecracker microVM in under 200ms, separate kernel, separate Docker daemon, destroyed on exit. Runs on your own EC2 bare-metal fleet." />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -45,21 +45,22 @@
     .wip-bar strong { color: var(--accent); font-weight: 600; }
 
     /* Nav */
-    .nav-wrap { border-bottom: 1px solid var(--border); }
+    .nav-wrap { border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; background: var(--bg); }
     nav {
-      max-width: 1080px; margin: 0 auto; padding: 0 28px;
-      height: 56px; display: flex; align-items: center; justify-content: space-between;
+      display: grid; grid-template-columns: 240px 1fr;
+      height: 56px; align-items: center;
     }
     .logo {
       font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
       display: flex; align-items: center; gap: 9px; color: var(--text);
+      padding: 0 20px 0 16px;
     }
     .logo-icon {
       width: 26px; height: 26px; background: var(--accent); border-radius: 6px;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       font-size: 14px; line-height: 1;
     }
-    .nav-right { display: flex; align-items: center; gap: 24px; }
+    .nav-right { display: flex; align-items: center; gap: 24px; justify-content: flex-end; padding: 0 28px; }
     .nav-link { font-size: 13.5px; color: #a1a1aa; transition: color 0.12s; }
     .nav-link:hover { color: var(--text); }
     .gh-btn {
@@ -112,6 +113,23 @@
     .t-ok { color: #22c55e; }
     .t-inf{ color: var(--accent); }
     .t-cm { color: #52525b; }
+
+    /* Architecture diagram */
+    .arch-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+    .arch-title { padding: 16px 20px 0; font-family: var(--mono); font-size: 10px; color: var(--dim); font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; }
+    .arch-flow { display: flex; align-items: center; padding: 24px 20px; gap: 0; overflow-x: auto; }
+    .arch-node { display: flex; flex-direction: column; align-items: center; gap: 8px; flex-shrink: 0; width: 108px; }
+    .arch-icon-ring { width: 50px; height: 50px; border-radius: 14px; display: flex; align-items: center; justify-content: center; border: 1px solid; }
+    .arch-node-name { font-size: 11.5px; font-weight: 600; color: var(--text); text-align: center; line-height: 1.35; }
+    .arch-node-sub { font-size: 10px; color: var(--dim); font-family: var(--mono); text-align: center; line-height: 1.5; }
+    .arch-conn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 0 4px; min-width: 64px; }
+    .arch-conn-lbl { font-size: 9px; font-family: var(--mono); white-space: nowrap; line-height: 1.3; color: var(--sub); }
+    .arch-conn-dim { font-size: 9px; font-family: var(--mono); white-space: nowrap; line-height: 1.3; color: var(--dim); }
+    .arch-conn-line { width: 100%; display: block; overflow: visible; }
+    .arch-stats { border-top: 1px solid var(--border); padding: 13px 20px; display: flex; }
+    .arch-stat { flex: 1; text-align: center; }
+    .arch-stat-n { font-size: 15px; font-weight: 700; color: var(--accent); font-family: var(--mono); display: block; }
+    .arch-stat-d { font-size: 10px; color: var(--dim); font-family: var(--mono); }
 
     /* Flow */
     .flow { display: flex; flex-direction: column; }
@@ -169,10 +187,57 @@
       gap: 1px; background: var(--border);
       border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
     }
+    @media (max-width: 800px) { .feat-grid { grid-template-columns: 1fr; } }
     .feat-cell { background: var(--bg); padding: 24px 26px; }
     .feat-cell h3 { font-size: 13.5px; font-weight: 600; margin-bottom: 8px; }
     .feat-cell p { font-size: 13px; color: #a1a1aa; line-height: 1.6; }
     .feat-cell p code { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
+
+    /* Who it's for */
+    .fit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 36px; }
+    @media (max-width: 800px) { .fit-grid { grid-template-columns: 1fr; } }
+    .fit-col { background: var(--surface); padding: 0; }
+    .fit-col-header { padding: 16px 24px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 9px; }
+    .fit-badge { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; }
+    .fit-badge-yes { background: rgba(74,222,128,0.1); color: #4ade80; }
+    .fit-badge-no  { background: rgba(248,113,113,0.1); color: #f87171; }
+    .fit-list { list-style: none; }
+    .fit-item { display: flex; gap: 13px; align-items: flex-start; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+    .fit-item:last-child { border-bottom: none; }
+    .fit-icon { flex-shrink: 0; margin-top: 2px; }
+    .fit-item-title { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.4; }
+    .fit-item-desc { font-size: 12.5px; color: var(--sub); line-height: 1.65; }
+
+    /* Docs layout */
+    .docs-layout { display: grid; grid-template-columns: 240px 1fr; }
+    .sidebar { position: sticky; top: 56px; align-self: start;
+      height: calc(100vh - 56px); overflow-y: auto; overflow-x: hidden;
+      border-right: 1px solid var(--border); padding: 24px 0;
+      scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+    }
+    .sidebar::-webkit-scrollbar { width: 3px; }
+    .sidebar::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
+    .sidebar-brand { display: none; }
+    .sidebar-group { margin-bottom: 20px; }
+    .sidebar-group-label {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--dim); padding: 0 20px 5px;
+    }
+    .sidebar-link {
+      display: block; padding: 5px 20px; font-size: 13px;
+      color: var(--sub); line-height: 1.45; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis;
+      border-left: 2px solid transparent; transition: color 0.1s, border-color 0.1s;
+    }
+    .sidebar-link:hover { color: var(--text); }
+    .sidebar-link.active { color: var(--text); border-left-color: var(--accent); }
+    .sidebar-link.sub { padding-left: 30px; font-size: 12px; }
+    .docs-main { min-width: 0; }
+    .docs-main .section { max-width: none; margin: 0; }
+    @media (max-width: 900px) {
+      .docs-layout { grid-template-columns: 1fr; }
+      .sidebar { display: none; }
+    }
 
     /* Footer */
     .footer-wrap { border-top: 1px solid var(--border); }
@@ -184,7 +249,6 @@
     @media (max-width: 800px) {
       .hero-grid { grid-template-columns: 1fr; gap: 36px; }
       .two-col { grid-template-columns: 1fr; }
-      .feat-grid { grid-template-columns: 1fr; }
       nav { padding: 0 20px; }
       .nav-link { display: none; }
       .section { padding: 52px 20px; }
@@ -194,7 +258,7 @@
 <body>
 
 <div class="wip-bar">
-  <strong>Work in progress.</strong> Not tested end-to-end. APIs and config schema will change before a stable release.
+  <strong>Alpha.</strong> Not production-ready. APIs and config schema will change. Contributions and feedback welcome.
 </div>
 
 <div class="nav-wrap">
@@ -205,8 +269,8 @@
     </a>
     <div class="nav-right">
       <a href="#how-it-works" class="nav-link">How it works</a>
-      <a href="#github-app" class="nav-link">GitHub App</a>
-      <a href="#features" class="nav-link">Features</a>
+      <a href="#get-started" class="nav-link">Set it up</a>
+      <a href="#features" class="nav-link">Why BurstGrid</a>
       <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener" class="gh-btn">
         <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
         GitHub
@@ -215,40 +279,140 @@
   </nav>
 </div>
 
-<!-- Hero -->
-<div class="section" style="padding-top:88px;padding-bottom:88px;">
-  <div class="hero-grid">
-    <div>
-      <div class="wip-pill">Alpha &mdash; work in progress</div>
-      <h1>GitHub Actions jobs,<br/>each in its own <em>microVM</em></h1>
-      <p class="hero-sub">
-        BurstGrid is an open-source self-hosted runner platform. A central TypeScript scheduler receives GitHub webhooks, dispatches jobs to a fleet of EC2 bare-metal hosts over SSE, and each job boots into a dedicated Firecracker VM in under 200&nbsp;ms&mdash;then disappears.
-      </p>
-      <div class="hero-actions">
-        <a href="https://github.com/gbudjeakp/burstgrid" class="btn btn-accent" target="_blank" rel="noopener">View on GitHub</a>
-        <a href="#how-it-works" class="btn btn-ghost">See the flow</a>
+<div class="docs-layout">
+  <aside class="sidebar">
+    <div class="sidebar-nav">
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Overview</div>
+        <a href="#" class="sidebar-link">Introduction</a>
+        <a href="#who-its-for" class="sidebar-link">Who it's for</a>
+        <a href="#how-it-works" class="sidebar-link">Architecture</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">The flow</div>
+        <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
+        <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
+        <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
+        <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Set it up</div>
+        <a href="#get-started" class="sidebar-link">Setup guide</a>
+        <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
+        <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
+        <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
+        <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
+        <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Why BurstGrid</div>
+        <a href="#features" class="sidebar-link">Features</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Custom images</div>
+        <a href="#custom-images" class="sidebar-link">Image catalog</a>
+        <a href="#image-template" class="sidebar-link sub">Dockerfile template</a>
+        <a href="#image-build" class="sidebar-link sub">Build the .img</a>
+        <a href="#image-register" class="sidebar-link sub">Register + use</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">GPU / AI</div>
+        <a href="#gpu-ai" class="sidebar-link">GPU workloads</a>
+        <a href="#gpu-ami" class="sidebar-link sub">Pre-baked AMI</a>
+        <a href="#gpu-fleet" class="sidebar-link sub">Fleet config</a>
       </div>
     </div>
+  </aside>
+  <div class="docs-main">
 
-    <div class="terminal">
-      <div class="terminal-bar">
-        <span class="dot" style="background:#3a2020;"></span>
-        <span class="dot" style="background:#2e2a1a;"></span>
-        <span class="dot" style="background:#1a2e1e;"></span>
+<!-- Hero -->
+<div class="section" style="padding-top:96px;padding-bottom:96px;text-align:center;">
+  <div style="max-width:700px;margin:0 auto;">
+    <div class="wip-pill">Open source &middot; Alpha</div>
+    <h1>One job.<br/>One microVM.<br/><em>Nothing shared.</em></h1>
+    <p class="hero-sub" style="margin-left:auto;margin-right:auto;">
+      BurstGrid dispatches every GitHub Actions job to a fresh Firecracker microVM on your own EC2 bare-metal fleet. Separate kernel, separate Docker daemon, separate everything. Gone the moment the job completes. No shared state. No secret bleed. No per-minute GitHub pricing.
+    </p>
+    <div class="hero-actions" style="justify-content:center;">
+      <a href="#get-started" class="btn btn-accent">Set it up</a>
+      <a href="https://github.com/gbudjeakp/burstgrid" class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div>
+
+  <div class="arch-diagram" style="margin-top:48px;">
+    <div class="arch-title">Job lifecycle</div>
+    <div class="arch-flow">
+
+      <!-- 1. GitHub Actions -->
+      <div class="arch-node">
+        <div class="arch-icon-ring" style="background:#0d1117;border-color:#30363d;">
+          <svg width="22" height="22" viewBox="0 0 16 16" fill="#c9d1d9"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        </div>
+        <div class="arch-node-name">GitHub Actions</div>
+        <div class="arch-node-sub">workflow_job<br>queued</div>
       </div>
-      <div class="terminal-body">
-<span class="t-p">$</span> <span class="t-cmd">pnpm dev:scheduler</span>
-<span class="t-inf">[scheduler] listening on :8080</span>
-<span class="t-inf">[scheduler] autoscaler started &mdash; 3 fleets</span>
-&nbsp;
-<span class="t-cm"># PR opened &rarr; GitHub fires workflow_job webhook</span>
-<span class="t-ok">[webhook]  queued &mdash; acme/monorepo run#9821</span>
-<span class="t-ok">[router]   &rarr; worker-i-0a3f  labels=[linux,large]</span>
-&nbsp;
-<span class="t-cm"># worker receives job over SSE, boots VM</span>
-<span class="t-ok">[agent]    booting VM slot-2  (4 vCPU / 4 GiB)</span>
-<span class="t-ok">[agent]    VM ready in 143ms &mdash; runner registered</span>
-<span class="t-ok">[agent]    job completed in 2m 14s &mdash; VM destroyed</span>
+
+      <!-- webhook POST -->
+      <div class="arch-conn">
+        <span class="arch-conn-lbl">HMAC-verified</span>
+        <svg class="arch-conn-line" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><line x1="2" y1="7" x2="86" y2="7" stroke="#2a2a32" stroke-width="1.5"/><polyline points="78,3 88,7 78,11" stroke="#2a2a32" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <span class="arch-conn-dim">webhook POST</span>
+      </div>
+
+      <!-- 2. Scheduler -->
+      <div class="arch-node">
+        <div class="arch-icon-ring" style="background:var(--accent-lo);border-color:#2e1608;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+        </div>
+        <div class="arch-node-name">Scheduler</div>
+        <div class="arch-node-sub">verify &middot; queue<br>tier &middot; route</div>
+      </div>
+
+      <!-- SSE stream -->
+      <div class="arch-conn">
+        <span class="arch-conn-lbl">job assignment</span>
+        <svg class="arch-conn-line" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><line x1="2" y1="7" x2="86" y2="7" stroke="#2a2a32" stroke-width="1.5"/><polyline points="78,3 88,7 78,11" stroke="#2a2a32" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <span class="arch-conn-dim">SSE push</span>
+      </div>
+
+      <!-- 3. Worker Agent -->
+      <div class="arch-node">
+        <div class="arch-icon-ring" style="background:#0a1520;border-color:#0f2340;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6" stroke-width="3"/><line x1="6" y1="18" x2="6.01" y2="18" stroke-width="3"/></svg>
+        </div>
+        <div class="arch-node-name">Worker Agent</div>
+        <div class="arch-node-sub">bare-metal EC2<br>KVM host</div>
+      </div>
+
+      <!-- Firecracker API -->
+      <div class="arch-conn">
+        <span class="arch-conn-lbl">Firecracker API</span>
+        <svg class="arch-conn-line" height="14" viewBox="0 0 100 14" preserveAspectRatio="none"><line x1="2" y1="7" x2="86" y2="7" stroke="#2a2a32" stroke-width="1.5"/><polyline points="78,3 88,7 78,11" stroke="#2a2a32" stroke-width="1.5" fill="none" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        <span class="arch-conn-dim">boot &middot; config</span>
+      </div>
+
+      <!-- 4. microVM -->
+      <div class="arch-node">
+        <div class="arch-icon-ring" style="background:#0d1a0f;border-color:#1e3a12;">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        </div>
+        <div class="arch-node-name">microVM</div>
+        <div class="arch-node-sub">isolated kernel<br>run &middot; destroy</div>
+      </div>
+
+    </div>
+    <div class="arch-stats">
+      <div class="arch-stat">
+        <span class="arch-stat-n">&lt;5ms</span>
+        <span class="arch-stat-d">dispatch</span>
+      </div>
+      <div class="arch-stat">
+        <span class="arch-stat-n">~150ms</span>
+        <span class="arch-stat-d">VM boot</span>
+      </div>
+      <div class="arch-stat">
+        <span class="arch-stat-n">0</span>
+        <span class="arch-stat-d">shared state</span>
       </div>
     </div>
   </div>
@@ -256,19 +420,86 @@
 
 <hr class="rule" />
 
+<!-- Who it's for -->
+<div class="section" id="who-its-for">
+  <div class="label">Fit</div>
+  <h2>Is BurstGrid right for you?</h2>
+  <p class="section-desc">BurstGrid is not the right tool for everyone. Here is when it makes sense and when it does not.</p>
+
+  <div class="fit-grid">
+    <div class="fit-col">
+      <div class="fit-col-header">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.15)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="fit-badge fit-badge-yes">Good fit</span>
+      </div>
+      <ul class="fit-list">
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">High concurrency</div><div class="fit-item-desc">Running 20+ jobs simultaneously most of the day. Density on bare-metal beats per-instance EC2 pricing above roughly 15 concurrent jobs.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Strict isolation requirements</div><div class="fit-item-desc">SOC 2, HIPAA, or FedRAMP workloads where kernel-level isolation per job is required. Containers share a kernel; microVMs do not.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Reproducible build environments</div><div class="fit-item-desc">You own the rootfs image. Bake your exact toolchain once, version it in git, and every job boots from an identical filesystem. No runtime package downloads, no AMI drift.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Mixed CPU + GPU CI pipelines</div><div class="fit-item-desc">One scheduler routes both standard jobs to Firecracker microVMs and GPU/ML jobs to dedicated GPU EC2 hosts. No separate runner groups to manage.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Fast feedback loops matter</div><div class="fit-item-desc">150ms VM boot vs 90s EC2 cold start. For short jobs on commit-heavy repos, that gap is most of the total CI wait time.</div></div>
+        </li>
+      </ul>
+    </div>
+    <div class="fit-col">
+      <div class="fit-col-header">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.15)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="fit-badge fit-badge-no">Not a good fit</span>
+      </div>
+      <ul class="fit-list">
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Low volume</div><div class="fit-item-desc">Under ~50 jobs per day, a per-job EC2 runner or GitHub-hosted runners are simpler and cheaper. Bare-metal has a floor cost even at zero jobs.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Already on Kubernetes</div><div class="fit-item-desc">ARC (Actions Runner Controller) integrates directly with your existing cluster. If you are already on EKS or GKE the operational overlap is zero and ARC is the right choice.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Windows runners</div><div class="fit-item-desc">Firecracker is Linux-only. Windows jobs are not supported.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Highly variable load</div><div class="fit-item-desc">Warm bare-metal hosts are required for fast dispatch. Scaling to zero kills the DX. If your CI load is unpredictable and spiky, per-job EC2 runners are a better match.</div></div>
+        </li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<hr class="rule" />
+
 <!-- How it works -->
-<div class="section section-border" id="how-it-works">
-  <div class="label">How it works</div>
-  <h2>From pull request to runner in four hops</h2>
-  <p class="section-desc">What happens from the moment a developer opens a PR to the moment a self-hosted runner picks up the job.</p>
+<div class="section" id="how-it-works">
+  <div class="label">The flow</div>
+  <h2>Webhook to running job in four hops</h2>
+  <p class="section-desc">No polling. No message broker. No Kubernetes. Just a webhook, a queue, a persistent SSE connection, and a VM that exists for exactly as long as the job does.</p>
 
   <div class="flow">
-    <div class="flow-step">
+    <div class="flow-step" id="flow-webhook">
       <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">GitHub queues the workflow job and fires a webhook</div>
+        <div class="flow-title">GitHub fires a <code>workflow_job</code> webhook</div>
         <div class="flow-body">
-          When the PR is opened, GitHub evaluates <code>.github/workflows/ci.yml</code>. Any job with <code>runs-on: [self-hosted, ...]</code> is set to <strong>queued</strong> and GitHub immediately POSTs a <code>workflow_job</code> event to the webhook URL configured in the BurstGrid GitHub App.
+          The moment a workflow job is queued, GitHub POSTs a signed <code>workflow_job</code> event to your scheduler.
+          BurstGrid verifies the <code>X-Hub-Signature-256</code> HMAC before doing anything else.
+          If the signature doesn&rsquo;t match, the request is dropped. If the queue is full, it returns <code>503</code>;
+          GitHub will retry the delivery for up to <strong>72 hours</strong>, so nothing is lost.
         </div>
         <div class="snippet">
           <div class="snippet-tab">POST /v1/webhook &nbsp;&mdash;&nbsp; X-GitHub-Event: workflow_job</div>
@@ -286,12 +517,16 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="flow-token">
       <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Scheduler verifies the payload, mints a runner token, enqueues the job</div>
+        <div class="flow-title">Scheduler mints a runner token and enqueues the job</div>
         <div class="flow-body">
-          BurstGrid verifies the <code>X-Hub-Signature-256</code> header using the webhook secret from the GitHub App. It then authenticates as the App installation and calls the GitHub Runners API to generate a <strong>one-time runner registration token</strong> for the target repo. The job and token go into a priority queue partitioned by tier. If the queue exceeds <code>maxQueueDepth</code>, the scheduler returns <code>503</code>&mdash;GitHub retries for up to 72&nbsp;hours.
+          BurstGrid authenticates as your GitHub App installation and calls the Runners API to generate a
+          <strong>one-time registration token</strong> for the target repo. The token and job metadata go into a
+          priority queue partitioned by tier. <code>critical</code> jobs always jump ahead of <code>standard</code> ones.
+          Token generation is protected by a circuit breaker: after 5 consecutive GitHub API failures,
+          the scheduler opens the circuit and returns <code>503</code> until the API recovers.
         </div>
         <div class="snippet">
           <div class="snippet-tab">POST /repos/acme/monorepo/actions/runners/registration-token</div>
@@ -304,12 +539,15 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="flow-dispatch">
       <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Scheduler dispatches the assignment to a worker over SSE</div>
+        <div class="flow-title">Router matches the job to a worker and pushes over SSE</div>
         <div class="flow-body">
-          The router checks each connected worker's free vCPU and RAM against the job's size label (<code>burstgrid:size=large</code> &rarr; 4&nbsp;vCPU / 4&nbsp;GiB). The first worker with matching capabilities and enough headroom receives the job as a JSON event on its persistent <code>GET /v1/workers/:id/stream</code> SSE connection. No polling, no database.
+          The router checks the job&rsquo;s size label (<code>burstgrid:size=large</code> &rarr; 4&nbsp;vCPU / 4&nbsp;GiB) against every connected
+          worker&rsquo;s free resources and capability labels. The first worker that fits gets the assignment pushed
+          as a JSON event over its persistent SSE connection, the same open HTTP response it&rsquo;s been holding
+          since it registered. No database read. No poll. Dispatch latency is typically under 5&nbsp;ms.
         </div>
         <div class="snippet">
           <div class="snippet-tab">SSE &rarr; worker-i-0a3f2b &nbsp;(persistent connection)</div>
@@ -324,12 +562,16 @@
       </div>
     </div>
 
-    <div class="flow-step">
+    <div class="flow-step" id="flow-boot">
       <div class="flow-left"><div class="flow-num on">4</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Worker boots a Firecracker microVM, runner self-registers, job runs</div>
+        <div class="flow-title">Worker boots a Firecracker VM; runner picks up the job</div>
         <div class="flow-body">
-          The agent calls the Firecracker Unix socket API to boot a microVM with the requested resources. The runner token and labels are passed as kernel boot arguments&mdash;the Actions runner inside the VM reads <code>/proc/cmdline</code>, registers with GitHub, and picks up the queued job. On completion the VM is terminated, the slot freed, and the worker sends a heartbeat back with updated resource counts. The rootfs is never reused.
+          The worker agent calls the Firecracker Unix socket API to boot a microVM with exactly the requested
+          vCPU and RAM. The runner token and size labels are injected as kernel boot args; the init script
+          inside the VM reads <code>/proc/cmdline</code>, calls <code>./config.sh --ephemeral</code> to register with GitHub,
+          then <code>./run.sh</code> to execute the job. When it exits, the VM is killed, the disk is discarded,
+          and the slot is freed. The rootfs is <strong>never reused</strong>.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Firecracker API &rarr; PUT /boot-source</div>
@@ -347,46 +589,305 @@
 
 <hr class="rule" />
 
-<!-- GitHub App -->
-<div class="section section-border" id="github-app">
-  <div class="label">Setup</div>
-  <h2>Yes, BurstGrid needs a GitHub App</h2>
-  <p class="section-desc">
-    The App provides a signed webhook channel and an installation token so the scheduler can call the Runners API to mint the per-repo registration tokens that let VMs self-register with GitHub.
-  </p>
+<!-- Get started -->
+<div class="section" id="get-started">
+  <div class="label">Get started</div>
+  <h2>From zero to running jobs</h2>
+  <p class="section-desc">Five steps to deploy BurstGrid against your own GitHub organization. Steps 1&ndash;2 run in minutes; steps 3&ndash;4 take longer the first time you build a rootfs.</p>
 
-  <div class="two-col">
-    <div class="card">
-      <h3>Permissions required</h3>
-      <ul class="perm-list">
-        <li><span class="pb pb-rw">Read &amp; write</span><span><strong>Administration</strong> &mdash; create and delete self-hosted runners on repos/orgs</span></li>
-        <li><span class="pb pb-ro">Read</span><span><strong>Actions</strong> &mdash; read workflow run details</span></li>
-        <li><span class="pb pb-ro">Read</span><span><strong>Metadata</strong> &mdash; required by GitHub for all Apps</span></li>
-        <li><span class="pb pb-wh">Webhook</span><span>Subscribe to <strong>workflow_job</strong> events &mdash; queued, in_progress, completed</span></li>
-      </ul>
+  <div class="flow">
+
+    <div class="flow-step" id="step-github-app">
+      <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Create a GitHub App</div>
+        <div class="flow-body">
+          Go to <strong>Settings &rarr; Developer Settings &rarr; GitHub Apps &rarr; New GitHub App</strong>.
+          Set the webhook URL to <code>https://your-scheduler/webhook/github</code> and generate a secret.
+          Grant <strong>Administration: read&nbsp;&amp;&nbsp;write</strong> and <strong>Actions: read</strong>, then subscribe to <strong>workflow_job</strong> events.
+          Download the private key PEM and install the App on your org.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Scheduler environment variables</div>
+          <div class="snippet-body"><span class="s-key">GITHUB_APP_ID</span>=<span class="s-str">123456</span>
+<span class="s-key">GITHUB_PRIVATE_KEY_PATH</span>=<span class="s-str">/run/secrets/burstgrid.pem</span>
+<span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">your-webhook-secret</span></div>
+        </div>
+      </div>
     </div>
-    <div class="card">
-      <h3>Environment variables</h3>
-      <table class="env-table">
-        <thead><tr><th>Variable</th><th>What it is</th></tr></thead>
-        <tbody>
-          <tr><td>GITHUB_APP_ID</td><td>Numeric App ID from the App settings page</td></tr>
-          <tr><td>GITHUB_PRIVATE_KEY</td><td>PEM private key &mdash; signs JWTs for API auth</td></tr>
-          <tr><td>GITHUB_WEBHOOK_SECRET</td><td>Set when creating the App &mdash; used to verify <code>X-Hub-Signature-256</code></td></tr>
-          <tr><td>GITHUB_INSTALLATION_ID</td><td>Installation ID for the org the App is installed on</td></tr>
-        </tbody>
-      </table>
+
+    <div class="flow-step" id="step-scheduler">
+      <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Deploy the scheduler</div>
+        <div class="flow-body">
+          A single Node.js process. Runs on any standard EC2 instance; <code>t3.small</code> handles thousands of webhooks per minute.
+          It needs outbound HTTPS to <code>api.github.com</code> and inbound port 8080 from GitHub&rsquo;s webhook IP ranges.
+          No database required to start; add Redis later if you need queue durability across restarts.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Docker</div>
+          <div class="snippet-body"><span class="s-cm"># Build from source</span>
+docker build --target scheduler -t burstgrid-scheduler .
+docker run -p 8080:8080 \
+  -e <span class="s-key">GITHUB_APP_ID</span>=<span class="s-num">123456</span> \
+  -e <span class="s-key">GITHUB_PRIVATE_KEY_PATH</span>=<span class="s-str">/run/secrets/key.pem</span> \
+  -e <span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">secret</span> \
+  -v /path/to/key.pem:/run/secrets/key.pem:ro \
+  burstgrid-scheduler</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="step-rootfs">
+      <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Build your rootfs image</div>
+        <div class="flow-body">
+          Each Firecracker VM boots from a small ext4 image you build once and store on each host.
+          Copy <code>rootfs/template/Dockerfile</code> into a new folder named after your image,
+          customise it for your toolchain, then run the build script. Every image is just a folder
+          with a single <code>Dockerfile</code> that fully declares what is in it.
+          The BurstGrid init script (<code>scripts/vm-init.sh</code>) is injected automatically.
+          It reads <code>RUNNER_TOKEN</code> and <code>RUNNER_LABELS</code> from <code>/proc/cmdline</code>
+          and starts the runner as an ephemeral instance.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">rootfs/ layout</div>
+          <div class="snippet-body">rootfs/
+  template/
+    Dockerfile          <span class="s-cm"># base template, copy this</span>
+  ubuntu-docker/
+    Dockerfile          <span class="s-cm"># Ubuntu 22.04 + Docker 24</span>
+  node20/
+    Dockerfile          <span class="s-cm"># Ubuntu 22.04 + Node 20</span>
+  my-custom-image/
+    Dockerfile          <span class="s-cm"># your image</span></div>
+        </div>
+        <div class="snippet" style="margin-top:10px;">
+          <div class="snippet-tab">Build and register an image</div>
+          <div class="snippet-body"><span class="s-cm"># 1. scaffold a new image from the template</span>
+cp -r rootfs/template rootfs/my-image
+<span class="s-cm"># 2. edit rootfs/my-image/Dockerfile</span>
+
+<span class="s-cm"># 3. build the .img (requires docker + e2fsprogs)</span>
+./scripts/build-rootfs.sh rootfs/my-image/Dockerfile /opt/images/my-image.img <span class="s-num">4G</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="step-workers">
+      <div class="flow-left"><div class="flow-num on">4</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Deploy worker agents on bare-metal EC2</div>
+        <div class="flow-body">
+          Firecracker requires KVM, so workers must run on <strong>bare-metal instances</strong>.
+          <code>m7i.metal-24xl</code>, <code>m6g.metal</code>, and similar are supported. Standard virtualized instances cannot run nested VMs.
+          Copy the rootfs image and kernel to each host, set the environment variables below, and start the agent.
+          The agent registers itself with the scheduler, opens an SSE stream, and starts accepting jobs immediately.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Worker agent environment</div>
+          <div class="snippet-body"><span class="s-key">BURSTGRID_SCHEDULER_URL</span>=<span class="s-str">http://10.0.1.50:8080</span>
+<span class="s-key">BURSTGRID_WORKER_ID</span>=<span class="s-str">$(curl -s http://169.254.169.254/latest/meta-data/instance-id)</span>
+<span class="s-key">BURSTGRID_VM_IMAGE</span>=<span class="s-str">/var/lib/burstgrid/runner.img</span>
+<span class="s-key">BURSTGRID_KERNEL</span>=<span class="s-str">/var/lib/burstgrid/vmlinux</span>
+<span class="s-key">BURSTGRID_SLOTS</span>=<span class="s-num">8</span>       <span class="s-cm"># concurrent VMs per host</span>
+<span class="s-key">BURSTGRID_VCPUS</span>=<span class="s-num">48</span>      <span class="s-cm"># match your instance type</span>
+<span class="s-key">BURSTGRID_MEMORY_MIB</span>=<span class="s-num">98304</span>  <span class="s-cm"># 96 GiB</span>
+<span class="s-key">BURSTGRID_CAPABILITIES</span>=<span class="s-str">linux,x86_64,docker</span>
+<span class="s-key">BURSTGRID_REGISTRY_MIRROR</span>=<span class="s-str">http://10.0.1.50:5000</span>  <span class="s-cm"># optional</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="step-workflows">
+      <div class="flow-left"><div class="flow-num on">5</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Point your workflows at BurstGrid</div>
+        <div class="flow-body">
+          Add <code>self-hosted</code> plus a <code>burstgrid:size=</code> label to any job&rsquo;s <code>runs-on</code>.
+          That&rsquo;s the only workflow change required. The scheduler reads the labels, picks the right worker,
+          and boots a VM sized to match. GPU jobs add a <code>gpu</code> label and land exclusively on
+          workers that advertise that capability. No routing config needed on your end.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">.github/workflows/ci.yml</div>
+          <div class="snippet-body"><span class="s-key">jobs</span>:
+  <span class="s-key">test</span>:
+    <span class="s-key">runs-on</span>: [<span class="s-str">self-hosted</span>, <span class="s-str">linux</span>, <span class="s-str">burstgrid:size=large</span>]
+    <span class="s-key">steps</span>:
+      - <span class="s-key">uses</span>: <span class="s-str">actions/checkout@v4</span>
+      - <span class="s-key">run</span>: <span class="s-str">pnpm test</span>
+
+  <span class="s-key">train</span>:
+    <span class="s-key">runs-on</span>: [<span class="s-str">self-hosted</span>, <span class="s-str">linux</span>, <span class="s-str">gpu</span>, <span class="s-str">burstgrid:size=4xlarge</span>]
+    <span class="s-key">steps</span>:
+      - <span class="s-key">run</span>: <span class="s-str">python train.py</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<hr class="rule" />
+
+<!-- Custom images -->
+<div class="section" id="custom-images">
+  <div class="label">Custom images</div>
+  <h2>Your Dockerfile is your image spec</h2>
+  <p class="section-desc">Every rootfs is built from a Dockerfile you own. Copy the template, add your tools, build once, reference by name. The image catalog in config maps label names to paths with no hardcoded conventions.</p>
+
+  <div class="flow">
+    <div class="flow-step" id="image-template">
+      <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Start from the template</div>
+        <div class="flow-body">
+          <code>rootfs/template/Dockerfile</code> is a commented starting point. Every section (base OS, system packages,
+          Docker daemon, language runtimes, pre-warmed caches, runner binary) is labelled and optional.
+          Copy it and delete what you don&rsquo;t need.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">rootfs/my-image/Dockerfile (after copying template)</div>
+          <div class="snippet-body">FROM ubuntu:22.04
+
+RUN apt-get update &amp;&amp; apt-get install -y \
+    ca-certificates curl git libicu70 libssl3 \
+    <span class="s-hl">python3 python3-pip build-essential</span>  <span class="s-cm"># your additions</span>
+
+<span class="s-cm"># pre-warm pip cache so jobs don&rsquo;t wait for installs</span>
+RUN pip install pytest boto3 requests
+
+<span class="s-cm"># runner binary (required)</span>
+ARG RUNNER_VERSION=2.317.0
+RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
+ &amp;&amp; curl -fsSL &quot;https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz&quot; \
+    | tar -xz &amp;&amp; ./bin/installdependencies.sh</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="image-build">
+      <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Build the .img</div>
+        <div class="flow-body">
+          <code>scripts/build-rootfs.sh</code> uses <code>docker export</code> + <code>mkfs.ext4</code> to turn any Dockerfile
+          into a bootable ext4 image. It also injects <code>scripts/vm-init.sh</code> as <code>/sbin/burstgrid-init</code>,
+          the PID&nbsp;1 script that reads <code>/proc/cmdline</code>, starts Docker if present,
+          and runs the Actions runner as ephemeral before halting the VM.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Build (run on the build host, not the worker)</div>
+          <div class="snippet-body">./scripts/build-rootfs.sh \
+  rootfs/my-image/Dockerfile \
+  /opt/images/my-image.img \
+  <span class="s-num">4G</span>           <span class="s-cm"># image size &mdash; set generously, sparse file</span>
+
+<span class="s-cm"># copy to workers via S3 or scp:</span>
+aws s3 cp /opt/images/my-image.img s3://your-bucket/rootfs/my-image.img
+ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&quot;</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="image-register">
+      <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Register and use</div>
+        <div class="flow-body">
+          Add the image to the <code>worker.images</code> catalog in <code>burstgrid.config.yaml</code>.
+          The <code>name</code> field is what jobs put in their <code>runs-on</code> label.
+          All other fields are metadata; they document what&rsquo;s in the image so your team doesn&rsquo;t have to guess.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">burstgrid.config.yaml</div>
+          <div class="snippet-body"><span class="s-key">worker</span>:
+  <span class="s-key">images</span>:
+    - <span class="s-key">name</span>:         <span class="s-str">my-image</span>          <span class="s-cm"># used in runs-on</span>
+      <span class="s-key">path</span>:         <span class="s-str">/opt/images/my-image.img</span>
+      <span class="s-key">description</span>: <span class="s-str">"Ubuntu 22.04 + Python 3 + pytest"</span>
+      <span class="s-key">os</span>:           <span class="s-str">ubuntu-22.04</span>
+      <span class="s-key">tools</span>:        [python3, pip, git, curl]</div>
+        </div>
+        <div class="snippet" style="margin-top:12px">
+          <div class="snippet-tab">.github/workflows/ci.yml</div>
+          <div class="snippet-body"><span class="s-key">jobs</span>:
+  <span class="s-key">test</span>:
+    <span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:image=my-image</span>]</div>
+        </div>
+      </div>
     </div>
   </div>
+</div>
 
-  <div class="card">
-    <h3 style="font-size:12.5px;font-weight:500;color:#a1a1aa;margin-bottom:12px;">Create the App in five steps</h3>
-    <div class="steps">
-<span style="color:#52525b;">1.</span> <span>Settings &rarr; Developer Settings &rarr; GitHub Apps &rarr; New GitHub App</span>
-<span style="color:#52525b;">2.</span> Set webhook URL to <code>https://your-scheduler/v1/webhook</code> and generate a webhook secret
-<span style="color:#52525b;">3.</span> Grant the permissions above and subscribe to <strong>workflow_job</strong> events
-<span style="color:#52525b;">4.</span> Generate a private key &mdash; download the <code>.pem</code> and set it as <code>GITHUB_PRIVATE_KEY</code>
-<span style="color:#52525b;">5.</span> Install the App on your org &mdash; note the installation ID in the URL
+<hr class="rule" />
+
+<!-- GPU / AI -->
+<div class="section" id="gpu-ai">
+  <div class="label">GPU / AI</div>
+  <h2>GPU jobs run directly on the host</h2>
+  <p class="section-desc">Firecracker has no GPU passthrough. GPU and ML jobs are routed to dedicated EC2 GPU instances that run the Actions runner natively, with no microVM in the path. The host AMI is pre-baked with CUDA, ML frameworks, and optionally Docker + NVIDIA Container Toolkit.</p>
+
+  <div class="flow">
+    <div class="flow-step" id="gpu-ami">
+      <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Define a GPU AMI profile</div>
+        <div class="flow-body">
+          Build an EC2 AMI with your GPU stack pre-installed (CUDA drivers, PyTorch, model weights, etc.).
+          Register it in <code>burstgrid.config.yaml</code> under <code>gpu_amis</code>.
+          Docker and the NVIDIA Container Toolkit can be included. <code>docker run --gpus all</code> works natively on the host.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">burstgrid.config.yaml</div>
+          <div class="snippet-body"><span class="s-key">gpu_amis</span>:
+  - <span class="s-key">id</span>:               <span class="s-str">ami-0abc1234</span>
+    <span class="s-key">name</span>:             <span class="s-str">cuda12-pytorch2</span>
+    <span class="s-key">cuda_version</span>:     <span class="s-str">"12.4"</span>
+    <span class="s-key">instance_families</span>: [g4dn, g5, p3]
+    <span class="s-key">docker_enabled</span>:   <span class="s-str">true</span>
+    <span class="s-key">cached_packages</span>:  [torch==2.3.0, transformers==4.40.0]
+    <span class="s-key">cached_models</span>:    [meta-llama/Llama-3-8B-Instruct]
+    <span class="s-key">pre_pulled_images</span>: [pytorch/pytorch:2.3.0-cuda12.1-runtime]
+    <span class="s-key">env</span>:
+      <span class="s-key">TORCH_HOME</span>: <span class="s-str">/opt/model-cache</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="gpu-fleet">
+      <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Configure the GPU autoscaler fleet</div>
+        <div class="flow-body">
+          Add a fleet entry with <code>gpu_ami_id</code> and <code>instance_type</code>.
+          The autoscaler passes these as overrides to <code>RunInstances</code> on top of your base Launch Template.
+          Workers on these instances should register with <code>gpu</code> and <code>cuda</code> in their capabilities;
+          only GPU-labelled jobs will land on them.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">autoscaler fleet + workflow label</div>
+          <div class="snippet-body"><span class="s-cm"># burstgrid.config.yaml</span>
+<span class="s-key">autoscaler</span>:
+  <span class="s-key">fleets</span>:
+    - <span class="s-key">name</span>:              <span class="s-str">gpu-ai</span>
+      <span class="s-key">size_tag</span>:         <span class="s-str">burstgrid:gpu</span>
+      <span class="s-key">launch_template_id</span>: <span class="s-str">lt-gpu-base</span>
+      <span class="s-key">gpu_ami_id</span>:        <span class="s-str">ami-0abc1234</span>
+      <span class="s-key">instance_type</span>:     <span class="s-str">g4dn.xlarge</span>
+      <span class="s-key">max_workers</span>:       <span class="s-num">5</span>
+      <span class="s-key">slots_per_worker</span>:  <span class="s-num">1</span>     <span class="s-cm"># 1 job at a time on each GPU host</span>
+      <span class="s-key">scale_up_threshold</span>: <span class="s-num">0</span>
+      <span class="s-key">subnet_ids</span>:        [subnet-gpu-az1]
+
+<span class="s-cm"># workflow</span>
+<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu</span>]         <span class="s-cm"># routes to gpu-ai tier</span>
+<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu-ai</span>]      <span class="s-cm"># equivalent alias</span></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -394,43 +895,58 @@
 <hr class="rule" />
 
 <!-- Features -->
-<div class="section section-border" id="features">
-  <div class="label">What's inside</div>
-  <h2>Built for teams who've hit the ceiling</h2>
-  <p class="section-desc">GitHub-hosted runners top out at 4&nbsp;vCPU / 16&nbsp;GiB. BurstGrid hands you the metal.</p>
+<div class="section" id="features">
+  <div class="label">Why BurstGrid</div>
+  <h2>Container isolation isn't enough</h2>
+  <p class="section-desc">When jobs handle secrets, run privileged operations, or modify the Docker daemon, sharing a kernel is a liability. VM-per-job removes the class of problem entirely.</p>
   <div class="feat-grid">
     <div class="feat-cell">
-      <h3>Firecracker isolation</h3>
-      <p>Every job gets its own kernel. No shared namespaces, no container breakout surface. The rootfs is discarded the moment the runner exits.</p>
+      <h3>Separate kernel per job</h3>
+      <p>Not a container. Not a namespace. A real Firecracker microVM with its own kernel, booted in under 200&nbsp;ms and destroyed on exit. The disk never touches the next job.</p>
     </div>
     <div class="feat-cell">
-      <h3>SSE dispatch</h3>
-      <p>Workers hold a persistent Server-Sent Events connection. Jobs arrive the instant they're queued&mdash;no polling, no long-poll timeouts, no extra infra.</p>
+      <h3>Sub-5 ms dispatch</h3>
+      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued, with no polling, no broker, no cold-start reconnect per job.</p>
     </div>
     <div class="feat-cell">
-      <h3>Resource-aware routing</h3>
-      <p>Label jobs with <code>burstgrid:size=large</code>. The scheduler only assigns to workers with enough free vCPU and RAM. No overcommit.</p>
+      <h3>Right-sized, not over-provisioned</h3>
+      <p>Seven sizes from <code>small</code> (1&nbsp;vCPU) to <code>8xlarge</code> (64&nbsp;vCPU&nbsp;/&nbsp;128&nbsp;GiB). Jobs only dispatch to workers with the headroom to match. No overcommit, ever.</p>
     </div>
     <div class="feat-cell">
-      <h3>Per-tier autoscaling</h3>
-      <p>Define separate EC2 launch templates for <code>standard</code>, <code>large</code>, and <code>xlarge</code> fleets. Each scales independently against its own queue threshold.</p>
+      <h3>GPU jobs go straight to metal</h3>
+      <p>Register GPU hosts in <code>process</code> mode with a <code>gpu</code> capability label. Jobs that need GPU land exclusively on those hosts. Firecracker isn&rsquo;t in the critical path.</p>
     </div>
     <div class="feat-cell">
-      <h3>Circuit breaker</h3>
-      <p>GitHub API calls trip after 5 consecutive failures and stay open for 30&nbsp;s. Returns <code>503</code> so GitHub keeps retrying for up to 72&nbsp;hours.</p>
+      <h3>Docker pulls that don&rsquo;t start from zero</h3>
+      <p>Point workers at a local registry mirror. The first VM pulls from Docker Hub and caches on the host. Every VM after that is served at LAN speed. ECR pull-through cache works too.</p>
     </div>
     <div class="feat-cell">
-      <h3>OpenTelemetry metrics</h3>
-      <p>Queue depth, dispatch latency, VM boot time, and job duration&mdash;all OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
+      <h3>Scale the right fleet, not all of them</h3>
+      <p>Separate EC2 launch templates per size tier. Each one scales independently against its own queue depth. Workers drain naturally, with no forced termination mid-job.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>GitHub goes down. Your queue doesn&rsquo;t.</h3>
+      <p>The circuit breaker trips after 5 consecutive API failures and returns <code>503</code>. GitHub retries webhook deliveries for up to 72&nbsp;hours. No events are dropped.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Durable when you need it</h3>
+      <p>Attach Redis for queue persistence and worker state, SQS as a webhook alternative, or DynamoDB for an append-only job history log. All opt-in, all env-var configured.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Metrics from day one</h3>
+      <p>Queue depth, dispatch latency, VM boot time, job duration, all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
     </div>
   </div>
 </div>
+
+  </div><!-- .docs-main -->
+</div><!-- .docs-layout -->
 
 <hr class="rule" />
 
 <div class="footer-wrap">
   <footer>
-    <span>BurstGrid &mdash; MIT License</span>
+    <span>BurstGrid &mdash; open source, MIT License</span>
     <div class="footer-links">
       <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/gbudjeakp/burstgrid/issues" target="_blank" rel="noopener">Issues</a>
@@ -439,5 +955,24 @@
   </footer>
 </div>
 
+<script>
+  (function () {
+    const links = document.querySelectorAll('.sidebar-link[href^="#"]');
+    function update() {
+      let active = '';
+      for (const link of links) {
+        const href = link.getAttribute('href');
+        if (href === '#') { if (window.scrollY < 120) { active = '#'; } continue; }
+        const el = document.getElementById(href.slice(1));
+        if (el && el.getBoundingClientRect().top <= 72) active = href;
+      }
+      for (const link of links) {
+        link.classList.toggle('active', link.getAttribute('href') === active);
+      }
+    }
+    window.addEventListener('scroll', update, { passive: true });
+    update();
+  })();
+</script>
 </body>
 </html>

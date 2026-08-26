@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
 import type { TierFleet } from '../fleet/autoscaler.js';
+import type { GpuAmiProfile, RootfsImage } from '../types/index.js';
 
 export interface BurstGridConfig {
   scheduler?: {
@@ -9,11 +10,27 @@ export interface BurstGridConfig {
     rateLimitMax?: number;
     rateLimitWindow?: string;
   };
+  worker?: {
+    /** Docker pull-through registry mirror URL. Env: BURSTGRID_REGISTRY_MIRROR */
+    registryMirror?: string;
+    /**
+     * Named rootfs image catalog. Maps burstgrid:image=<name> labels to absolute
+     * paths on the worker host. When omitted, the worker resolves images via
+     * imageDir/<name>.img convention.
+     */
+    images?: RootfsImage[];
+  };
   autoscaler?: {
     enabled?: boolean;
     evaluationIntervalSec?: number;
     fleets?: TierFleet[];
   };
+  /**
+   * Pre-baked GPU AMI profiles.  Each profile describes an AMI with CUDA drivers,
+   * ML frameworks, and optionally model weights pre-installed for fast job start.
+   * Reference a profile by name in a TierFleet via gpuAmiId.
+   */
+  gpuAmis?: GpuAmiProfile[];
   backends?: {
     redis?: {
       /** Redis connection URL, e.g. redis://your-elasticache:6379. Env: BURSTGRID_REDIS_URL */

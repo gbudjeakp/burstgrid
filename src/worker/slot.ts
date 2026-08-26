@@ -6,6 +6,29 @@ import { vmSizeFromLabels, type RootfsImage } from '../types/index.js';
 /** How the slot executes jobs on this host. */
 export type SlotMode = 'firecracker' | 'process' | 'simulate';
 
+// Keys that must never be overridden by job-supplied env vars in process mode.
+const BLOCKED_ENV_KEYS = new Set([
+  'LD_PRELOAD', 'LD_LIBRARY_PATH',
+  'DYLD_INSERT_LIBRARIES', 'DYLD_LIBRARY_PATH',
+  'IFS', 'BASH_ENV', 'ENV', 'CDPATH',
+  'PYTHONPATH', 'RUBYLIB', 'PERL5LIB',
+  'NODE_OPTIONS', 'NODE_PATH',
+  'PATH',
+  'AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_SESSION_TOKEN',
+]);
+
+function sanitizeEnv(env: Record<string, string>): Record<string, string> {
+  const safe: Record<string, string> = {};
+  for (const [k, v] of Object.entries(env)) {
+    if (BLOCKED_ENV_KEYS.has(k)) {
+      console.warn(`[slot] blocked env key from job assignment: ${k}`);
+      continue;
+    }
+    safe[k] = v;
+  }
+  return safe;
+}
+
 export interface SlotConfig {
   jobId: string;
   mode: SlotMode;
@@ -55,7 +78,7 @@ export class Slot {
     // process mode: spawn the runner script directly without a VM (bare-metal / GPU hosts)
     const child = spawn(this.cfg.runnerPath ?? './run.sh', [], {
       stdio: 'inherit',
-      env: { ...process.env, ...this.cfg.env, RUNNER_TOKEN: runnerToken, RUNNER_LABELS: labels.join(',') },
+      env: { ...process.env, ...sanitizeEnv(this.cfg.env ?? {}), RUNNER_TOKEN: runnerToken, RUNNER_LABELS: labels.join(',') },
     });
     this.proc = child;
     this.procExit = new Promise((resolve, reject) => {

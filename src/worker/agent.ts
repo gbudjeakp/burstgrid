@@ -23,6 +23,8 @@ export interface AgentConfig {
   runnerPath?: string;
   /** Docker pull-through registry mirror URL forwarded to each VM. */
   registryMirror?: string;
+  /** Shared secret for authenticating to the scheduler. Set BURSTGRID_WORKER_TOKEN on both sides. */
+  workerToken?: string;
 }
 
 export class WorkerAgent {
@@ -90,7 +92,7 @@ export class WorkerAgent {
   private async connectStream(signal: AbortSignal): Promise<void> {
     const res = await fetch(
       `${this.cfg.schedulerUrl}/v1/workers/${this.cfg.workerId}/stream`,
-      { signal, headers: { Accept: 'text/event-stream' } },
+      { signal, headers: { Accept: 'text/event-stream', ...this.authHeader() } },
     );
     if (!res.ok || !res.body) throw new Error(`stream connect failed: ${res.status}`);
 
@@ -165,10 +167,17 @@ export class WorkerAgent {
   private async post(path: string, body: unknown): Promise<void> {
     const res = await fetch(`${this.cfg.schedulerUrl}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.authHeader(),
+      },
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} from ${path}`);
+  }
+
+  private authHeader(): Record<string, string> {
+    return this.cfg.workerToken ? { Authorization: `Bearer ${this.cfg.workerToken}` } : {};
   }
 }
 

@@ -20,6 +20,7 @@ const {
   BURSTGRID_RUNNER_PATH,
   // Pull-through registry mirror — set to http://<host>:5000 to cache Docker Hub pulls
   BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
+  BURSTGRID_WORKER_TOKEN = '',
 } = process.env;
 
 const controller = new AbortController();
@@ -39,6 +40,7 @@ const agent = new WorkerAgent({
   imageDir: BURSTGRID_IMAGE_DIR,
   runnerPath: BURSTGRID_RUNNER_PATH,
   registryMirror: BURSTGRID_REGISTRY_MIRROR,
+  workerToken: BURSTGRID_WORKER_TOKEN,
 });
 
 try {

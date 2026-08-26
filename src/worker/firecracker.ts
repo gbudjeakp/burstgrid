@@ -43,6 +43,8 @@ export class FirecrackerVM {
 
     await this.waitForSocket(5_000);
     await this.configure();
+    // Scrub the token from heap — it has already been transmitted to the Firecracker API socket
+    Object.assign(this.cfg, { runnerToken: '' });
     await this.apiPut('/actions', { action_type: 'InstanceStart' });
     recordVmBootDuration(Date.now() - bootStart);
   }

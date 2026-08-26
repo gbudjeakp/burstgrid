@@ -26,6 +26,7 @@ const {
   BURSTGRID_FLEETS,
   GITHUB_APP_ID,
   GITHUB_PRIVATE_KEY_PATH,
+  GITHUB_PRIVATE_KEY,
   GITHUB_TOKEN,
 } = process.env;
 
@@ -59,6 +60,8 @@ registerSchedulerObservers(
 
 const ghClient = GITHUB_TOKEN
   ? AppClient.fromToken(GITHUB_TOKEN)
+  : GITHUB_PRIVATE_KEY
+  ? AppClient.fromGitHubAppKey(Number(GITHUB_APP_ID), GITHUB_PRIVATE_KEY.replace(/\\n/g, '\n'))
   : AppClient.fromGitHubApp(Number(GITHUB_APP_ID), GITHUB_PRIVATE_KEY_PATH!);
 
 const app = Fastify({ logger: { level: 'info' } });

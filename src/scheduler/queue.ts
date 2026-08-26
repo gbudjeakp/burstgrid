@@ -6,6 +6,7 @@ import type { RedisQueueBackend } from '../backends/redis.js';
 const TIER_PRIORITY: ExecutionTier[] = [
   ExecutionTier.Critical,
   ExecutionTier.Standard,
+  ExecutionTier.GpuAI,
   ExecutionTier.HighDensity,
   ExecutionTier.Overflow,
 ];

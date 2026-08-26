@@ -57,6 +57,8 @@ export interface JobAssignment {
   tier: ExecutionTier;
   vcpus: number;
   memoryMiB: number;
+  /** Extra env vars from the GpuAmiProfile, forwarded to the runner process. */
+  env?: Record<string, string>;
 }
 
 export const VM_SIZES: Record<string, { vcpus: number; memoryMiB: number }> = {
@@ -100,4 +102,15 @@ export interface GpuAmiProfile {
   cachedPackages?: string[];
   /** HuggingFace model IDs pre-downloaded into the model cache on the image. */
   cachedModels?: string[];
+  /**
+   * Whether Docker + NVIDIA Container Toolkit are pre-installed on the AMI.
+   * GPU jobs run directly on the EC2 host (not inside a Firecracker VM), so
+   * Docker is fully available — containers can access GPUs via --gpus all.
+   * Defaults to false; set true if your AMI includes the NVIDIA runtime.
+   */
+  dockerEnabled?: boolean;
+  /** Docker images pre-pulled on the AMI to avoid pull latency on first job. */
+  prePulledImages?: string[];
+  /** Extra environment variables injected into every job on this host. */
+  env?: Record<string, string>;
 }

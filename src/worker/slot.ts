@@ -17,6 +17,8 @@ export interface SlotConfig {
   runnerPath?: string;
   /** Docker registry mirror URL passed to VMs as a boot arg (e.g. http://10.0.0.1:5000). */
   registryMirror?: string;
+  /** Extra env vars from GpuAmiProfile forwarded to the runner process in 'process' mode. */
+  env?: Record<string, string>;
 }
 
 export class Slot {
@@ -51,7 +53,7 @@ export class Slot {
     // process mode: spawn the runner script directly without a VM (bare-metal / GPU hosts)
     const child = spawn(this.cfg.runnerPath ?? './run.sh', [], {
       stdio: 'inherit',
-      env: { ...process.env, RUNNER_TOKEN: runnerToken, RUNNER_LABELS: labels.join(',') },
+      env: { ...process.env, ...this.cfg.env, RUNNER_TOKEN: runnerToken, RUNNER_LABELS: labels.join(',') },
     });
     this.proc = child;
     this.procExit = new Promise((resolve, reject) => {

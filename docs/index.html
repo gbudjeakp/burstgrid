@@ -115,11 +115,11 @@
 
     /* Architecture diagram */
     .arch-diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
-    .arch-hdr { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 6px; }
-    .arch-hdr-txt { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 4px; }
-    .arch-grid { display: grid; grid-template-columns: 1fr 56px 1fr; grid-template-rows: auto 48px auto; align-items: center; padding: 24px 16px 20px; }
+    .arch-hdr { padding: 12px 16px 0; display: flex; align-items: center; gap: 6px; }
+    .arch-hdr-txt { font-family: var(--mono); font-size: 11px; color: var(--dim); }
+    .arch-grid { display: grid; grid-template-columns: 1fr 56px 1fr; grid-template-rows: auto 48px auto; align-items: center; padding: 16px 16px 20px; }
     .arch-node { display: flex; flex-direction: column; align-items: center; gap: 5px; }
-    .arch-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 11px; font-weight: 700; border: 1px solid; }
+    .arch-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 1px solid; }
     .arch-name { font-size: 12px; font-weight: 600; color: var(--text); }
     .arch-hint { font-size: 10px; color: var(--dim); font-family: var(--mono); text-align: center; line-height: 1.4; }
     .arch-arr { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
@@ -312,15 +312,12 @@
 
   <div class="arch-diagram" style="margin-top:48px;">
     <div class="arch-hdr">
-      <span class="dot" style="background:#3a2020"></span>
-      <span class="dot" style="background:#2e2a1a"></span>
-      <span class="dot" style="background:#1a2e1e"></span>
-      <span class="arch-hdr-txt">Job lifecycle</span>
+      <span class="arch-hdr-txt">⚡ Job lifecycle</span>
     </div>
     <div class="arch-grid">
       <!-- row 1 -->
       <div class="arch-node">
-        <div class="arch-icon" style="background:#0d1117;border-color:#30363d;color:#c9d1d9">GH</div>
+        <div class="arch-icon" style="background:#0d1117;border-color:#30363d;">🐙</div>
         <div class="arch-name">GitHub Actions</div>
         <div class="arch-hint">workflow_job<br/>queued</div>
       </div>
@@ -329,7 +326,7 @@
         <span class="arch-arr-sym">&rarr;</span>
       </div>
       <div class="arch-node">
-        <div class="arch-icon" style="background:var(--accent-lo);border-color:#2e1608;color:var(--accent)">&#9889;</div>
+        <div class="arch-icon" style="background:var(--accent-lo);border-color:#2e1608;">⚡</div>
         <div class="arch-name">Scheduler</div>
         <div class="arch-hint">verify &middot; queue<br/>route</div>
       </div>
@@ -342,7 +339,7 @@
       </div>
       <!-- row 3 -->
       <div class="arch-node">
-        <div class="arch-icon" style="background:#0d1a0f;border-color:#1e3a12;color:#4ade80">VM</div>
+        <div class="arch-icon" style="background:#0d1a0f;border-color:#1e3a12;">🔒</div>
         <div class="arch-name">microVM</div>
         <div class="arch-hint">boot &middot; run<br/>destroy</div>
       </div>
@@ -351,7 +348,7 @@
         <span class="arch-arr-lbl">FC API</span>
       </div>
       <div class="arch-node">
-        <div class="arch-icon" style="background:#0a1520;border-color:#0f2340;color:#60a5fa">EC2</div>
+        <div class="arch-icon" style="background:#0a1520;border-color:#0f2340;">🖥️</div>
         <div class="arch-name">Worker Agent</div>
         <div class="arch-hint">bare-metal<br/>KVM</div>
       </div>

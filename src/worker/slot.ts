@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { FirecrackerVM, type VMConfig } from './firecracker.js';
-import { vmSizeFromLabels } from '../types/index.js';
+import { vmSizeFromLabels, type RootfsImage } from '../types/index.js';
 
 /** How the slot executes jobs on this host. */
 export type SlotMode = 'firecracker' | 'process' | 'simulate';
@@ -13,6 +13,8 @@ export interface SlotConfig {
   kernelPath: string;
   /** Root directory of pre-baked rootfs images; resolved via burstgrid:image=<name> labels. */
   imageDir?: string;
+  /** Explicit image catalog from config; takes priority over imageDir convention. */
+  imageCatalog?: RootfsImage[];
   /** Runner executable for 'process' mode (bare-metal / GPU hosts). */
   runnerPath?: string;
   /** Docker registry mirror URL passed to VMs as a boot arg (e.g. http://10.0.0.1:5000). */
@@ -34,7 +36,7 @@ export class Slot {
     const { memoryMiB, vcpus } = vmSizeFromLabels(labels);
 
     if (this.cfg.mode === 'firecracker') {
-      const rootfsPath = resolveRootfs(labels, this.cfg.imageDir, this.cfg.vmImagePath);
+      const rootfsPath = resolveRootfs(labels, this.cfg.imageCatalog, this.cfg.imageDir, this.cfg.vmImagePath);
       const vmCfg: VMConfig = {
         vmId: `bg-${this.cfg.jobId.slice(0, 8)}`,
         kernelPath: this.cfg.kernelPath,
@@ -75,12 +77,25 @@ export class Slot {
   }
 }
 
-/** Resolve rootfs path: image label wins over the default path. */
-function resolveRootfs(labels: string[], imageDir: string | undefined, fallback: string): string {
-  if (!imageDir) return fallback;
+/**
+ * Resolve rootfs path for a job.
+ * Priority: explicit catalog entry → imageDir/<name>.img convention → default path.
+ */
+function resolveRootfs(
+  labels: string[],
+  catalog: RootfsImage[] | undefined,
+  imageDir: string | undefined,
+  fallback: string,
+): string {
   const tag = labels.find(l => l.toLowerCase().startsWith('burstgrid:image='));
   if (!tag) return fallback;
-  return path.join(imageDir, `${tag.slice('burstgrid:image='.length)}.img`);
+  const name = tag.slice('burstgrid:image='.length);
+  if (catalog) {
+    const entry = catalog.find(e => e.name.toLowerCase() === name.toLowerCase());
+    if (entry) return entry.path;
+  }
+  if (imageDir) return path.join(imageDir, `${name}.img`);
+  return fallback;
 }
 
 const sleep = (ms: number): Promise<void> => new Promise(r => setTimeout(r, ms));

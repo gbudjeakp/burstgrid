@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
 import type { TierFleet } from '../fleet/autoscaler.js';
-import type { GpuAmiProfile } from '../types/index.js';
+import type { GpuAmiProfile, RootfsImage } from '../types/index.js';
 
 export interface BurstGridConfig {
   scheduler?: {
@@ -13,6 +13,12 @@ export interface BurstGridConfig {
   worker?: {
     /** Docker pull-through registry mirror URL. Env: BURSTGRID_REGISTRY_MIRROR */
     registryMirror?: string;
+    /**
+     * Named rootfs image catalog. Maps burstgrid:image=<name> labels to absolute
+     * paths on the worker host. When omitted, the worker resolves images via
+     * imageDir/<name>.img convention.
+     */
+    images?: RootfsImage[];
   };
   autoscaler?: {
     enabled?: boolean;

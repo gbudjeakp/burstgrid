@@ -1,4 +1,4 @@
-import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate } from '../types/index.js';
+import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate, RootfsImage } from '../types/index.js';
 import { JobStatus as Status } from '../types/index.js';
 import { Slot, type SlotMode } from './slot.js';
 import { recordJobDuration } from '../telemetry/index.js';
@@ -17,6 +17,8 @@ export interface AgentConfig {
   mode?: SlotMode;
   /** Directory of pre-baked rootfs images for burstgrid:image=<name> label resolution. */
   imageDir?: string;
+  /** Explicit image catalog; entries take priority over imageDir convention. */
+  imageCatalog?: RootfsImage[];
   /** Runner script path for 'process' mode. */
   runnerPath?: string;
   /** Docker pull-through registry mirror URL forwarded to each VM. */
@@ -131,6 +133,7 @@ export class WorkerAgent {
       vmImagePath: this.cfg.vmImagePath,
       kernelPath: this.cfg.kernelPath,
       imageDir: this.cfg.imageDir,
+      imageCatalog: this.cfg.imageCatalog,
       runnerPath: this.cfg.runnerPath,
       registryMirror: this.cfg.registryMirror,
       env: job.env,

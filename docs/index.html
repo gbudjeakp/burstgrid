@@ -193,6 +193,21 @@
     .feat-cell p { font-size: 13px; color: #a1a1aa; line-height: 1.6; }
     .feat-cell p code { font-family: var(--mono); font-size: 11.5px; color: var(--text); }
 
+    /* Who it's for */
+    .fit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; margin-top: 36px; }
+    @media (max-width: 800px) { .fit-grid { grid-template-columns: 1fr; } }
+    .fit-col { background: var(--surface); padding: 0; }
+    .fit-col-header { padding: 16px 24px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 9px; }
+    .fit-badge { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; }
+    .fit-badge-yes { background: rgba(74,222,128,0.1); color: #4ade80; }
+    .fit-badge-no  { background: rgba(248,113,113,0.1); color: #f87171; }
+    .fit-list { list-style: none; }
+    .fit-item { display: flex; gap: 13px; align-items: flex-start; padding: 16px 24px; border-bottom: 1px solid var(--border); }
+    .fit-item:last-child { border-bottom: none; }
+    .fit-icon { flex-shrink: 0; margin-top: 2px; }
+    .fit-item-title { font-size: 13.5px; font-weight: 600; color: var(--text); margin-bottom: 3px; line-height: 1.4; }
+    .fit-item-desc { font-size: 12.5px; color: var(--sub); line-height: 1.65; }
+
     /* Docs layout */
     .docs-layout { display: grid; grid-template-columns: 240px 1fr; }
     .sidebar { position: sticky; top: 56px; align-self: start;
@@ -411,52 +426,58 @@
   <h2>Is BurstGrid right for you?</h2>
   <p class="section-desc">BurstGrid is not the right tool for everyone. Here is when it makes sense and when it does not.</p>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:32px;">
-    <div style="background:var(--surface);border:1px solid var(--border-2);border-radius:10px;padding:24px;">
-      <div style="font-size:13px;font-weight:600;color:#4ade80;letter-spacing:0.04em;margin-bottom:16px;">GOOD FIT</div>
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">High concurrency</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">Running 20+ jobs simultaneously most of the day. Density on bare-metal beats per-instance EC2 pricing above roughly 15 concurrent jobs.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Strict isolation requirements</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">SOC 2, HIPAA, or FedRAMP workloads where kernel-level isolation per job is required. Containers share a kernel; microVMs do not.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Reproducible build environments</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">You own the rootfs image. Bake your exact toolchain once, version it in git, and every job boots from an identical filesystem. No runtime package downloads, no AMI drift.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Mixed CPU + GPU CI pipelines</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">One scheduler routes both standard jobs to Firecracker microVMs and GPU/ML jobs to dedicated GPU EC2 hosts. No separate runner groups to manage.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Fast feedback loops matter</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">150ms VM boot vs 90s EC2 cold start. For short jobs on commit-heavy repos, that gap is most of the total CI wait time.</div>
-        </div>
+  <div class="fit-grid">
+    <div class="fit-col">
+      <div class="fit-col-header">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.15)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="fit-badge fit-badge-yes">Good fit</span>
       </div>
+      <ul class="fit-list">
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">High concurrency</div><div class="fit-item-desc">Running 20+ jobs simultaneously most of the day. Density on bare-metal beats per-instance EC2 pricing above roughly 15 concurrent jobs.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Strict isolation requirements</div><div class="fit-item-desc">SOC 2, HIPAA, or FedRAMP workloads where kernel-level isolation per job is required. Containers share a kernel; microVMs do not.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Reproducible build environments</div><div class="fit-item-desc">You own the rootfs image. Bake your exact toolchain once, version it in git, and every job boots from an identical filesystem. No runtime package downloads, no AMI drift.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Mixed CPU + GPU CI pipelines</div><div class="fit-item-desc">One scheduler routes both standard jobs to Firecracker microVMs and GPU/ML jobs to dedicated GPU EC2 hosts. No separate runner groups to manage.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Fast feedback loops matter</div><div class="fit-item-desc">150ms VM boot vs 90s EC2 cold start. For short jobs on commit-heavy repos, that gap is most of the total CI wait time.</div></div>
+        </li>
+      </ul>
     </div>
-    <div style="background:var(--surface);border:1px solid var(--border-2);border-radius:10px;padding:24px;">
-      <div style="font-size:13px;font-weight:600;color:#f87171;letter-spacing:0.04em;margin-bottom:16px;">NOT A GOOD FIT</div>
-      <div style="display:flex;flex-direction:column;gap:14px;">
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Low volume</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">Under ~50 jobs per day, a per-job EC2 runner (terraform-aws-github-runner) or GitHub-hosted runners are simpler and cheaper. Bare-metal has a floor cost even at zero jobs.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Already on Kubernetes</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">ARC (Actions Runner Controller) integrates directly with your existing cluster. If you are already running EKS or GKE the operational overlap is zero and ARC is the right choice.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Windows runners</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">Firecracker is Linux-only. Windows jobs are not supported.</div>
-        </div>
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text);margin-bottom:3px;">Highly variable load</div>
-          <div style="font-size:12.5px;color:#a1a1aa;line-height:1.6;">Warm bare-metal hosts are required for fast dispatch. Scaling to zero kills the DX. If your CI load is unpredictable and spiky, per-job EC2 runners are a better match.</div>
-        </div>
+    <div class="fit-col">
+      <div class="fit-col-header">
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.15)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        <span class="fit-badge fit-badge-no">Not a good fit</span>
       </div>
+      <ul class="fit-list">
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Low volume</div><div class="fit-item-desc">Under ~50 jobs per day, a per-job EC2 runner or GitHub-hosted runners are simpler and cheaper. Bare-metal has a floor cost even at zero jobs.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Already on Kubernetes</div><div class="fit-item-desc">ARC (Actions Runner Controller) integrates directly with your existing cluster. If you are already on EKS or GKE the operational overlap is zero and ARC is the right choice.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Windows runners</div><div class="fit-item-desc">Firecracker is Linux-only. Windows jobs are not supported.</div></div>
+        </li>
+        <li class="fit-item">
+          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div><div class="fit-item-title">Highly variable load</div><div class="fit-item-desc">Warm bare-metal hosts are required for fast dispatch. Scaling to zero kills the DX. If your CI load is unpredictable and spiky, per-job EC2 runners are a better match.</div></div>
+        </li>
+      </ul>
     </div>
   </div>
 </div>

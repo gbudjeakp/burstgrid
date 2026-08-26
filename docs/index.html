@@ -53,7 +53,7 @@
     .logo {
       font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
       display: flex; align-items: center; gap: 9px; color: var(--text);
-      padding: 0 20px;
+      padding: 0 20px 0 16px;
     }
     .logo-icon {
       width: 26px; height: 26px; background: var(--accent); border-radius: 6px;
@@ -243,7 +243,7 @@
 <body>
 
 <div class="wip-bar">
-  <strong>Alpha.</strong> Not production-ready &mdash; APIs and config schema will change. Contributions and feedback welcome.
+  <strong>Alpha.</strong> Not production-ready. APIs and config schema will change. Contributions and feedback welcome.
 </div>
 
 <div class="nav-wrap">
@@ -315,7 +315,7 @@
     <div class="wip-pill">Open source &middot; Alpha</div>
     <h1>One job.<br/>One microVM.<br/><em>Nothing shared.</em></h1>
     <p class="hero-sub" style="margin-left:auto;margin-right:auto;">
-      BurstGrid dispatches every GitHub Actions job to a fresh Firecracker microVM on your own EC2 bare-metal fleet. Separate kernel, separate Docker daemon, separate everything &mdash; gone the moment the job completes. No shared state. No secret bleed. No per-minute GitHub pricing.
+      BurstGrid dispatches every GitHub Actions job to a fresh Firecracker microVM on your own EC2 bare-metal fleet. Separate kernel, separate Docker daemon, separate everything. Gone the moment the job completes. No shared state. No secret bleed. No per-minute GitHub pricing.
     </p>
     <div class="hero-actions" style="justify-content:center;">
       <a href="#get-started" class="btn btn-accent">Set it up</a>
@@ -418,7 +418,7 @@
         <div class="flow-body">
           The moment a workflow job is queued, GitHub POSTs a signed <code>workflow_job</code> event to your scheduler.
           BurstGrid verifies the <code>X-Hub-Signature-256</code> HMAC before doing anything else.
-          If the signature doesn&rsquo;t match, the request is dropped. If the queue is full, it returns <code>503</code> &mdash;
+          If the signature doesn&rsquo;t match, the request is dropped. If the queue is full, it returns <code>503</code>;
           GitHub will retry the delivery for up to <strong>72 hours</strong>, so nothing is lost.
         </div>
         <div class="snippet">
@@ -444,7 +444,7 @@
         <div class="flow-body">
           BurstGrid authenticates as your GitHub App installation and calls the Runners API to generate a
           <strong>one-time registration token</strong> for the target repo. The token and job metadata go into a
-          priority queue partitioned by tier &mdash; <code>critical</code> jobs always jump ahead of <code>standard</code> ones.
+          priority queue partitioned by tier. <code>critical</code> jobs always jump ahead of <code>standard</code> ones.
           Token generation is protected by a circuit breaker: after 5 consecutive GitHub API failures,
           the scheduler opens the circuit and returns <code>503</code> until the API recovers.
         </div>
@@ -466,7 +466,7 @@
         <div class="flow-body">
           The router checks the job&rsquo;s size label (<code>burstgrid:size=large</code> &rarr; 4&nbsp;vCPU / 4&nbsp;GiB) against every connected
           worker&rsquo;s free resources and capability labels. The first worker that fits gets the assignment pushed
-          as a JSON event over its persistent SSE connection &mdash; the same open HTTP response it&rsquo;s been holding
+          as a JSON event over its persistent SSE connection, the same open HTTP response it&rsquo;s been holding
           since it registered. No database read. No poll. Dispatch latency is typically under 5&nbsp;ms.
         </div>
         <div class="snippet">
@@ -488,7 +488,7 @@
         <div class="flow-title">Worker boots a Firecracker VM; runner picks up the job</div>
         <div class="flow-body">
           The worker agent calls the Firecracker Unix socket API to boot a microVM with exactly the requested
-          vCPU and RAM. The runner token and size labels are injected as kernel boot args &mdash; the init script
+          vCPU and RAM. The runner token and size labels are injected as kernel boot args; the init script
           inside the VM reads <code>/proc/cmdline</code>, calls <code>./config.sh --ephemeral</code> to register with GitHub,
           then <code>./run.sh</code> to execute the job. When it exits, the VM is killed, the disk is discarded,
           and the slot is freed. The rootfs is <strong>never reused</strong>.
@@ -541,7 +541,7 @@
       <div class="flow-right">
         <div class="flow-title">Deploy the scheduler</div>
         <div class="flow-body">
-          A single Node.js process. Runs on any standard EC2 instance &mdash; <code>t3.small</code> handles thousands of webhooks per minute.
+          A single Node.js process. Runs on any standard EC2 instance; <code>t3.small</code> handles thousands of webhooks per minute.
           It needs outbound HTTPS to <code>api.github.com</code> and inbound port 8080 from GitHub&rsquo;s webhook IP ranges.
           No database required to start; add Redis later if you need queue durability across restarts.
         </div>
@@ -565,20 +565,32 @@ docker run -p 8080:8080 \
         <div class="flow-title">Build your rootfs image</div>
         <div class="flow-body">
           Each Firecracker VM boots from a small ext4 image you build once and store on each host.
-          Start from the included <code>rootfs/Dockerfile.template</code>, customise it for your toolchain,
-          then run the build script. The output is a single <code>.img</code> file you reference in config.
-          The BurstGrid init script (<code>scripts/vm-init.sh</code>) is injected automatically &mdash;
-          it reads <code>RUNNER_TOKEN</code> and <code>RUNNER_LABELS</code> from <code>/proc/cmdline</code>
+          Copy <code>rootfs/template/Dockerfile</code> into a new folder named after your image,
+          customise it for your toolchain, then run the build script. Every image is just a folder
+          with a single <code>Dockerfile</code> that fully declares what is in it.
+          The BurstGrid init script (<code>scripts/vm-init.sh</code>) is injected automatically.
+          It reads <code>RUNNER_TOKEN</code> and <code>RUNNER_LABELS</code> from <code>/proc/cmdline</code>
           and starts the runner as an ephemeral instance.
-          See <a href="#custom-images" style="color:var(--accent)">Custom images</a> for the full guide.
         </div>
         <div class="snippet">
-          <div class="snippet-tab">Build a rootfs from a Dockerfile</div>
-          <div class="snippet-body"><span class="s-cm"># copy the template and customise</span>
-cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
-<span class="s-cm"># edit rootfs/my-image/Dockerfile &mdash; add your tools, runtimes, packages</span>
+          <div class="snippet-tab">rootfs/ layout</div>
+          <div class="snippet-body">rootfs/
+  template/
+    Dockerfile          <span class="s-cm"># base template, copy this</span>
+  ubuntu-docker/
+    Dockerfile          <span class="s-cm"># Ubuntu 22.04 + Docker 24</span>
+  node20/
+    Dockerfile          <span class="s-cm"># Ubuntu 22.04 + Node 20</span>
+  my-custom-image/
+    Dockerfile          <span class="s-cm"># your image</span></div>
+        </div>
+        <div class="snippet" style="margin-top:10px;">
+          <div class="snippet-tab">Build and register an image</div>
+          <div class="snippet-body"><span class="s-cm"># 1. scaffold a new image from the template</span>
+cp -r rootfs/template rootfs/my-image
+<span class="s-cm"># 2. edit rootfs/my-image/Dockerfile</span>
 
-<span class="s-cm"># build the .img (requires docker + e2fsprogs on the build host)</span>
+<span class="s-cm"># 3. build the .img (requires docker + e2fsprogs)</span>
 ./scripts/build-rootfs.sh rootfs/my-image/Dockerfile /opt/images/my-image.img <span class="s-num">4G</span></div>
         </div>
       </div>
@@ -589,8 +601,8 @@ cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
       <div class="flow-right">
         <div class="flow-title">Deploy worker agents on bare-metal EC2</div>
         <div class="flow-body">
-          Firecracker requires KVM, so workers must run on <strong>bare-metal instances</strong> &mdash;
-          <code>m7i.metal-24xl</code>, <code>m6g.metal</code>, and similar. Standard virtualized instances can&rsquo;t run nested VMs.
+          Firecracker requires KVM, so workers must run on <strong>bare-metal instances</strong>.
+          <code>m7i.metal-24xl</code>, <code>m6g.metal</code>, and similar are supported. Standard virtualized instances cannot run nested VMs.
           Copy the rootfs image and kernel to each host, set the environment variables below, and start the agent.
           The agent registers itself with the scheduler, opens an SSE stream, and starts accepting jobs immediately.
         </div>
@@ -617,7 +629,7 @@ cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
           Add <code>self-hosted</code> plus a <code>burstgrid:size=</code> label to any job&rsquo;s <code>runs-on</code>.
           That&rsquo;s the only workflow change required. The scheduler reads the labels, picks the right worker,
           and boots a VM sized to match. GPU jobs add a <code>gpu</code> label and land exclusively on
-          workers that advertise that capability &mdash; no routing config needed on your end.
+          workers that advertise that capability. No routing config needed on your end.
         </div>
         <div class="snippet">
           <div class="snippet-tab">.github/workflows/ci.yml</div>
@@ -645,7 +657,7 @@ cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
 <div class="section" id="custom-images">
   <div class="label">Custom images</div>
   <h2>Your Dockerfile is your image spec</h2>
-  <p class="section-desc">Every rootfs is built from a Dockerfile you own. Copy the template, add your tools, build once, reference by name. The image catalog in config maps label names to paths &mdash; no hardcoded conventions.</p>
+  <p class="section-desc">Every rootfs is built from a Dockerfile you own. Copy the template, add your tools, build once, reference by name. The image catalog in config maps label names to paths with no hardcoded conventions.</p>
 
   <div class="flow">
     <div class="flow-step" id="image-template">
@@ -653,8 +665,8 @@ cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
       <div class="flow-right">
         <div class="flow-title">Start from the template</div>
         <div class="flow-body">
-          <code>rootfs/Dockerfile.template</code> is a commented starting point. Every section &mdash; base OS, system packages,
-          Docker daemon, language runtimes, pre-warmed caches, runner binary &mdash; is labelled and optional.
+          <code>rootfs/template/Dockerfile</code> is a commented starting point. Every section (base OS, system packages,
+          Docker daemon, language runtimes, pre-warmed caches, runner binary) is labelled and optional.
           Copy it and delete what you don&rsquo;t need.
         </div>
         <div class="snippet">
@@ -683,7 +695,7 @@ RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
         <div class="flow-title">Build the .img</div>
         <div class="flow-body">
           <code>scripts/build-rootfs.sh</code> uses <code>docker export</code> + <code>mkfs.ext4</code> to turn any Dockerfile
-          into a bootable ext4 image. It also injects <code>scripts/vm-init.sh</code> as <code>/sbin/burstgrid-init</code> &mdash;
+          into a bootable ext4 image. It also injects <code>scripts/vm-init.sh</code> as <code>/sbin/burstgrid-init</code>,
           the PID&nbsp;1 script that reads <code>/proc/cmdline</code>, starts Docker if present,
           and runs the Actions runner as ephemeral before halting the VM.
         </div>
@@ -708,7 +720,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
         <div class="flow-body">
           Add the image to the <code>worker.images</code> catalog in <code>burstgrid.config.yaml</code>.
           The <code>name</code> field is what jobs put in their <code>runs-on</code> label.
-          All other fields are metadata &mdash; they document what&rsquo;s in the image so your team doesn&rsquo;t have to guess.
+          All other fields are metadata; they document what&rsquo;s in the image so your team doesn&rsquo;t have to guess.
         </div>
         <div class="snippet">
           <div class="snippet-tab">burstgrid.config.yaml</div>
@@ -737,7 +749,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
 <div class="section" id="gpu-ai">
   <div class="label">GPU / AI</div>
   <h2>GPU jobs run directly on the host</h2>
-  <p class="section-desc">Firecracker has no GPU passthrough. GPU and ML jobs are routed to dedicated EC2 GPU instances that run the Actions runner natively &mdash; no microVM in the path. The host AMI is pre-baked with CUDA, ML frameworks, and optionally Docker + NVIDIA Container Toolkit.</p>
+  <p class="section-desc">Firecracker has no GPU passthrough. GPU and ML jobs are routed to dedicated EC2 GPU instances that run the Actions runner natively, with no microVM in the path. The host AMI is pre-baked with CUDA, ML frameworks, and optionally Docker + NVIDIA Container Toolkit.</p>
 
   <div class="flow">
     <div class="flow-step" id="gpu-ami">
@@ -747,7 +759,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
         <div class="flow-body">
           Build an EC2 AMI with your GPU stack pre-installed (CUDA drivers, PyTorch, model weights, etc.).
           Register it in <code>burstgrid.config.yaml</code> under <code>gpu_amis</code>.
-          Docker and the NVIDIA Container Toolkit can be included &mdash; <code>docker run --gpus all</code> works natively on the host.
+          Docker and the NVIDIA Container Toolkit can be included. <code>docker run --gpus all</code> works natively on the host.
         </div>
         <div class="snippet">
           <div class="snippet-tab">burstgrid.config.yaml</div>
@@ -773,7 +785,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
         <div class="flow-body">
           Add a fleet entry with <code>gpu_ami_id</code> and <code>instance_type</code>.
           The autoscaler passes these as overrides to <code>RunInstances</code> on top of your base Launch Template.
-          Workers on these instances should register with <code>gpu</code> and <code>cuda</code> in their capabilities &mdash;
+          Workers on these instances should register with <code>gpu</code> and <code>cuda</code> in their capabilities;
           only GPU-labelled jobs will land on them.
         </div>
         <div class="snippet">
@@ -814,7 +826,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     </div>
     <div class="feat-cell">
       <h3>Sub-5 ms dispatch</h3>
-      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued &mdash; no polling, no broker, no cold-start reconnect per job.</p>
+      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued, with no polling, no broker, no cold-start reconnect per job.</p>
     </div>
     <div class="feat-cell">
       <h3>Right-sized, not over-provisioned</h3>
@@ -822,7 +834,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     </div>
     <div class="feat-cell">
       <h3>GPU jobs go straight to metal</h3>
-      <p>Register GPU hosts in <code>process</code> mode with a <code>gpu</code> capability label. Jobs that need GPU land exclusively on those hosts &mdash; Firecracker isn&rsquo;t in the critical path.</p>
+      <p>Register GPU hosts in <code>process</code> mode with a <code>gpu</code> capability label. Jobs that need GPU land exclusively on those hosts. Firecracker isn&rsquo;t in the critical path.</p>
     </div>
     <div class="feat-cell">
       <h3>Docker pulls that don&rsquo;t start from zero</h3>
@@ -830,11 +842,11 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     </div>
     <div class="feat-cell">
       <h3>Scale the right fleet, not all of them</h3>
-      <p>Separate EC2 launch templates per size tier. Each one scales independently against its own queue depth. Workers drain naturally &mdash; no forced termination mid-job.</p>
+      <p>Separate EC2 launch templates per size tier. Each one scales independently against its own queue depth. Workers drain naturally, with no forced termination mid-job.</p>
     </div>
     <div class="feat-cell">
       <h3>GitHub goes down. Your queue doesn&rsquo;t.</h3>
-      <p>The circuit breaker trips after 5 consecutive API failures and returns <code>503</code> &mdash; GitHub retries webhook deliveries for up to 72&nbsp;hours. No events are dropped.</p>
+      <p>The circuit breaker trips after 5 consecutive API failures and returns <code>503</code>. GitHub retries webhook deliveries for up to 72&nbsp;hours. No events are dropped.</p>
     </div>
     <div class="feat-cell">
       <h3>Durable when you need it</h3>
@@ -842,7 +854,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     </div>
     <div class="feat-cell">
       <h3>Metrics from day one</h3>
-      <p>Queue depth, dispatch latency, VM boot time, job duration &mdash; all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
+      <p>Queue depth, dispatch latency, VM boot time, job duration, all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
     </div>
   </div>
 </div>

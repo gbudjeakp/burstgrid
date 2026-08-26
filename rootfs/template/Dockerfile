@@ -1,8 +1,8 @@
 # BurstGrid rootfs Dockerfile template.
 #
-# Copy this file and customise it for your workload. Then build the image:
+# Copy this file to a new folder and customise it for your workload:
 #
-#   cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
+#   cp -r rootfs/template rootfs/my-image
 #   # edit rootfs/my-image/Dockerfile to add your tools
 #   ./scripts/build-rootfs.sh rootfs/my-image/Dockerfile /opt/images/my-image.img 4G
 #

@@ -47,19 +47,20 @@
     /* Nav */
     .nav-wrap { border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; background: var(--bg); }
     nav {
-      max-width: 1080px; margin: 0 auto; padding: 0 28px;
-      height: 56px; display: flex; align-items: center; justify-content: space-between;
+      display: grid; grid-template-columns: 240px 1fr;
+      height: 56px; align-items: center;
     }
     .logo {
       font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
       display: flex; align-items: center; gap: 9px; color: var(--text);
+      padding: 0 20px;
     }
     .logo-icon {
       width: 26px; height: 26px; background: var(--accent); border-radius: 6px;
       display: flex; align-items: center; justify-content: center; flex-shrink: 0;
       font-size: 14px; line-height: 1;
     }
-    .nav-right { display: flex; align-items: center; gap: 24px; }
+    .nav-right { display: flex; align-items: center; gap: 24px; justify-content: flex-end; padding: 0 28px; }
     .nav-link { font-size: 13.5px; color: #a1a1aa; transition: color 0.12s; }
     .nav-link:hover { color: var(--text); }
     .gh-btn {
@@ -290,6 +291,19 @@
       <div class="sidebar-group">
         <div class="sidebar-group-label">Why BurstGrid</div>
         <a href="#features" class="sidebar-link">Features</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Custom images</div>
+        <a href="#custom-images" class="sidebar-link">Image catalog</a>
+        <a href="#image-template" class="sidebar-link sub">Dockerfile template</a>
+        <a href="#image-build" class="sidebar-link sub">Build the .img</a>
+        <a href="#image-register" class="sidebar-link sub">Register + use</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">GPU / AI</div>
+        <a href="#gpu-ai" class="sidebar-link">GPU workloads</a>
+        <a href="#gpu-ami" class="sidebar-link sub">Pre-baked AMI</a>
+        <a href="#gpu-fleet" class="sidebar-link sub">Fleet config</a>
       </div>
     </div>
   </aside>
@@ -550,28 +564,22 @@ docker run -p 8080:8080 \
       <div class="flow-right">
         <div class="flow-title">Build your rootfs image</div>
         <div class="flow-body">
-          Each Firecracker VM boots from a small ext4 image you build once and store in S3 or on each host.
-          Start from a minimal Linux base (Amazon Linux 2 or Ubuntu 22.04), install Docker and the GitHub Actions runner binary,
-          then write an init script that reads <code>RUNNER_TOKEN</code>, <code>RUNNER_LABELS</code>, and optionally
-          <code>REGISTRY_MIRROR</code> from <code>/proc/cmdline</code>.
-          The scheduler injects these at boot &mdash; your init script just reads them and starts the runner.
+          Each Firecracker VM boots from a small ext4 image you build once and store on each host.
+          Start from the included <code>rootfs/Dockerfile.template</code>, customise it for your toolchain,
+          then run the build script. The output is a single <code>.img</code> file you reference in config.
+          The BurstGrid init script (<code>scripts/vm-init.sh</code>) is injected automatically &mdash;
+          it reads <code>RUNNER_TOKEN</code> and <code>RUNNER_LABELS</code> from <code>/proc/cmdline</code>
+          and starts the runner as an ephemeral instance.
+          See <a href="#custom-images" style="color:var(--accent)">Custom images</a> for the full guide.
         </div>
         <div class="snippet">
-          <div class="snippet-tab">/etc/init.d/burstgrid-runner (rootfs init script)</div>
-          <div class="snippet-body"><span class="s-cm">#!/bin/bash</span>
-<span class="s-cm"># Parse kernel cmdline args written by the scheduler</span>
-TOKEN=$(grep -oP <span class="s-str">'RUNNER_TOKEN=\K\S+'</span> /proc/cmdline)
-LABELS=$(grep -oP <span class="s-str">'RUNNER_LABELS=\K\S+'</span> /proc/cmdline)
-MIRROR=$(grep -oP <span class="s-str">'REGISTRY_MIRROR=\K\S+'</span> /proc/cmdline || true)
+          <div class="snippet-tab">Build a rootfs from a Dockerfile</div>
+          <div class="snippet-body"><span class="s-cm"># copy the template and customise</span>
+cp rootfs/Dockerfile.template rootfs/my-image/Dockerfile
+<span class="s-cm"># edit rootfs/my-image/Dockerfile &mdash; add your tools, runtimes, packages</span>
 
-<span class="s-cm"># Configure Docker pull-through cache if mirror is set</span>
-[ -n <span class="s-str">"$MIRROR"</span> ] &amp;&amp; echo <span class="s-str">"{\"registry-mirrors\":[\"$MIRROR\"]}"</span> &gt; /etc/docker/daemon.json
-service docker start
-
-<span class="s-cm"># Register and run the GitHub Actions runner (ephemeral)</span>
-cd /opt/actions-runner
-./config.sh --url <span class="s-str">"$REPO_URL"</span> --token <span class="s-str">"$TOKEN"</span> --labels <span class="s-str">"$LABELS"</span> --ephemeral --unattended
-./run.sh</div>
+<span class="s-cm"># build the .img (requires docker + e2fsprogs on the build host)</span>
+./scripts/build-rootfs.sh rootfs/my-image/Dockerfile /opt/images/my-image.img <span class="s-num">4G</span></div>
         </div>
       </div>
     </div>
@@ -628,6 +636,167 @@ cd /opt/actions-runner
       </div>
     </div>
 
+  </div>
+</div>
+
+<hr class="rule" />
+
+<!-- Custom images -->
+<div class="section" id="custom-images">
+  <div class="label">Custom images</div>
+  <h2>Your Dockerfile is your image spec</h2>
+  <p class="section-desc">Every rootfs is built from a Dockerfile you own. Copy the template, add your tools, build once, reference by name. The image catalog in config maps label names to paths &mdash; no hardcoded conventions.</p>
+
+  <div class="flow">
+    <div class="flow-step" id="image-template">
+      <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Start from the template</div>
+        <div class="flow-body">
+          <code>rootfs/Dockerfile.template</code> is a commented starting point. Every section &mdash; base OS, system packages,
+          Docker daemon, language runtimes, pre-warmed caches, runner binary &mdash; is labelled and optional.
+          Copy it and delete what you don&rsquo;t need.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">rootfs/my-image/Dockerfile (after copying template)</div>
+          <div class="snippet-body">FROM ubuntu:22.04
+
+RUN apt-get update &amp;&amp; apt-get install -y \
+    ca-certificates curl git libicu70 libssl3 \
+    <span class="s-hl">python3 python3-pip build-essential</span>  <span class="s-cm"># your additions</span>
+
+<span class="s-cm"># pre-warm pip cache so jobs don&rsquo;t wait for installs</span>
+RUN pip install pytest boto3 requests
+
+<span class="s-cm"># runner binary (required)</span>
+ARG RUNNER_VERSION=2.317.0
+RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
+ &amp;&amp; curl -fsSL &quot;https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz&quot; \
+    | tar -xz &amp;&amp; ./bin/installdependencies.sh</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="image-build">
+      <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Build the .img</div>
+        <div class="flow-body">
+          <code>scripts/build-rootfs.sh</code> uses <code>docker export</code> + <code>mkfs.ext4</code> to turn any Dockerfile
+          into a bootable ext4 image. It also injects <code>scripts/vm-init.sh</code> as <code>/sbin/burstgrid-init</code> &mdash;
+          the PID&nbsp;1 script that reads <code>/proc/cmdline</code>, starts Docker if present,
+          and runs the Actions runner as ephemeral before halting the VM.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">Build (run on the build host, not the worker)</div>
+          <div class="snippet-body">./scripts/build-rootfs.sh \
+  rootfs/my-image/Dockerfile \
+  /opt/images/my-image.img \
+  <span class="s-num">4G</span>           <span class="s-cm"># image size &mdash; set generously, sparse file</span>
+
+<span class="s-cm"># copy to workers via S3 or scp:</span>
+aws s3 cp /opt/images/my-image.img s3://your-bucket/rootfs/my-image.img
+ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&quot;</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="image-register">
+      <div class="flow-left"><div class="flow-num on">3</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Register and use</div>
+        <div class="flow-body">
+          Add the image to the <code>worker.images</code> catalog in <code>burstgrid.config.yaml</code>.
+          The <code>name</code> field is what jobs put in their <code>runs-on</code> label.
+          All other fields are metadata &mdash; they document what&rsquo;s in the image so your team doesn&rsquo;t have to guess.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">burstgrid.config.yaml</div>
+          <div class="snippet-body"><span class="s-key">worker</span>:
+  <span class="s-key">images</span>:
+    - <span class="s-key">name</span>:         <span class="s-str">my-image</span>          <span class="s-cm"># used in runs-on</span>
+      <span class="s-key">path</span>:         <span class="s-str">/opt/images/my-image.img</span>
+      <span class="s-key">description</span>: <span class="s-str">"Ubuntu 22.04 + Python 3 + pytest"</span>
+      <span class="s-key">os</span>:           <span class="s-str">ubuntu-22.04</span>
+      <span class="s-key">tools</span>:        [python3, pip, git, curl]</div>
+        </div>
+        <div class="snippet" style="margin-top:12px">
+          <div class="snippet-tab">.github/workflows/ci.yml</div>
+          <div class="snippet-body"><span class="s-key">jobs</span>:
+  <span class="s-key">test</span>:
+    <span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:image=my-image</span>]</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<hr class="rule" />
+
+<!-- GPU / AI -->
+<div class="section" id="gpu-ai">
+  <div class="label">GPU / AI</div>
+  <h2>GPU jobs run directly on the host</h2>
+  <p class="section-desc">Firecracker has no GPU passthrough. GPU and ML jobs are routed to dedicated EC2 GPU instances that run the Actions runner natively &mdash; no microVM in the path. The host AMI is pre-baked with CUDA, ML frameworks, and optionally Docker + NVIDIA Container Toolkit.</p>
+
+  <div class="flow">
+    <div class="flow-step" id="gpu-ami">
+      <div class="flow-left"><div class="flow-num on">1</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Define a GPU AMI profile</div>
+        <div class="flow-body">
+          Build an EC2 AMI with your GPU stack pre-installed (CUDA drivers, PyTorch, model weights, etc.).
+          Register it in <code>burstgrid.config.yaml</code> under <code>gpu_amis</code>.
+          Docker and the NVIDIA Container Toolkit can be included &mdash; <code>docker run --gpus all</code> works natively on the host.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">burstgrid.config.yaml</div>
+          <div class="snippet-body"><span class="s-key">gpu_amis</span>:
+  - <span class="s-key">id</span>:               <span class="s-str">ami-0abc1234</span>
+    <span class="s-key">name</span>:             <span class="s-str">cuda12-pytorch2</span>
+    <span class="s-key">cuda_version</span>:     <span class="s-str">"12.4"</span>
+    <span class="s-key">instance_families</span>: [g4dn, g5, p3]
+    <span class="s-key">docker_enabled</span>:   <span class="s-str">true</span>
+    <span class="s-key">cached_packages</span>:  [torch==2.3.0, transformers==4.40.0]
+    <span class="s-key">cached_models</span>:    [meta-llama/Llama-3-8B-Instruct]
+    <span class="s-key">pre_pulled_images</span>: [pytorch/pytorch:2.3.0-cuda12.1-runtime]
+    <span class="s-key">env</span>:
+      <span class="s-key">TORCH_HOME</span>: <span class="s-str">/opt/model-cache</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-step" id="gpu-fleet">
+      <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
+      <div class="flow-right">
+        <div class="flow-title">Configure the GPU autoscaler fleet</div>
+        <div class="flow-body">
+          Add a fleet entry with <code>gpu_ami_id</code> and <code>instance_type</code>.
+          The autoscaler passes these as overrides to <code>RunInstances</code> on top of your base Launch Template.
+          Workers on these instances should register with <code>gpu</code> and <code>cuda</code> in their capabilities &mdash;
+          only GPU-labelled jobs will land on them.
+        </div>
+        <div class="snippet">
+          <div class="snippet-tab">autoscaler fleet + workflow label</div>
+          <div class="snippet-body"><span class="s-cm"># burstgrid.config.yaml</span>
+<span class="s-key">autoscaler</span>:
+  <span class="s-key">fleets</span>:
+    - <span class="s-key">name</span>:              <span class="s-str">gpu-ai</span>
+      <span class="s-key">size_tag</span>:         <span class="s-str">burstgrid:gpu</span>
+      <span class="s-key">launch_template_id</span>: <span class="s-str">lt-gpu-base</span>
+      <span class="s-key">gpu_ami_id</span>:        <span class="s-str">ami-0abc1234</span>
+      <span class="s-key">instance_type</span>:     <span class="s-str">g4dn.xlarge</span>
+      <span class="s-key">max_workers</span>:       <span class="s-num">5</span>
+      <span class="s-key">slots_per_worker</span>:  <span class="s-num">1</span>     <span class="s-cm"># 1 job at a time on each GPU host</span>
+      <span class="s-key">scale_up_threshold</span>: <span class="s-num">0</span>
+      <span class="s-key">subnet_ids</span>:        [subnet-gpu-az1]
+
+<span class="s-cm"># workflow</span>
+<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu</span>]         <span class="s-cm"># routes to gpu-ai tier</span>
+<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu-ai</span>]      <span class="s-cm"># equivalent alias</span></div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 

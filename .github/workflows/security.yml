@@ -30,20 +30,6 @@ jobs:
       # Fails the job on moderate+ severity vulnerabilities
       - run: pnpm audit --audit-level moderate
 
-  dependency-review:
-    name: Dependency review (PRs only)
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    permissions:
-      contents: read
-      pull-requests: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: moderate
-          comment-summary-in-pr: always
-
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest

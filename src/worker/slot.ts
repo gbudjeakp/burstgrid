@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
-import { FirecrackerVM, type VMConfig } from './firecracker.js';
+import { FirecrackerVM, VM_BOOT_TARGET_MS, type VMConfig } from './firecracker.js';
 import { vmSizeFromLabels, type RootfsImage } from '../types/index.js';
 
 /** How the slot executes jobs on this host. */
@@ -54,7 +54,8 @@ export class Slot {
   constructor(private readonly cfg: SlotConfig) {}
 
   async start(runnerToken: string, labels: string[]): Promise<void> {
-    if (this.cfg.mode === 'simulate') return;
+    // simulate: sleep VM_BOOT_TARGET_MS so callers experience realistic boot latency
+    if (this.cfg.mode === 'simulate') { await sleep(VM_BOOT_TARGET_MS); return; }
 
     const { memoryMiB, vcpus } = vmSizeFromLabels(labels);
 
@@ -88,7 +89,7 @@ export class Slot {
   }
 
   async wait(): Promise<void> {
-    if (this.cfg.mode === 'simulate') { await sleep(2_000); return; }
+    if (this.cfg.mode === 'simulate') { await sleep(VM_BOOT_TARGET_MS); return; }
     if (this.vm) return this.vm.wait();
     if (this.procExit) return this.procExit;
     throw new Error('slot not started');

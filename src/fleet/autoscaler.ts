@@ -1,4 +1,4 @@
-import { EC2Client, RunInstancesCommand } from '@aws-sdk/client-ec2';
+import { EC2Client, RunInstancesCommand, type _InstanceType } from '@aws-sdk/client-ec2';
 import type { WorkerPool } from '../scheduler/worker-pool.js';
 import type { JobQueue } from '../scheduler/queue.js';
 
@@ -16,6 +16,13 @@ export interface TierFleet {
   /** Expected concurrent jobs per worker — used to calculate how many new workers to launch. */
   slotsPerWorker: number;
   scaleUpThreshold: number;
+  /**
+   * Pre-baked GPU AMI ID to use instead of the Launch Template's default AMI.
+   * Set this for gpu-ai fleets so workers boot with CUDA + ML frameworks pre-cached.
+   */
+  gpuAmiId?: string;
+  /** EC2 instance type override for this fleet (e.g. 'g4dn.xlarge', 'p3.2xlarge'). */
+  instanceType?: string;
 }
 
 export class Autoscaler {
@@ -90,6 +97,9 @@ export class Autoscaler {
           SubnetId: subnetId,
           MinCount: 1,
           MaxCount: 1,
+          // GPU fleets override the AMI and instance type from the launch template
+          ...(fleet.gpuAmiId ? { ImageId: fleet.gpuAmiId } : {}),
+          ...(fleet.instanceType ? { InstanceType: fleet.instanceType as _InstanceType } : {}),
         }));
         const id = res.Instances?.[0]?.InstanceId ?? 'unknown';
         console.info(`[autoscaler] fleet "${fleet.name}": launched ${id} (subnet ${subnetId})`);

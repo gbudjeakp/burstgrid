@@ -8,6 +8,8 @@ const STALE_JOB_WARN_MS = 10 * 60 * 1_000;
 const TIER_LABEL_MAP: [string, ExecutionTier][] = [
   ['burstgrid:critical', ExecutionTier.Critical],
   ['burstgrid:high-density', ExecutionTier.HighDensity],
+  ['burstgrid:gpu-ai', ExecutionTier.GpuAI],
+  ['burstgrid:gpu', ExecutionTier.GpuAI],
 ];
 
 export function selectTier(labels: string[]): ExecutionTier {

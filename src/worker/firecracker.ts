@@ -13,6 +13,8 @@ export interface VMConfig {
   vcpus: number;
   runnerToken: string;
   runnerLabels: string;
+  /** Pull-through registry mirror URL injected as REGISTRY_MIRROR boot arg; init reads /proc/cmdline. */
+  registryMirror?: string;
 }
 
 export class FirecrackerVM {
@@ -41,6 +43,8 @@ export class FirecrackerVM {
 
     await this.waitForSocket(5_000);
     await this.configure();
+    // Scrub the token from heap — it has already been transmitted to the Firecracker API socket
+    Object.assign(this.cfg, { runnerToken: '' });
     await this.apiPut('/actions', { action_type: 'InstanceStart' });
     recordVmBootDuration(Date.now() - bootStart);
   }
@@ -57,9 +61,10 @@ export class FirecrackerVM {
 
   private async configure(): Promise<void> {
     // Runner token + labels are passed as kernel boot args; the rootfs init reads /proc/cmdline
+    const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
     await this.apiPut('/boot-source', {
       kernel_image_path: this.cfg.kernelPath,
-      boot_args: `console=ttyS0 reboot=k panic=1 pci=off RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels}`,
+      boot_args: `console=ttyS0 reboot=k panic=1 pci=off RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels}${mirrorArg}`,
     });
     await this.apiPut('/drives/rootfs', {
       drive_id: 'rootfs',

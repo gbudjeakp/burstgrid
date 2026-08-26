@@ -46,6 +46,14 @@ autoscaler:
 # ── Optional backends ──────────────────────────────────────────────────────────
 # All fields are also settable via env vars (env takes precedence).
 
+# ── Worker config ──────────────────────────────────────────────────────────────
+# worker:
+#   # Pull-through registry mirror — VMs receive this as a REGISTRY_MIRROR boot arg.
+#   # The rootfs init must read /proc/cmdline and write /etc/docker/daemon.json.
+#   # For AWS: use an ECR pull-through cache endpoint or a registry:2 sidecar.
+#   # Env: BURSTGRID_REGISTRY_MIRROR
+#   registryMirror: http://10.0.0.1:5000
+
 backends:
   # Redis (ElastiCache) — enables job queue durability and worker registry persistence.
   # If set, the queue survives scheduler restarts and workers are tracked in Redis.

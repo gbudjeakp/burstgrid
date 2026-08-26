@@ -1,6 +1,6 @@
-import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate } from '../types/index.js';
+import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate, RootfsImage } from '../types/index.js';
 import { JobStatus as Status } from '../types/index.js';
-import { Slot } from './slot.js';
+import { Slot, type SlotMode } from './slot.js';
 import { recordJobDuration } from '../telemetry/index.js';
 
 export interface AgentConfig {
@@ -13,6 +13,18 @@ export interface AgentConfig {
   capabilities: string[];
   vmImagePath: string;
   kernelPath: string;
+  /** Execution mode: 'firecracker' (default), 'process' (bare-metal/GPU), or 'simulate' (local dev). */
+  mode?: SlotMode;
+  /** Directory of pre-baked rootfs images for burstgrid:image=<name> label resolution. */
+  imageDir?: string;
+  /** Explicit image catalog; entries take priority over imageDir convention. */
+  imageCatalog?: RootfsImage[];
+  /** Runner script path for 'process' mode. */
+  runnerPath?: string;
+  /** Docker pull-through registry mirror URL forwarded to each VM. */
+  registryMirror?: string;
+  /** Shared secret for authenticating to the scheduler. Set BURSTGRID_WORKER_TOKEN on both sides. */
+  workerToken?: string;
 }
 
 export class WorkerAgent {
@@ -80,7 +92,7 @@ export class WorkerAgent {
   private async connectStream(signal: AbortSignal): Promise<void> {
     const res = await fetch(
       `${this.cfg.schedulerUrl}/v1/workers/${this.cfg.workerId}/stream`,
-      { signal, headers: { Accept: 'text/event-stream' } },
+      { signal, headers: { Accept: 'text/event-stream', ...this.authHeader() } },
     );
     if (!res.ok || !res.body) throw new Error(`stream connect failed: ${res.status}`);
 
@@ -119,8 +131,14 @@ export class WorkerAgent {
     this.usedMemoryMiB += job.memoryMiB;
     const slot = new Slot({
       jobId: job.jobId,
+      mode: this.cfg.mode ?? 'firecracker',
       vmImagePath: this.cfg.vmImagePath,
       kernelPath: this.cfg.kernelPath,
+      imageDir: this.cfg.imageDir,
+      imageCatalog: this.cfg.imageCatalog,
+      runnerPath: this.cfg.runnerPath,
+      registryMirror: this.cfg.registryMirror,
+      env: job.env,
     });
 
     try {
@@ -149,10 +167,17 @@ export class WorkerAgent {
   private async post(path: string, body: unknown): Promise<void> {
     const res = await fetch(`${this.cfg.schedulerUrl}${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...this.authHeader(),
+      },
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status} from ${path}`);
+  }
+
+  private authHeader(): Record<string, string> {
+    return this.cfg.workerToken ? { Authorization: `Bearer ${this.cfg.workerToken}` } : {};
   }
 }
 

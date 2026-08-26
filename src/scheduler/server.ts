@@ -1,14 +1,41 @@
-import type { FastifyInstance } from 'fastify';
+import crypto from 'node:crypto';
+import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { WorkerPool } from './worker-pool.js';
 import type { JobQueue } from './queue.js';
-import type { WorkerRegistration, WorkerHeartbeat, JobUpdate } from '../types/index.js';
+import { selectTier } from './router.js';
+import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job } from '../types/index.js';
+
+/**
+ * Returns a preHandler that enforces Bearer token auth on worker/job routes.
+ * Skipped entirely when token is empty (dev mode).
+ */
+function makeWorkerAuth(token: string): ((req: FastifyRequest, reply: FastifyReply) => Promise<void>) | null {
+  if (!token) return null;
+  const expected = Buffer.from(token);
+  return async (req: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const auth = req.headers['authorization'] ?? '';
+    const provided = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    // timingSafeEqual prevents timing attacks on the token comparison
+    if (
+      provided.length !== token.length ||
+      !crypto.timingSafeEqual(expected, Buffer.from(provided))
+    ) {
+      req.log.warn({ ip: req.ip, workerId: (req.params as Record<string, string>)?.id }, 'worker auth rejected');
+      await reply.status(401).send({ error: 'unauthorized' });
+    }
+  };
+}
 
 export function registerSchedulerRoutes(
   app: FastifyInstance,
   pool: WorkerPool,
   queue: JobQueue,
+  workerToken = '',
 ): void {
-  app.post<{ Body: WorkerRegistration }>('/v1/workers/register', async (req, reply) => {
+  const workerAuth = makeWorkerAuth(workerToken);
+  const preHandler = workerAuth ? [workerAuth] : [];
+
+  app.post<{ Body: WorkerRegistration }>('/v1/workers/register', { preHandler }, async (req, reply) => {
     const { workerId, totalSlots } = req.body;
     if (!workerId || totalSlots <= 0) {
       return reply.status(400).send({ error: 'workerId and totalSlots required' });
@@ -19,6 +46,7 @@ export function registerSchedulerRoutes(
 
   app.post<{ Params: { id: string }; Body: WorkerHeartbeat }>(
     '/v1/workers/:id/heartbeat',
+    { preHandler },
     async (req, reply) => {
       pool.heartbeat({ ...req.body, workerId: req.params.id });
       return reply.status(200).send();
@@ -26,7 +54,7 @@ export function registerSchedulerRoutes(
   );
 
   // SSE stream: the scheduler pushes job assignments to workers over a persistent connection
-  app.get<{ Params: { id: string } }>('/v1/workers/:id/stream', (req, reply) => {
+  app.get<{ Params: { id: string } }>('/v1/workers/:id/stream', { preHandler }, (req, reply) => {
     const workerId = req.params.id;
     if (!pool.hasWorker(workerId)) {
       reply.status(404).send({ error: 'worker not registered' });
@@ -60,6 +88,7 @@ export function registerSchedulerRoutes(
 
   app.post<{ Params: { id: string }; Body: JobUpdate }>(
     '/v1/jobs/:id/status',
+    { preHandler },
     async (req, reply) => {
       req.log.info({ jobId: req.params.id, status: req.body.status, workerId: req.body.workerId }, 'job status update');
       return reply.status(200).send();
@@ -73,4 +102,26 @@ export function registerSchedulerRoutes(
   }));
 
   app.get('/health', async (_, reply) => reply.status(200).send({ ok: true }));
+
+  // Dev-only: inject a job directly without a real GitHub webhook or runner token
+  if (process.env.NODE_ENV !== 'production') {
+    interface InjectBody { owner: string; repo: string; runId?: number; labels?: string[]; runnerToken?: string }
+    app.post<{ Body: InjectBody }>('/v1/jobs/inject', async (req, reply) => {
+      const { owner, repo, runId = 0, labels = ['linux', 'x86_64'], runnerToken = 'dev-token' } = req.body;
+      if (!owner || !repo) return reply.status(400).send({ error: 'owner and repo required' });
+      const job: Job = {
+        id: crypto.randomUUID(),
+        owner,
+        repo,
+        runId,
+        labels,
+        tier: selectTier(labels),
+        queuedAt: new Date(),
+        runnerToken,
+      };
+      queue.enqueue(job);
+      req.log.info({ jobId: job.id, owner, repo, labels }, 'job injected (dev)');
+      return reply.status(202).send({ jobId: job.id });
+    });
+  }
 }

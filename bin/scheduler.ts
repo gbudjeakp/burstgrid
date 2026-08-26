@@ -19,6 +19,7 @@ const {
   BURSTGRID_ADDR = '0.0.0.0',
   BURSTGRID_PORT = '8080',
   BURSTGRID_WEBHOOK_SECRET = '',
+  BURSTGRID_WORKER_TOKEN = '',
   BURSTGRID_MAX_QUEUE_DEPTH,
   BURSTGRID_LAUNCH_TEMPLATE_ID = '',
   BURSTGRID_SUBNET_IDS = '',
@@ -78,7 +79,7 @@ await app.register(rateLimit, {
   timeWindow: rl.rateLimitWindow ?? '1 minute',
 });
 
-registerSchedulerRoutes(app, pool, queue);
+registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN);
 registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, ghClient, maxQueueDepth);
 
 // Fleet config: BURSTGRID_FLEETS env (JSON) > burstgrid.config.yaml > legacy single-template env vars

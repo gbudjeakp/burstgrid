@@ -1,5 +1,8 @@
 import os from 'node:os';
 import { WorkerAgent } from '../src/worker/agent.js';
+import { loadConfig } from '../src/config/index.js';
+
+const cfg = loadConfig();
 
 const {
   BURSTGRID_SCHEDULER_URL = 'http://localhost:8080',
@@ -11,6 +14,13 @@ const {
   BURSTGRID_CAPABILITIES = 'linux,x86_64,docker',
   BURSTGRID_VM_IMAGE = '/var/lib/burstgrid/runner.img',
   BURSTGRID_KERNEL = '/var/lib/burstgrid/vmlinux',
+  // 'firecracker' (default), 'process' (bare-metal/GPU), or 'simulate' (local dev)
+  BURSTGRID_MODE = 'firecracker',
+  BURSTGRID_IMAGE_DIR,
+  BURSTGRID_RUNNER_PATH,
+  // Pull-through registry mirror — set to http://<host>:5000 to cache Docker Hub pulls
+  BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
+  BURSTGRID_WORKER_TOKEN = '',
 } = process.env;
 
 const controller = new AbortController();
@@ -26,6 +36,11 @@ const agent = new WorkerAgent({
   capabilities: BURSTGRID_CAPABILITIES.split(',').map(s => s.trim()).filter(Boolean),
   vmImagePath: BURSTGRID_VM_IMAGE,
   kernelPath: BURSTGRID_KERNEL,
+  mode: BURSTGRID_MODE as 'firecracker' | 'process' | 'simulate',
+  imageDir: BURSTGRID_IMAGE_DIR,
+  runnerPath: BURSTGRID_RUNNER_PATH,
+  registryMirror: BURSTGRID_REGISTRY_MIRROR,
+  workerToken: BURSTGRID_WORKER_TOKEN,
 });
 
 try {

@@ -3,6 +3,7 @@ export enum ExecutionTier {
   Critical = 'critical',
   HighDensity = 'high-density',
   Overflow = 'overflow',
+  GpuAI = 'gpu-ai',
 }
 
 export enum JobStatus {
@@ -79,4 +80,24 @@ export interface JobUpdate {
   workerId: string;
   status: JobStatus;
   error?: string;
+}
+
+/**
+ * Describes a pre-baked GPU AMI used as the execution environment for gpu-ai jobs.
+ * The AMI should have CUDA drivers, ML frameworks, and optionally model weights
+ * pre-installed so workers can start jobs without downloading large dependencies.
+ */
+export interface GpuAmiProfile {
+  /** AWS AMI ID, e.g. 'ami-0abc1234'. */
+  id: string;
+  /** Human-readable name; also used for label matching via burstgrid:gpu-ami=<name>. */
+  name: string;
+  /** CUDA version pre-installed, e.g. '12.4'. */
+  cudaVersion: string;
+  /** EC2 instance families this image supports (e.g. ['g4dn', 'g5', 'p3']). */
+  instanceFamilies: string[];
+  /** Pip packages pre-installed in the image for fast job start. */
+  cachedPackages?: string[];
+  /** HuggingFace model IDs pre-downloaded into the model cache on the image. */
+  cachedModels?: string[];
 }

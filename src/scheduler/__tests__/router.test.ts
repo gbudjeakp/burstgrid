@@ -42,6 +42,19 @@ describe('selectTier', () => {
     expect(selectTier(['BURSTGRID:HIGH-DENSITY'])).toBe(ExecutionTier.HighDensity);
   });
 
+  it('returns GpuAI for the burstgrid:gpu label', () => {
+    expect(selectTier(['linux', 'burstgrid:gpu'])).toBe(ExecutionTier.GpuAI);
+  });
+
+  it('returns GpuAI for the burstgrid:gpu-ai label', () => {
+    expect(selectTier(['linux', 'burstgrid:gpu-ai'])).toBe(ExecutionTier.GpuAI);
+  });
+
+  it('is case-insensitive for GPU labels', () => {
+    expect(selectTier(['BURSTGRID:GPU'])).toBe(ExecutionTier.GpuAI);
+    expect(selectTier(['BURSTGRID:GPU-AI'])).toBe(ExecutionTier.GpuAI);
+  });
+
   it('critical takes precedence when multiple tier labels are present', () => {
     expect(selectTier(['burstgrid:critical', 'burstgrid:high-density'])).toBe(ExecutionTier.Critical);
   });

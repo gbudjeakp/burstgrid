@@ -15,6 +15,7 @@ const TIER_SCORE: Record<ExecutionTier, number> = {
   [ExecutionTier.Standard]:    2_000_000_000_000,
   [ExecutionTier.HighDensity]: 3_000_000_000_000,
   [ExecutionTier.Overflow]:    4_000_000_000_000,
+  [ExecutionTier.GpuAI]:       2_500_000_000_000,
 };
 
 export class RedisQueueBackend implements IQueueBackend {

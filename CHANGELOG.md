@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.0](https://github.com/gbudjeakp/burstgrid/compare/v1.0.0...v1.1.0) (2026-08-26)
+
+
+### Features
+
+* VM_BOOT_TARGET_MS contract; simulate models boot latency; update hero copy ([27d6b18](https://github.com/gbudjeakp/burstgrid/commit/27d6b180fad369b7abccf264212e8a7a76f5caf1))
+
 ## 1.0.0 (2026-08-26)
 
 

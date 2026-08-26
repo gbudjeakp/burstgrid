@@ -17,16 +17,26 @@ describe('JobQueue', () => {
     const critical = makeJob(ExecutionTier.Critical, 'critical');
     const overflow = makeJob(ExecutionTier.Overflow, 'overflow');
     const highDensity = makeJob(ExecutionTier.HighDensity, 'hd');
+    const gpuAi = makeJob(ExecutionTier.GpuAI, 'gpu');
 
     queue.enqueue(overflow);
-    queue.enqueue(standard);
     queue.enqueue(highDensity);
+    queue.enqueue(gpuAi);
+    queue.enqueue(standard);
     queue.enqueue(critical);
 
     expect(queue.dequeue()?.id).toBe('critical');
     expect(queue.dequeue()?.id).toBe('standard');
+    expect(queue.dequeue()?.id).toBe('gpu');
     expect(queue.dequeue()?.id).toBe('hd');
     expect(queue.dequeue()?.id).toBe('overflow');
+  });
+
+  it('GpuAI jobs enqueue and dequeue without error', () => {
+    const gpu = makeJob(ExecutionTier.GpuAI, 'gpu-job');
+    queue.enqueue(gpu);
+    expect(queue.depth).toBe(1);
+    expect(queue.dequeue()?.id).toBe('gpu-job');
   });
 
   it('returns undefined when empty', () => {

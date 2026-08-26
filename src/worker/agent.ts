@@ -133,6 +133,7 @@ export class WorkerAgent {
       imageDir: this.cfg.imageDir,
       runnerPath: this.cfg.runnerPath,
       registryMirror: this.cfg.registryMirror,
+      env: job.env,
     });
 
     try {

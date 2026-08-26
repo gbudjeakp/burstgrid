@@ -90,6 +90,19 @@ export interface RootfsImage {
   name: string;
   /** Absolute path to the rootfs .img file on the worker host. */
   path: string;
+  // ── Optional metadata — documents what is baked into this image ──
+  /** Human-readable description shown in logs. */
+  description?: string;
+  /** Base OS, e.g. 'ubuntu-22.04' or 'alpine-3.19'. */
+  os?: string;
+  /** Pre-installed tools/packages, e.g. ['docker', 'node', 'python3', 'git']. */
+  tools?: string[];
+  /** Docker version if the Docker daemon is pre-installed, e.g. '24.0'. */
+  dockerVersion?: string;
+  /** Language runtimes pre-installed, e.g. { node: '20.x', python: '3.11' }. */
+  languages?: Record<string, string>;
+  /** Image file size in bytes; informational only. */
+  sizeBytes?: number;
 }
 
 /**

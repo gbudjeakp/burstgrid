@@ -297,80 +297,16 @@
   <div class="docs-main">
 
 <!-- Hero -->
-<div class="section" style="padding-top:80px;padding-bottom:80px;">
-  <div>
-    <div>
-      <div class="wip-pill">Open source &middot; Alpha</div>
-      <h1>One job.<br/>One microVM.<br/><em>Nothing shared.</em></h1>
-      <p class="hero-sub">
-        BurstGrid dispatches every GitHub Actions job to a fresh Firecracker microVM on your own EC2 bare-metal fleet. Separate kernel, separate Docker daemon, separate everything &mdash; gone the moment the job completes. No shared state. No secret bleed. No per-minute GitHub pricing.
-      </p>
-      <div class="hero-actions">
-        <a href="#get-started" class="btn btn-accent">Set it up</a>
-        <a href="https://github.com/gbudjeakp/burstgrid" class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
-      </div>
-    </div>
-
-    <div class="arch-diagram" style="margin-top:40px;">
-      <div class="arch-hdr">
-        <span class="dot" style="background:#3a2020"></span>
-        <span class="dot" style="background:#2e2a1a"></span>
-        <span class="dot" style="background:#1a2e1e"></span>
-        <span class="arch-hdr-txt">Job lifecycle</span>
-      </div>
-      <div class="arch-grid">
-        <!-- row 1 -->
-        <div class="arch-node">
-          <div class="arch-icon" style="background:#0d1117;border-color:#30363d;color:#c9d1d9">GH</div>
-          <div class="arch-name">GitHub Actions</div>
-          <div class="arch-hint">workflow_job<br/>queued</div>
-        </div>
-        <div class="arch-arr">
-          <span class="arch-arr-lbl">webhook POST</span>
-          <span class="arch-arr-sym">&rarr;</span>
-        </div>
-        <div class="arch-node">
-          <div class="arch-icon" style="background:var(--accent-lo);border-color:#2e1608;color:var(--accent)">&#9889;</div>
-          <div class="arch-name">Scheduler</div>
-          <div class="arch-hint">verify &middot; queue<br/>route</div>
-        </div>
-        <!-- row 2: vertical down arrow on right -->
-        <div></div>
-        <div></div>
-        <div class="arch-arr arch-arr-v">
-          <span class="arch-arr-sym">&darr;</span>
-          <span class="arch-arr-lbl">SSE push</span>
-        </div>
-        <!-- row 3 -->
-        <div class="arch-node">
-          <div class="arch-icon" style="background:#0d1a0f;border-color:#1e3a12;color:#4ade80">VM</div>
-          <div class="arch-name">microVM</div>
-          <div class="arch-hint">boot &middot; run<br/>destroy</div>
-        </div>
-        <div class="arch-arr">
-          <span class="arch-arr-sym">&larr;</span>
-          <span class="arch-arr-lbl">FC API</span>
-        </div>
-        <div class="arch-node">
-          <div class="arch-icon" style="background:#0a1520;border-color:#0f2340;color:#60a5fa">EC2</div>
-          <div class="arch-name">Worker Agent</div>
-          <div class="arch-hint">bare-metal<br/>KVM</div>
-        </div>
-      </div>
-      <div class="arch-stats">
-        <div class="arch-stat">
-          <span class="arch-stat-n">&lt;5ms</span>
-          <span class="arch-stat-d">dispatch</span>
-        </div>
-        <div class="arch-stat">
-          <span class="arch-stat-n">~150ms</span>
-          <span class="arch-stat-d">VM boot</span>
-        </div>
-        <div class="arch-stat">
-          <span class="arch-stat-n">0</span>
-          <span class="arch-stat-d">shared state</span>
-        </div>
-      </div>
+<div class="section" style="padding-top:96px;padding-bottom:96px;text-align:center;">
+  <div style="max-width:700px;margin:0 auto;">
+    <div class="wip-pill">Open source &middot; Alpha</div>
+    <h1>One job.<br/>One microVM.<br/><em>Nothing shared.</em></h1>
+    <p class="hero-sub" style="margin-left:auto;margin-right:auto;">
+      BurstGrid dispatches every GitHub Actions job to a fresh Firecracker microVM on your own EC2 bare-metal fleet. Separate kernel, separate Docker daemon, separate everything &mdash; gone the moment the job completes. No shared state. No secret bleed. No per-minute GitHub pricing.
+    </p>
+    <div class="hero-actions" style="justify-content:center;">
+      <a href="#get-started" class="btn btn-accent">Set it up</a>
+      <a href="https://github.com/gbudjeakp/burstgrid" class="btn btn-ghost" target="_blank" rel="noopener">View on GitHub</a>
     </div>
   </div>
 </div>
@@ -475,6 +411,68 @@
     RUNNER_LABELS=self-hosted,linux,burstgrid:size=large"</span>
 <span class="s-cm">}</span></div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arch-diagram" style="margin-top:48px;">
+    <div class="arch-hdr">
+      <span class="dot" style="background:#3a2020"></span>
+      <span class="dot" style="background:#2e2a1a"></span>
+      <span class="dot" style="background:#1a2e1e"></span>
+      <span class="arch-hdr-txt">Job lifecycle</span>
+    </div>
+    <div class="arch-grid">
+      <!-- row 1 -->
+      <div class="arch-node">
+        <div class="arch-icon" style="background:#0d1117;border-color:#30363d;color:#c9d1d9">GH</div>
+        <div class="arch-name">GitHub Actions</div>
+        <div class="arch-hint">workflow_job<br/>queued</div>
+      </div>
+      <div class="arch-arr">
+        <span class="arch-arr-lbl">webhook POST</span>
+        <span class="arch-arr-sym">&rarr;</span>
+      </div>
+      <div class="arch-node">
+        <div class="arch-icon" style="background:var(--accent-lo);border-color:#2e1608;color:var(--accent)">&#9889;</div>
+        <div class="arch-name">Scheduler</div>
+        <div class="arch-hint">verify &middot; queue<br/>route</div>
+      </div>
+      <!-- row 2: vertical down arrow on right -->
+      <div></div>
+      <div></div>
+      <div class="arch-arr arch-arr-v">
+        <span class="arch-arr-sym">&darr;</span>
+        <span class="arch-arr-lbl">SSE push</span>
+      </div>
+      <!-- row 3 -->
+      <div class="arch-node">
+        <div class="arch-icon" style="background:#0d1a0f;border-color:#1e3a12;color:#4ade80">VM</div>
+        <div class="arch-name">microVM</div>
+        <div class="arch-hint">boot &middot; run<br/>destroy</div>
+      </div>
+      <div class="arch-arr">
+        <span class="arch-arr-sym">&larr;</span>
+        <span class="arch-arr-lbl">FC API</span>
+      </div>
+      <div class="arch-node">
+        <div class="arch-icon" style="background:#0a1520;border-color:#0f2340;color:#60a5fa">EC2</div>
+        <div class="arch-name">Worker Agent</div>
+        <div class="arch-hint">bare-metal<br/>KVM</div>
+      </div>
+    </div>
+    <div class="arch-stats">
+      <div class="arch-stat">
+        <span class="arch-stat-n">&lt;5ms</span>
+        <span class="arch-stat-d">dispatch</span>
+      </div>
+      <div class="arch-stat">
+        <span class="arch-stat-n">~150ms</span>
+        <span class="arch-stat-d">VM boot</span>
+      </div>
+      <div class="arch-stat">
+        <span class="arch-stat-n">0</span>
+        <span class="arch-stat-d">shared state</span>
       </div>
     </div>
   </div>

@@ -184,15 +184,7 @@
     }
     .sidebar::-webkit-scrollbar { width: 3px; }
     .sidebar::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
-    .sidebar-brand {
-      display: flex; align-items: center; gap: 8px;
-      font-size: 13px; font-weight: 600; color: var(--text);
-      padding: 0 20px 18px; border-bottom: 1px solid var(--border); margin-bottom: 18px;
-    }
-    .sidebar-brand-icon {
-      width: 22px; height: 22px; background: var(--accent); border-radius: 5px;
-      display: flex; align-items: center; justify-content: center; font-size: 12px; flex-shrink: 0;
-    }
+    .sidebar-brand { display: none; }
     .sidebar-group { margin-bottom: 20px; }
     .sidebar-group-label {
       font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
@@ -208,6 +200,7 @@
     .sidebar-link.active { color: var(--text); border-left-color: var(--accent); }
     .sidebar-link.sub { padding-left: 30px; font-size: 12px; }
     .docs-main { min-width: 0; }
+    .docs-main .section { max-width: none; margin: 0; }
     @media (max-width: 900px) {
       .docs-layout { grid-template-columns: 1fr; }
       .sidebar { display: none; }
@@ -253,8 +246,40 @@
   </nav>
 </div>
 
+<div class="docs-layout">
+  <aside class="sidebar">
+    <div class="sidebar-nav">
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Overview</div>
+        <a href="#" class="sidebar-link">Introduction</a>
+        <a href="#how-it-works" class="sidebar-link">Architecture</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">The flow</div>
+        <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
+        <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
+        <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
+        <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Set it up</div>
+        <a href="#get-started" class="sidebar-link">Setup guide</a>
+        <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
+        <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
+        <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
+        <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
+        <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
+      </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Why BurstGrid</div>
+        <a href="#features" class="sidebar-link">Features</a>
+      </div>
+    </div>
+  </aside>
+  <div class="docs-main">
+
 <!-- Hero -->
-<div class="section" style="padding-top:88px;padding-bottom:88px;">
+<div class="section" style="padding-top:80px;padding-bottom:80px;">
   <div class="hero-grid">
     <div>
       <div class="wip-pill">Open source &middot; Alpha</div>
@@ -291,41 +316,7 @@
   </div>
 </div>
 
-<div class="docs-layout">
-  <aside class="sidebar">
-    <div class="sidebar-brand">
-      <span class="sidebar-brand-icon">&#9889;</span>
-      BurstGrid
-    </div>
-    <div class="sidebar-nav">
-      <div class="sidebar-group">
-        <div class="sidebar-group-label">Overview</div>
-        <a href="#" class="sidebar-link">Introduction</a>
-        <a href="#how-it-works" class="sidebar-link">Architecture</a>
-      </div>
-      <div class="sidebar-group">
-        <div class="sidebar-group-label">The flow</div>
-        <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
-        <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
-        <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
-        <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
-      </div>
-      <div class="sidebar-group">
-        <div class="sidebar-group-label">Set it up</div>
-        <a href="#get-started" class="sidebar-link">Setup guide</a>
-        <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
-        <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
-        <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
-        <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
-        <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
-      </div>
-      <div class="sidebar-group">
-        <div class="sidebar-group-label">Why BurstGrid</div>
-        <a href="#features" class="sidebar-link">Features</a>
-      </div>
-    </div><!-- .sidebar-nav -->
-  </aside>
-  <div class="docs-main">
+<hr class="rule" />
 
 <!-- How it works -->
 <div class="section section-border" id="how-it-works">

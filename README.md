@@ -1,8 +1,12 @@
 # BurstGrid
 
-> **⚠ Work in progress** — not tested end-to-end. APIs will change before a stable release.
+> **⚠️ Highly experimental — do not use in production.**
+> This is a research-grade project. The scheduler, worker agent, and Firecracker integration are functional, but nothing has been tested end-to-end on real AWS infrastructure. APIs, config schema, and wire formats will change without notice. Security has not been audited. If you run this in production and something breaks, that is expected.
 
 Self-hosted GitHub Actions runners on Firecracker microVMs. A TypeScript scheduler receives `workflow_job` webhooks, dispatches jobs to EC2 bare-metal hosts over SSE, and each job boots into a dedicated microVM in under 200 ms — then disappears.
+
+**Good fit:** teams running 20+ concurrent CI jobs with consistent load, strict isolation requirements (SOC 2, HIPAA), or mixed CPU + GPU pipelines.
+**Not a good fit:** &lt;50 jobs/day, orgs already on Kubernetes (use [ARC](https://github.com/actions/actions-runner-controller)), or highly variable/spiky load. [See the full fit guide →](https://gbudjeakp.github.io/burstgrid/#who-its-for)
 
 ```
 GitHub webhook
@@ -100,9 +104,11 @@ On AWS: use an **ECR pull-through cache** endpoint — same config, no extra inf
 | `BURSTGRID_ADDR` | `0.0.0.0` | Listen address |
 | `BURSTGRID_PORT` | `8080` | Listen port |
 | `BURSTGRID_WEBHOOK_SECRET` | — | GitHub webhook HMAC secret |
+| `BURSTGRID_WORKER_TOKEN` | — | Shared secret workers must send as `Authorization: Bearer` |
 | `BURSTGRID_MAX_QUEUE_DEPTH` | `500` | Jobs before returning 503 |
 | `GITHUB_APP_ID` | — | GitHub App numeric ID |
-| `GITHUB_PRIVATE_KEY_PATH` | — | Path to App private key PEM |
+| `GITHUB_PRIVATE_KEY_PATH` | — | Path to App private key PEM file |
+| `GITHUB_PRIVATE_KEY` | — | PEM content as env var (alternative to file; use for Secrets Manager) |
 | `GITHUB_TOKEN` | — | PAT for dev (overrides App auth) |
 | `BURSTGRID_CONFIG` | `./burstgrid.config.yaml` | YAML config path |
 
@@ -111,14 +117,15 @@ On AWS: use an **ECR pull-through cache** endpoint — same config, no extra inf
 | Variable | Default | Description |
 |---|---|---|
 | `BURSTGRID_SCHEDULER_URL` | `http://localhost:8080` | Scheduler address |
-| `BURSTGRID_WORKER_ID` | `os.hostname()` | Worker ID (use EC2 instance-id in prod) |
-| `BURSTGRID_SLOTS` | `8` | Max concurrent VM slots |
-| `BURSTGRID_VCPUS` | `16` | Total host vCPUs |
-| `BURSTGRID_MEMORY_MIB` | `32768` | Total host memory in MiB |
-| `BURSTGRID_CAPABILITIES` | `linux,x86_64,docker` | Capability labels advertised to scheduler |
+| `BURSTGRID_WORKER_ID` | EC2 instance-id or hostname | Auto-detected from IMDS; set explicitly to override |
+| `BURSTGRID_SLOTS` | `floor(cpuCount / 2)` | Max concurrent VM slots; auto-calculated if unset |
+| `BURSTGRID_VCPUS` | `os.cpus().length` | Total host vCPUs; auto-detected if unset |
+| `BURSTGRID_MEMORY_MIB` | `os.totalmem()` | Total host memory in MiB; auto-detected if unset |
+| `BURSTGRID_CAPABILITIES` | `linux,<arch>[,docker][,gpu,cuda]` | Auto-detected: arch + Docker + nvidia-smi presence |
 | `BURSTGRID_MODE` | `firecracker` | `firecracker` / `process` / `simulate` |
 | `BURSTGRID_VM_IMAGE` | `/var/lib/burstgrid/runner.img` | Firecracker rootfs path |
 | `BURSTGRID_KERNEL` | `/var/lib/burstgrid/vmlinux` | Firecracker kernel path |
+| `BURSTGRID_WORKER_TOKEN` | — | Shared secret matching scheduler's token |
 | `BURSTGRID_REGISTRY_MIRROR` | — | Docker pull-through mirror URL |
 | `BURSTGRID_IMAGE_DIR` | — | Directory of pre-baked rootfs images (`burstgrid:image=<name>`) |
 | `BURSTGRID_RUNNER_PATH` | `./run.sh` | Runner script path (`process` mode) |

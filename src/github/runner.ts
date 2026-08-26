@@ -61,6 +61,11 @@ export class AppClient {
     return new AppClient(new App({ appId, privateKey }), null);
   }
 
+  /** Read PEM from env var directly — avoids writing a temp file from Secrets Manager/SSM. */
+  static fromGitHubAppKey(appId: number, privateKey: string): AppClient {
+    return new AppClient(new App({ appId, privateKey }), null);
+  }
+
   /** For local dev with a PAT — skips GitHub App auth entirely. */
   static fromToken(token: string): AppClient {
     return new AppClient(null, token);

@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import path from 'node:path';
 import { Slot } from '../slot.js';
+import { VM_BOOT_TARGET_MS } from '../firecracker.js';
 import type { RootfsImage } from '../../types/index.js';
 
 // resolveRootfs is private, so we test it through a Slot in simulate mode.
@@ -87,5 +88,51 @@ describe('Slot imageCatalog wiring', () => {
       kernelPath: '/vmlinux',
       imageCatalog: catalog,
     })).not.toThrow();
+  });
+});
+
+// ─── Cold-start timing contract ───────────────────────────────────────────────
+// Simulate mode models the VM_BOOT_TARGET_MS window.
+// These tests use fake timers to verify the contract without real wall-clock delay.
+
+function makeSimulateSlot() {
+  return new Slot({ jobId: 'boot-test', mode: 'simulate', vmImagePath: '/x', kernelPath: '/k' });
+}
+
+describe('simulate mode cold-start contract', () => {
+  it('VM_BOOT_TARGET_MS is within the documented <200ms claim', () => {
+    expect(VM_BOOT_TARGET_MS).toBeLessThanOrEqual(200);
+    expect(VM_BOOT_TARGET_MS).toBeGreaterThan(0);
+  });
+
+  it('start() does not resolve before VM_BOOT_TARGET_MS elapses', async () => {
+    vi.useFakeTimers();
+    const slot = makeSimulateSlot();
+    let resolved = false;
+    const p = slot.start('token', ['linux']).then(() => { resolved = true; });
+
+    await vi.advanceTimersByTimeAsync(VM_BOOT_TARGET_MS - 1);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await p;
+    expect(resolved).toBe(true);
+    vi.useRealTimers();
+  });
+
+  it('wait() resolves in a second VM_BOOT_TARGET_MS window (simulates job duration)', async () => {
+    vi.useFakeTimers();
+    const slot = makeSimulateSlot();
+    await vi.advanceTimersByTimeAsync(VM_BOOT_TARGET_MS); // drain start()
+    let done = false;
+    const p = slot.wait().then(() => { done = true; });
+
+    await vi.advanceTimersByTimeAsync(VM_BOOT_TARGET_MS - 1);
+    expect(done).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await p;
+    expect(done).toBe(true);
+    vi.useRealTimers();
   });
 });

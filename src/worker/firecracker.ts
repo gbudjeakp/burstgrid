@@ -5,6 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { recordVmBootDuration } from '../telemetry/index.js';
 
+/** Performance contract: Firecracker microVMs should boot within this window. */
+export const VM_BOOT_TARGET_MS = 150;
+
 export interface VMConfig {
   vmId: string;
   kernelPath: string;
@@ -46,7 +49,11 @@ export class FirecrackerVM {
     // Scrub the token from heap — it has already been transmitted to the Firecracker API socket
     Object.assign(this.cfg, { runnerToken: '' });
     await this.apiPut('/actions', { action_type: 'InstanceStart' });
-    recordVmBootDuration(Date.now() - bootStart);
+    const elapsed = Date.now() - bootStart;
+    recordVmBootDuration(elapsed);
+    if (elapsed > VM_BOOT_TARGET_MS * 2) {
+      console.warn(`[firecracker] boot took ${elapsed}ms — expected <${VM_BOOT_TARGET_MS * 2}ms`);
+    }
   }
 
   async wait(): Promise<void> {

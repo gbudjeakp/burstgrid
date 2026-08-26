@@ -1,11 +1,13 @@
 {
   "name": "burstgrid",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "CI runner scheduling and execution platform — diversified EC2 worker fleet with Firecracker microVM isolation",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@9.0.0",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "tsup",
     "dev:scheduler": "tsx bin/scheduler.ts",

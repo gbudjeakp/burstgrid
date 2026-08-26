@@ -24,9 +24,9 @@
     "@aws-sdk/util-dynamodb": "^3.600.0",
     "@fastify/rate-limit": "^10.0.0",
     "@octokit/app": "^15.0.0",
-    "@opentelemetry/api": "^1.9.0",
-    "@opentelemetry/exporter-metrics-otlp-http": "^0.57.0",
-    "@opentelemetry/sdk-metrics": "^1.30.0",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.221.0",
+    "@opentelemetry/sdk-metrics": "^2.10.0",
     "fastify": "^5.0.0",
     "ioredis": "^5.4.0",
     "yaml": "^2.5.0"
@@ -37,6 +37,12 @@
     "tsup": "^8.2.0",
     "tsx": "^4.16.0",
     "typescript": "^5.5.0",
-    "vitest": "^2.0.0"
+    "vite": "^6.4.3",
+    "vitest": "^4.1.11"
+  },
+  "pnpm": {
+    "overrides": {
+      "esbuild": ">=0.28.1"
+    }
   }
 }

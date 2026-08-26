@@ -84,6 +84,14 @@ export interface JobUpdate {
   error?: string;
 }
 
+/** A named rootfs image entry in the worker image catalog (burstgrid.config.yaml). */
+export interface RootfsImage {
+  /** The name used in the burstgrid:image=<name> job label. */
+  name: string;
+  /** Absolute path to the rootfs .img file on the worker host. */
+  path: string;
+}
+
 /**
  * Describes a pre-baked GPU AMI used as the execution environment for gpu-ai jobs.
  * The AMI should have CUDA drivers, ML frameworks, and optionally model weights

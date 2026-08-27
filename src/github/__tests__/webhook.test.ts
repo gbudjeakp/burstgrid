@@ -180,4 +180,32 @@ describe('POST /webhook/github', () => {
     expect(res.statusCode).toBe(202);
     expect(queue.depth).toBe(1);
   });
+
+  it('returns 503 and does not enqueue when isDraining is true', async () => {
+    const app = Fastify({ logger: false });
+    const queue = new JobQueue();
+    const mockClient = { createRunnerToken: vi.fn() } as unknown as AppClient;
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      req.rawBody = body as Buffer;
+      try { done(null, JSON.parse((body as Buffer).toString())); }
+      catch (err) { done(err as Error, undefined); }
+    });
+    registerWebhookRoute(app, SECRET, queue, mockClient, 500, () => true);
+
+    const body = JSON.stringify(workflowJobPayload('queued'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook/github',
+      headers: {
+        'x-github-event': 'workflow_job',
+        'x-hub-signature-256': sign(body),
+        'content-type': 'application/json',
+      },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(queue.depth).toBe(0);
+    expect(mockClient.createRunnerToken).not.toHaveBeenCalled();
+  });
 });

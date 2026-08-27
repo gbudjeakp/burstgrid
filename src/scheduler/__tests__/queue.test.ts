@@ -81,6 +81,32 @@ describe('JobQueue', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
+  it('emits drain when dequeue removes the last item', () => {
+    const spy = vi.fn();
+    queue.on('drain', spy);
+    queue.enqueue(makeJob(ExecutionTier.Standard));
+    queue.dequeue();
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('does not emit drain on non-final dequeues', () => {
+    const spy = vi.fn();
+    queue.on('drain', spy);
+    queue.enqueue(makeJob(ExecutionTier.Standard));
+    queue.enqueue(makeJob(ExecutionTier.Standard));
+    queue.dequeue();
+    expect(spy).not.toHaveBeenCalled(); // one item still in queue
+    queue.dequeue();
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it('does not emit drain when dequeuing from an already-empty queue', () => {
+    const spy = vi.fn();
+    queue.on('drain', spy);
+    queue.dequeue();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('depth is zero after draining all tiers', () => {
     queue.enqueue(makeJob(ExecutionTier.Critical));
     queue.enqueue(makeJob(ExecutionTier.Standard));

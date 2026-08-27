@@ -31,6 +31,9 @@ export class Autoscaler {
   private readonly ec2: EC2Client;
   private subnetCursors = new Map<string, number>();
   private timer: NodeJS.Timeout | null = null;
+  // timestamps of launches that haven't registered yet, keyed by fleet name
+  private readonly pendingLaunches = new Map<string, number[]>();
+  private readonly LAUNCH_TTL_MS = 3 * 60 * 1_000;
 
   constructor(
     private readonly pool: WorkerPool,
@@ -63,14 +66,22 @@ export class Autoscaler {
     const pending = this.jobCountForFleet(fleet);
     const freeSlots = this.pool.freeSlotsWithCapability(fleet.sizeTag);
     const workers = this.pool.workersWithCapability(fleet.sizeTag);
+    const pendingWorkers = this.activePendingCount(fleet.name);
 
-    if (pending <= fleet.scaleUpThreshold || workers >= fleet.maxWorkers) return;
+    if (pending <= fleet.scaleUpThreshold || workers + pendingWorkers >= fleet.maxWorkers) return;
 
     const needed = Math.min(
       Math.ceil((pending - freeSlots) / fleet.slotsPerWorker),
-      fleet.maxWorkers - workers,
+      fleet.maxWorkers - workers - pendingWorkers,
     );
     if (needed > 0) await this.launchWorkers(needed, fleet);
+  }
+
+  private activePendingCount(fleetName: string): number {
+    const now = Date.now();
+    const active = (this.pendingLaunches.get(fleetName) ?? []).filter(t => now - t < this.LAUNCH_TTL_MS);
+    this.pendingLaunches.set(fleetName, active);
+    return active.length;
   }
 
   private jobCountForFleet(fleet: TierFleet): number {
@@ -106,6 +117,9 @@ export class Autoscaler {
             : {}),
         }));
         const id = res.Instances?.[0]?.InstanceId ?? 'unknown';
+        const launches = this.pendingLaunches.get(fleet.name) ?? [];
+        launches.push(Date.now());
+        this.pendingLaunches.set(fleet.name, launches);
         console.info(`[autoscaler] fleet "${fleet.name}": launched ${id} (subnet ${subnetId})`);
       } catch (err) {
         console.error(`[autoscaler] fleet "${fleet.name}": launch failed`, err);

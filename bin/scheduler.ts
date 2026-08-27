@@ -11,6 +11,10 @@ import { loadConfig } from '../src/config/index.js';
 import { initTelemetry, registerSchedulerObservers } from '../src/telemetry/index.js';
 import { createBackends } from '../src/backends/index.js';
 import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
+import { JobWatchdog } from '../src/scheduler/watchdog.js';
+import { awaitDrain } from '../src/scheduler/drain.js';
+import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../src/telemetry/index.js';
+import type { IJobHistoryBackend } from '../src/backends/types.js';
 
 await initTelemetry('burstgrid-scheduler');
 
@@ -44,6 +48,7 @@ const queue = new JobQueue();
 const pool  = new WorkerPool();
 const router = new Router(queue, pool);
 const metaCache = new JobMetaCache();
+let draining = false;
 
 const backends = createBackends(queue);
 
@@ -51,6 +56,23 @@ if (backends.redisQueue)   queue.attachRedis(backends.redisQueue);
 if (backends.redisWorkers) pool.attachRedis(backends.redisWorkers);
 if (backends.jobHistory)   router.attachHistory(backends.jobHistory);
 router.attachJobMetaCache(metaCache);
+
+function handleJobTimeout(jobId: string, meta: import('../src/scheduler/job-meta-cache.js').CachedJobMeta, reason: string): void {
+  console.warn(`[watchdog] job ${jobId} timed out — ${reason}`);
+  recordJobOutcome('timeout', meta.tier, meta.repo);
+  addJobSpanEvent(jobId, 'timeout', { reason });
+  endJobSpan(jobId, 'error', reason);
+  void (backends.jobHistory as IJobHistoryBackend | undefined)?.record({
+    jobId, status: 'failed', owner: meta.owner, repo: meta.repo,
+    runId: meta.runId, tier: meta.tier, labels: meta.labels, timestamp: new Date(),
+  }).catch(err => console.error('[watchdog] history error:', err));
+  metaCache.delete(jobId);
+}
+
+const watchdog = new JobWatchdog(metaCache, handleJobTimeout, {
+  dispatchTimeoutMs: cfg.worker?.dispatchTimeoutMs,
+  jobTimeoutMs:      cfg.worker?.jobTimeoutMs,
+});
 
 // Restore any jobs that were queued before the last restart
 await queue.restoreFromRedis();
@@ -86,7 +108,7 @@ await app.register(rateLimit, {
 });
 
 registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN, { cache: metaCache, history: backends.jobHistory });
-registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, ghClient, maxQueueDepth);
+registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, ghClient, maxQueueDepth, () => draining);
 
 // Fleet config: BURSTGRID_FLEETS env (JSON) > burstgrid.config.yaml > legacy single-template env vars
 const fleets: TierFleet[] = BURSTGRID_FLEETS
@@ -104,7 +126,19 @@ const autoscaler = new Autoscaler(
 if (autoscalerEnabled) autoscaler.start();
 else console.info('[scheduler] autoscaler disabled via config');
 
+const drainTimeoutMs = cfg.scheduler?.drainTimeoutMs ?? 5 * 60 * 1_000;
+
 const shutdown = async () => {
+  draining = true;
+  console.info(`[scheduler] draining — ${queue.depth} queued, ${metaCache.size} in-flight`);
+  const drained = await Promise.race([
+    awaitDrain(queue, metaCache).then(() => true),
+    new Promise<boolean>(r => setTimeout(() => r(false), drainTimeoutMs)),
+  ]);
+  if (!drained) {
+    console.warn(`[scheduler] drain timeout — ${queue.depth} queued, ${metaCache.size} in-flight jobs abandoned`);
+  }
+  watchdog.stop();
   autoscaler.stop();
   metaCache.destroy();
   await app.close();

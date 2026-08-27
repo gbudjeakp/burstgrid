@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import type { ExecutionTier } from '../types/index.js';
 
 export interface CachedJobMeta {
@@ -8,16 +9,19 @@ export interface CachedJobMeta {
   labels: string[];
   /** unix ms, set at insertion time */
   cachedAt: number;
+  /** unix ms, updated whenever any status update arrives */
+  lastStatusAt?: number;
 }
 
 const TTL_MS = 60 * 60 * 1_000;        // evict entries older than 1 hour
 const EVICT_INTERVAL_MS = 5 * 60 * 1_000;
 
-export class JobMetaCache {
+export class JobMetaCache extends EventEmitter {
   private readonly store = new Map<string, CachedJobMeta>();
   private readonly timer: NodeJS.Timeout;
 
   constructor() {
+    super();
     this.timer = setInterval(() => this.evict(), EVICT_INTERVAL_MS);
     this.timer.unref();
   }
@@ -31,7 +35,14 @@ export class JobMetaCache {
   }
 
   delete(jobId: string): void {
-    this.store.delete(jobId);
+    const existed = this.store.delete(jobId);
+    if (existed && this.store.size === 0) this.emit('drain');
+  }
+
+  /** Record that a status update arrived for this job (used by the watchdog). */
+  touchStatus(jobId: string): void {
+    const entry = this.store.get(jobId);
+    if (entry) entry.lastStatusAt = Date.now();
   }
 
   get size(): number {

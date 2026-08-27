@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.0](https://github.com/gbudjeakp/burstgrid/compare/v1.2.0...v1.3.0) (2026-08-27)
+
+
+### Features
+
+* **reliability:** watchdog, graceful drain, config validation, on-de… ([d5aec43](https://github.com/gbudjeakp/burstgrid/commit/d5aec4320efb5d4606730406158e5e047c7b7de2))
+* **reliability:** watchdog, graceful drain, config validation, on-demand EC2 ([60f7c38](https://github.com/gbudjeakp/burstgrid/commit/60f7c3838c3a6ab5cd65a5e65ff2b70e9480d7c9))
+
 ## [1.2.0](https://github.com/gbudjeakp/burstgrid/compare/v1.1.0...v1.2.0) (2026-08-27)
 
 

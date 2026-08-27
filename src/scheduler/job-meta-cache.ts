@@ -8,6 +8,8 @@ export interface CachedJobMeta {
   labels: string[];
   /** unix ms, set at insertion time */
   cachedAt: number;
+  /** unix ms, updated whenever any status update arrives */
+  lastStatusAt?: number;
 }
 
 const TTL_MS = 60 * 60 * 1_000;        // evict entries older than 1 hour
@@ -32,6 +34,12 @@ export class JobMetaCache {
 
   delete(jobId: string): void {
     this.store.delete(jobId);
+  }
+
+  /** Record that a status update arrived for this job (used by the watchdog). */
+  touchStatus(jobId: string): void {
+    const entry = this.store.get(jobId);
+    if (entry) entry.lastStatusAt = Date.now();
   }
 
   get size(): number {

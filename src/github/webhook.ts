@@ -25,6 +25,7 @@ export function registerWebhookRoute(
   queue: JobQueue,
   ghClient: AppClient,
   maxQueueDepth = 500,
+  isDraining: () => boolean = () => false,
 ): void {
   app.post<{ Body: WorkflowJobEvent }>('/webhook/github', async (req, reply) => {
     const sig = req.headers['x-hub-signature-256'] as string | undefined;
@@ -40,8 +41,11 @@ export function registerWebhookRoute(
     const payload = req.body;
     if (payload.action !== 'queued') return reply.status(200).send();
 
+    if (isDraining()) {
+      return reply.status(503).send({ error: 'scheduler draining, retry later' });
+    }
+
     if (queue.depth >= maxQueueDepth) {
-      // 503 triggers GitHub's 72-hour retry window — don't silently drop the event
       return reply.status(503).send({ error: 'scheduler queue full, retry later' });
     }
 

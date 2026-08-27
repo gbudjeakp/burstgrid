@@ -99,6 +99,7 @@ export function registerSchedulerRoutes(
       const meta = opts.cache?.get(jobId);
 
       req.log.info({ jobId, status, workerId, owner: meta?.owner, repo: meta?.repo, tier: meta?.tier, error }, 'job status update');
+      opts.cache?.touchStatus(jobId);
       recordJobOutcome(status as string, meta?.tier ?? 'unknown', meta?.repo ?? 'unknown');
       addJobSpanEvent(jobId, status as string, { workerId, ...(error ? { error } : {}) });
 

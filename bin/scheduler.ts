@@ -10,6 +10,7 @@ import { Autoscaler, type TierFleet } from '../src/fleet/autoscaler.js';
 import { loadConfig } from '../src/config/index.js';
 import { initTelemetry, registerSchedulerObservers } from '../src/telemetry/index.js';
 import { createBackends } from '../src/backends/index.js';
+import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
 
 await initTelemetry('burstgrid-scheduler');
 
@@ -42,12 +43,14 @@ const maxQueueDepth = Number(BURSTGRID_MAX_QUEUE_DEPTH ?? cfg.scheduler?.maxQueu
 const queue = new JobQueue();
 const pool  = new WorkerPool();
 const router = new Router(queue, pool);
+const metaCache = new JobMetaCache();
 
 const backends = createBackends(queue);
 
 if (backends.redisQueue)   queue.attachRedis(backends.redisQueue);
 if (backends.redisWorkers) pool.attachRedis(backends.redisWorkers);
 if (backends.jobHistory)   router.attachHistory(backends.jobHistory);
+router.attachJobMetaCache(metaCache);
 
 // Restore any jobs that were queued before the last restart
 await queue.restoreFromRedis();
@@ -82,7 +85,7 @@ await app.register(rateLimit, {
   timeWindow: rl.rateLimitWindow ?? '1 minute',
 });
 
-registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN);
+registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN, { cache: metaCache, history: backends.jobHistory });
 registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, ghClient, maxQueueDepth);
 
 // Fleet config: BURSTGRID_FLEETS env (JSON) > burstgrid.config.yaml > legacy single-template env vars
@@ -103,6 +106,7 @@ else console.info('[scheduler] autoscaler disabled via config');
 
 const shutdown = async () => {
   autoscaler.stop();
+  metaCache.destroy();
   await app.close();
   await backends.close();
   process.exit(0);

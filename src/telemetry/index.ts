@@ -6,13 +6,38 @@
  *
  * Compatible receivers: Grafana Alloy, Datadog Agent, Honeycomb, any OTLP endpoint.
  */
-import { metrics, type Meter } from '@opentelemetry/api';
+import { metrics, trace, SpanStatusCode, type Meter, type Tracer, type Span } from '@opentelemetry/api';
 
 let meter: Meter;
+let tracer: Tracer | undefined;
+
+// spans keyed by jobId; entries are removed when the span ends
+const activeSpans = new Map<string, Span>();
 
 function getMeter(): Meter {
   if (!meter) meter = metrics.getMeter('burstgrid', '0.1.0');
   return meter;
+}
+
+// ─── Trace spans (scheduler) ─────────────────────────────────────────────────
+
+export function openJobSpan(jobId: string, owner: string, repo: string, tier: string): void {
+  if (!tracer) return;
+  const span = tracer.startSpan('job.lifecycle', { attributes: { 'job.id': jobId, 'job.owner': owner, 'job.repo': repo, 'job.tier': tier } });
+  activeSpans.set(jobId, span);
+}
+
+export function addJobSpanEvent(jobId: string, event: string, attrs?: Record<string, string>): void {
+  activeSpans.get(jobId)?.addEvent(event, attrs);
+}
+
+export function endJobSpan(jobId: string, outcome: 'ok' | 'error', error?: string): void {
+  const span = activeSpans.get(jobId);
+  if (!span) return;
+  if (outcome === 'error') span.setStatus({ code: SpanStatusCode.ERROR, message: error });
+  else span.setStatus({ code: SpanStatusCode.OK });
+  span.end();
+  activeSpans.delete(jobId);
 }
 
 // ─── Gauges (scheduler) ───────────────────────────────────────────────────────
@@ -32,6 +57,11 @@ export function registerSchedulerObservers(
 }
 
 // ─── Counters ────────────────────────────────────────────────────────────────
+
+export function recordJobOutcome(status: string, tier: string, repo: string): void {
+  getMeter().createCounter('burstgrid.jobs.outcomes', { description: 'Job terminal and intermediate status events', unit: 'jobs' })
+    .add(1, { status, tier, repo });
+}
 
 export function recordJobQueued(tier: string): void {
   getMeter().createCounter('burstgrid.jobs.queued', { description: 'Jobs received from webhook', unit: 'jobs' })
@@ -74,6 +104,14 @@ export async function initTelemetry(serviceName: string): Promise<void> {
 
   const { MeterProvider, PeriodicExportingMetricReader } = await import('@opentelemetry/sdk-metrics');
   const { OTLPMetricExporter } = await import('@opentelemetry/exporter-metrics-otlp-http');
+  const { TracerProvider, SimpleSpanProcessor } = await import('@opentelemetry/sdk-trace');
+  const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
+
+  const traceProvider = new TracerProvider({
+    spanProcessors: [new SimpleSpanProcessor({ exporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }) })],
+  });
+  trace.setGlobalTracerProvider(traceProvider);
+  tracer = trace.getTracer('burstgrid', '0.1.0');
 
   const provider = new MeterProvider({
     readers: [
@@ -84,5 +122,5 @@ export async function initTelemetry(serviceName: string): Promise<void> {
     ],
   });
   metrics.setGlobalMeterProvider(provider);
-  console.info(`[telemetry] OTLP metrics → ${endpoint} (service: ${serviceName})`);
+  console.info(`[telemetry] OTLP metrics+traces → ${endpoint} (service: ${serviceName})`);
 }

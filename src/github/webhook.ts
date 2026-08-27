@@ -4,6 +4,7 @@ import { selectTier } from '../scheduler/router.js';
 import type { JobQueue } from '../scheduler/queue.js';
 import { CircuitOpenError, type AppClient } from './runner.js';
 import type { Job } from '../types/index.js';
+import { openJobSpan } from '../telemetry/index.js';
 
 // Augment Fastify's request type for the rawBody plugin
 declare module 'fastify' {
@@ -71,6 +72,7 @@ export function registerWebhookRoute(
     };
 
     queue.enqueue(job);
+    openJobSpan(job.id, job.owner, job.repo, job.tier);
     req.log.info({ jobId: job.id, repo: full_name, tier: job.tier }, 'job enqueued');
     return reply.status(202).send();
   });

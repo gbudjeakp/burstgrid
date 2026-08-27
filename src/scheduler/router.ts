@@ -1,8 +1,9 @@
 import type { JobQueue } from './queue.js';
 import type { WorkerPool } from './worker-pool.js';
 import { ExecutionTier, vmSizeFromLabels } from '../types/index.js';
-import { recordJobDispatched } from '../telemetry/index.js';
+import { recordJobDispatched, addJobSpanEvent } from '../telemetry/index.js';
 import type { IJobHistoryBackend } from '../backends/types.js';
+import type { JobMetaCache } from './job-meta-cache.js';
 
 const STALE_JOB_WARN_MS = 10 * 60 * 1_000;
 const TIER_LABEL_MAP: [string, ExecutionTier][] = [
@@ -23,10 +24,14 @@ export function selectTier(labels: string[]): ExecutionTier {
 export class Router {
   private readonly timer: NodeJS.Timeout;
   private jobHistory?: IJobHistoryBackend;
+  private metaCache?: JobMetaCache;
 
-  /** Attach a job history backend (e.g. DynamoDB) to record dispatch events. */
   attachHistory(backend: IJobHistoryBackend): void {
     this.jobHistory = backend;
+  }
+
+  attachJobMetaCache(cache: JobMetaCache): void {
+    this.metaCache = cache;
   }
 
   constructor(
@@ -74,6 +79,8 @@ export class Router {
       }
 
       recordJobDispatched(job.tier, job.queuedAt);
+      addJobSpanEvent(job.id, 'dispatched', { workerId });
+      this.metaCache?.set(job.id, { owner: job.owner, repo: job.repo, runId: job.runId, tier: job.tier, labels: job.labels });
       void this.jobHistory?.record({
         jobId:             job.id,
         status:            'dispatched',

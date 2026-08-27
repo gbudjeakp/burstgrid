@@ -52,6 +52,7 @@ export class JobQueue extends EventEmitter {
         void this.redisBackend?.removeById(job.id).catch(err =>
           console.error('[queue] Redis remove error:', err),
         );
+        if (this.depth === 0) this.emit('drain');
         return job;
       }
     }

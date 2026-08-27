@@ -127,14 +127,25 @@ else console.info('[scheduler] autoscaler disabled via config');
 
 const drainTimeoutMs = cfg.scheduler?.drainTimeoutMs ?? 5 * 60 * 1_000;
 
+function awaitDrain(): Promise<void> {
+  return new Promise(resolve => {
+    let qDrained = queue.depth === 0;
+    let cDrained = metaCache.size === 0;
+    const check = () => { if (qDrained && cDrained) resolve(); };
+    if (!qDrained) queue.once('drain', () => { qDrained = true; check(); });
+    if (!cDrained) metaCache.once('drain', () => { cDrained = true; check(); });
+    check(); // resolve immediately if both already empty
+  });
+}
+
 const shutdown = async () => {
   draining = true;
-  console.info(`[scheduler] draining — waiting for ${queue.depth} queued + ${metaCache.size} in-flight jobs (timeout: ${drainTimeoutMs}ms)`);
-  const deadline = Date.now() + drainTimeoutMs;
-  while ((queue.depth > 0 || metaCache.size > 0) && Date.now() < deadline) {
-    await new Promise(resolve => setTimeout(resolve, 1_000));
-  }
-  if (queue.depth > 0 || metaCache.size > 0) {
+  console.info(`[scheduler] draining — ${queue.depth} queued, ${metaCache.size} in-flight`);
+  const drained = await Promise.race([
+    awaitDrain().then(() => true),
+    new Promise<boolean>(r => setTimeout(() => r(false), drainTimeoutMs)),
+  ]);
+  if (!drained) {
     console.warn(`[scheduler] drain timeout — ${queue.depth} queued, ${metaCache.size} in-flight jobs abandoned`);
   }
   watchdog.stop();

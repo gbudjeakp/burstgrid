@@ -2,6 +2,7 @@ import os from 'node:os';
 import { WorkerAgent } from '../src/worker/agent.js';
 import { detectCapabilities, detectWorkerId } from '../src/worker/detect.js';
 import { loadConfig } from '../src/config/index.js';
+import { startWorkerHealthServer } from '../src/worker/health.js';
 
 const cfg = loadConfig();
 
@@ -24,6 +25,7 @@ const {
   // Pull-through registry mirror — set to http://<host>:5000 to cache Docker Hub pulls
   BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
   BURSTGRID_WORKER_TOKEN = '',
+  BURSTGRID_HEALTH_PORT = '9090',
 } = process.env;
 
 const cpuCount = os.cpus().length;
@@ -63,6 +65,11 @@ const agent = new WorkerAgent({
   workerToken: BURSTGRID_WORKER_TOKEN,
 });
 
+const healthServer = startWorkerHealthServer(
+  Number(BURSTGRID_HEALTH_PORT),
+  () => agent.isReady() && !controller.signal.aborted,
+);
+
 try {
   await agent.run(controller.signal);
 } catch (err) {
@@ -70,4 +77,6 @@ try {
     console.error('[worker-agent] fatal error', err);
     process.exit(1);
   }
+} finally {
+  healthServer.close();
 }

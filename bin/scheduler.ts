@@ -107,7 +107,8 @@ await app.register(rateLimit, {
   timeWindow: rl.rateLimitWindow ?? '1 minute',
 });
 
-registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN, { cache: metaCache, history: backends.jobHistory });
+registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN,
+  { cache: metaCache, history: backends.jobHistory, isDraining: () => draining });
 registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, ghClient, maxQueueDepth, () => draining);
 
 // Fleet config: BURSTGRID_FLEETS env (JSON) > burstgrid.config.yaml > legacy single-template env vars

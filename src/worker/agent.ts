@@ -31,6 +31,10 @@ export class WorkerAgent {
   private usedSlots = 0;
   private usedVcpus = 0;
   private usedMemoryMiB = 0;
+  private registered = false;
+  private streamConnected = false;
+
+  isReady(): boolean { return this.registered && this.streamConnected; }
 
   constructor(private readonly cfg: AgentConfig) {}
 
@@ -55,6 +59,7 @@ export class WorkerAgent {
       capabilities: this.cfg.capabilities,
     };
     await this.post('/v1/workers/register', reg);
+    this.registered = true;
     console.info(`[agent] registered ${this.cfg.workerId} (${this.cfg.maxSlots} slots, ${this.cfg.totalVcpus} vCPU, ${this.cfg.totalMemoryMiB} MiB)`);
   }
 
@@ -95,7 +100,8 @@ export class WorkerAgent {
       { signal, headers: { Accept: 'text/event-stream', ...this.authHeader() } },
     );
     if (!res.ok || !res.body) throw new Error(`stream connect failed: ${res.status}`);
-
+    this.streamConnected = true;
+    try {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -122,6 +128,9 @@ export class WorkerAgent {
           console.warn('[agent] unparseable SSE event', line);
         }
       }
+    }
+    } finally {
+      this.streamConnected = false;
     }
   }
 

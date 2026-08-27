@@ -83,3 +83,30 @@ describe('worker auth — token enforced', () => {
     expect(res.statusCode).toBe(200);
   });
 });
+
+// ─── Health / readiness endpoints ────────────────────────────────────────────
+
+describe('health and readiness', () => {
+  it('/health/live always returns 200', async () => {
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, new WorkerPool(), new JobQueue(), '', { isDraining: () => true });
+    const res = await app.inject({ method: 'GET', url: '/health/live' });
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('/health/ready returns 200 when not draining', async () => {
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, new WorkerPool(), new JobQueue(), '', { isDraining: () => false });
+    const res = await app.inject({ method: 'GET', url: '/health/ready' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ready: true });
+  });
+
+  it('/health/ready returns 503 when draining', async () => {
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, new WorkerPool(), new JobQueue(), '', { isDraining: () => true });
+    const res = await app.inject({ method: 'GET', url: '/health/ready' });
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({ ready: false });
+  });
+});

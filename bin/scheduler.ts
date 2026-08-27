@@ -12,6 +12,7 @@ import { initTelemetry, registerSchedulerObservers } from '../src/telemetry/inde
 import { createBackends } from '../src/backends/index.js';
 import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
 import { JobWatchdog } from '../src/scheduler/watchdog.js';
+import { awaitDrain } from '../src/scheduler/drain.js';
 import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../src/telemetry/index.js';
 import type { IJobHistoryBackend } from '../src/backends/types.js';
 
@@ -127,22 +128,11 @@ else console.info('[scheduler] autoscaler disabled via config');
 
 const drainTimeoutMs = cfg.scheduler?.drainTimeoutMs ?? 5 * 60 * 1_000;
 
-function awaitDrain(): Promise<void> {
-  return new Promise(resolve => {
-    let qDrained = queue.depth === 0;
-    let cDrained = metaCache.size === 0;
-    const check = () => { if (qDrained && cDrained) resolve(); };
-    if (!qDrained) queue.once('drain', () => { qDrained = true; check(); });
-    if (!cDrained) metaCache.once('drain', () => { cDrained = true; check(); });
-    check(); // resolve immediately if both already empty
-  });
-}
-
 const shutdown = async () => {
   draining = true;
   console.info(`[scheduler] draining — ${queue.depth} queued, ${metaCache.size} in-flight`);
   const drained = await Promise.race([
-    awaitDrain().then(() => true),
+    awaitDrain(queue, metaCache).then(() => true),
     new Promise<boolean>(r => setTimeout(() => r(false), drainTimeoutMs)),
   ]);
   if (!drained) {

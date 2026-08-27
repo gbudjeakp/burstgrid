@@ -35,8 +35,8 @@ export class JobMetaCache extends EventEmitter {
   }
 
   delete(jobId: string): void {
-    this.store.delete(jobId);
-    if (this.store.size === 0) this.emit('drain');
+    const existed = this.store.delete(jobId);
+    if (existed && this.store.size === 0) this.emit('drain');
   }
 
   /** Record that a status update arrived for this job (used by the watchdog). */

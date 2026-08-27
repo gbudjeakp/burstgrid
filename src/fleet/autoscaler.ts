@@ -1,4 +1,4 @@
-import { EC2Client, RunInstancesCommand, type _InstanceType } from '@aws-sdk/client-ec2';
+import { EC2Client, RunInstancesCommand, type _InstanceType, type InstanceMarketOptionsRequest } from '@aws-sdk/client-ec2';
 import type { WorkerPool } from '../scheduler/worker-pool.js';
 import type { JobQueue } from '../scheduler/queue.js';
 
@@ -23,6 +23,8 @@ export interface TierFleet {
   gpuAmiId?: string;
   /** EC2 instance type override for this fleet (e.g. 'g4dn.xlarge', 'p3.2xlarge'). */
   instanceType?: string;
+  /** 'spot' uses EC2 spot market; 'on-demand' (default) launches regular instances. */
+  capacityType?: 'spot' | 'on-demand';
 }
 
 export class Autoscaler {
@@ -97,9 +99,11 @@ export class Autoscaler {
           SubnetId: subnetId,
           MinCount: 1,
           MaxCount: 1,
-          // GPU fleets override the AMI and instance type from the launch template
           ...(fleet.gpuAmiId ? { ImageId: fleet.gpuAmiId } : {}),
           ...(fleet.instanceType ? { InstanceType: fleet.instanceType as _InstanceType } : {}),
+          ...(fleet.capacityType === 'spot'
+            ? { InstanceMarketOptions: { MarketType: 'spot' } as InstanceMarketOptionsRequest }
+            : {}),
         }));
         const id = res.Instances?.[0]?.InstanceId ?? 'unknown';
         console.info(`[autoscaler] fleet "${fleet.name}": launched ${id} (subnet ${subnetId})`);

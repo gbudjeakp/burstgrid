@@ -1,53 +1,86 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parse } from 'yaml';
+import { z } from 'zod';
 import type { TierFleet } from '../fleet/autoscaler.js';
 import type { GpuAmiProfile, RootfsImage } from '../types/index.js';
+
+// ─── Zod schema (mirrors BurstGridConfig — validates YAML at startup) ─────────
+
+const RootfsImageSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  description: z.string().optional(),
+  os: z.string().optional(),
+  tools: z.array(z.string()).optional(),
+  dockerVersion: z.string().optional(),
+}).strict();
+
+const TierFleetSchema = z.object({
+  name: z.string(),
+  sizeTag: z.string(),
+  launchTemplateId: z.string(),
+  subnetIds: z.array(z.string()),
+  maxWorkers: z.number().int().positive(),
+  slotsPerWorker: z.number().int().positive(),
+  scaleUpThreshold: z.number().int().nonnegative(),
+  gpuAmiId: z.string().optional(),
+  instanceType: z.string().optional(),
+  capacityType: z.enum(['spot', 'on-demand']).optional(),
+}).strict();
+
+const ConfigSchema = z.object({
+  scheduler: z.object({
+    maxQueueDepth: z.number().int().positive().optional(),
+    rateLimitMax: z.number().int().positive().optional(),
+    rateLimitWindow: z.string().optional(),
+    drainTimeoutMs: z.number().int().positive().optional(),
+  }).strict().optional(),
+  worker: z.object({
+    registryMirror: z.string().optional(),
+    images: z.array(RootfsImageSchema).optional(),
+    dispatchTimeoutMs: z.number().int().positive().optional(),
+    jobTimeoutMs: z.number().int().positive().optional(),
+  }).strict().optional(),
+  autoscaler: z.object({
+    enabled: z.boolean().optional(),
+    evaluationIntervalSec: z.number().positive().optional(),
+    fleets: z.array(TierFleetSchema).optional(),
+  }).strict().optional(),
+  gpuAmis: z.array(z.object({ name: z.string(), amiId: z.string(), region: z.string() }).passthrough()).optional(),
+  backends: z.object({
+    redis: z.object({ url: z.string() }).strict().optional(),
+    sqs: z.object({ queueUrl: z.string(), region: z.string().optional() }).strict().optional(),
+    dynamodb: z.object({ tableName: z.string(), region: z.string().optional() }).strict().optional(),
+  }).strict().optional(),
+}).strict();
 
 export interface BurstGridConfig {
   scheduler?: {
     maxQueueDepth?: number;
     rateLimitMax?: number;
     rateLimitWindow?: string;
+    /** Max ms to wait for in-flight jobs to finish during graceful shutdown. Default: 300_000 (5 min). */
+    drainTimeoutMs?: number;
   };
   worker?: {
-    /** Docker pull-through registry mirror URL. Env: BURSTGRID_REGISTRY_MIRROR */
     registryMirror?: string;
-    /**
-     * Named rootfs image catalog. Maps burstgrid:image=<name> labels to absolute
-     * paths on the worker host. When omitted, the worker resolves images via
-     * imageDir/<name>.img convention.
-     */
     images?: RootfsImage[];
+    /** Ms after dispatch before a job that never reports running is marked failed. Default: 60_000. */
+    dispatchTimeoutMs?: number;
+    /** Ms after running before a job that never completes is marked failed. Default: 3_600_000 (1h). */
+    jobTimeoutMs?: number;
   };
   autoscaler?: {
     enabled?: boolean;
     evaluationIntervalSec?: number;
     fleets?: TierFleet[];
   };
-  /**
-   * Pre-baked GPU AMI profiles.  Each profile describes an AMI with CUDA drivers,
-   * ML frameworks, and optionally model weights pre-installed for fast job start.
-   * Reference a profile by name in a TierFleet via gpuAmiId.
-   */
   gpuAmis?: GpuAmiProfile[];
   backends?: {
-    redis?: {
-      /** Redis connection URL, e.g. redis://your-elasticache:6379. Env: BURSTGRID_REDIS_URL */
-      url?: string;
-    };
-    sqs?: {
-      /** SQS queue URL. Env: BURSTGRID_SQS_QUEUE_URL */
-      queueUrl?: string;
-      /** AWS region for SQS. Env: BURSTGRID_SQS_REGION */
-      region?: string;
-    };
-    dynamodb?: {
-      /** DynamoDB table name for job history. Env: BURSTGRID_DYNAMODB_TABLE */
-      tableName?: string;
-      /** AWS region for DynamoDB. Env: BURSTGRID_DYNAMODB_REGION */
-      region?: string;
-    };
+    redis?: { url?: string };
+    sqs?: { queueUrl?: string; region?: string };
+    dynamodb?: { tableName?: string; region?: string };
   };
 }
 
@@ -57,10 +90,20 @@ export function loadConfig(configPath?: string): BurstGridConfig {
     ?? path.join(process.cwd(), 'burstgrid.config.yaml');
 
   if (!fs.existsSync(filePath)) return {};
+
+  let raw: unknown;
   try {
-    return (parse(fs.readFileSync(filePath, 'utf-8')) as BurstGridConfig) ?? {};
+    raw = parse(fs.readFileSync(filePath, 'utf-8')) ?? {};
   } catch (err) {
-    console.warn(`[config] failed to parse ${filePath}:`, err);
-    return {};
+    console.error(`[config] failed to parse ${filePath}:`, err);
+    process.exit(1);
   }
+
+  const result = ConfigSchema.safeParse(raw);
+  if (!result.success) {
+    console.error(`[config] ${filePath} has invalid fields:\n${result.error.errors.map(e => `  ${e.path.join('.')}: ${e.message}`).join('\n')}`);
+    process.exit(1);
+  }
+
+  return result.data as BurstGridConfig;
 }

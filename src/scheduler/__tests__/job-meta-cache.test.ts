@@ -68,4 +68,34 @@ describe('JobMetaCache', () => {
     cache.destroy();
     vi.useRealTimers();
   });
+
+  it('emits drain when the last entry is deleted', () => {
+    const cache = new JobMetaCache();
+    const spy = vi.fn();
+    cache.on('drain', spy);
+    cache.set('job-1', META);
+    cache.delete('job-1');
+    expect(spy).toHaveBeenCalledOnce();
+    cache.destroy();
+  });
+
+  it('does not emit drain when items remain after delete', () => {
+    const cache = new JobMetaCache();
+    const spy = vi.fn();
+    cache.on('drain', spy);
+    cache.set('job-1', META);
+    cache.set('job-2', META);
+    cache.delete('job-1');
+    expect(spy).not.toHaveBeenCalled();
+    cache.destroy();
+  });
+
+  it('does not emit drain when deleting a key that does not exist', () => {
+    const cache = new JobMetaCache();
+    const spy = vi.fn();
+    cache.on('drain', spy);
+    cache.delete('missing');
+    expect(spy).not.toHaveBeenCalled();
+    cache.destroy();
+  });
 });

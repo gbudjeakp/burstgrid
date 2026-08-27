@@ -34,7 +34,7 @@ export function registerSchedulerRoutes(
   pool: WorkerPool,
   queue: JobQueue,
   workerToken = '',
-  opts: { cache?: JobMetaCache; history?: IJobHistoryBackend } = {},
+  opts: { cache?: JobMetaCache; history?: IJobHistoryBackend; isDraining?: () => boolean } = {},
 ): void {
   const workerAuth = makeWorkerAuth(workerToken);
   const preHandler = workerAuth ? [workerAuth] : [];
@@ -133,6 +133,11 @@ export function registerSchedulerRoutes(
     queuedJobs: queue.depth,
   }));
 
+  app.get('/health/live',  async (_, reply) => reply.status(200).send({ ok: true }));
+  app.get('/health/ready', async (_, reply) => {
+    const draining = opts.isDraining?.() ?? false;
+    return reply.status(draining ? 503 : 200).send({ ready: !draining });
+  });
   app.get('/health', async (_, reply) => reply.status(200).send({ ok: true }));
 
   // Dev-only: inject a job directly without a real GitHub webhook or runner token

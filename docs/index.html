@@ -145,13 +145,13 @@
     .flow-num.on { background: var(--accent-lo); border-color: var(--accent); color: var(--accent); }
     .flow-line { width: 1px; flex: 1; background: var(--border); margin: 4px 0; min-height: 20px; }
     .flow-step:last-child .flow-line { display: none; }
-    .flow-right { padding: 4px 0 40px 24px; }
+    .flow-right { padding: 4px 0 40px 24px; min-width: 0; }
     .flow-step:last-child .flow-right { padding-bottom: 0; }
     .flow-title { font-size: 14px; font-weight: 600; margin-bottom: 6px; }
     .flow-body { font-size: 13.5px; color: #a1a1aa; line-height: 1.65; margin-bottom: 14px; }
     .flow-body code, .flow-body strong { color: var(--text); }
     .flow-body code { font-family: var(--mono); font-size: 11.5px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
-    .snippet { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .snippet { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; max-width: 100%; }
     .snippet-tab { padding: 7px 14px; font-family: var(--mono); font-size: 11px; color: #52525b; border-bottom: 1px solid var(--border); }
     .snippet-body { padding: 14px 18px; font-family: var(--mono); font-size: 12px; line-height: 1.85; color: #a1a1aa; overflow-x: auto; white-space: pre; }
     .s-key{ color: #94a3b8; }
@@ -389,6 +389,7 @@
     <h1>Your runners.<br/>Your hardware.<br/><em>150ms cold start.</em></h1>
     <p class="hero-sub" style="margin-left:auto;margin-right:auto;">
       BurstGrid routes GitHub Actions jobs to Firecracker microVMs on EC2 bare-metal you own. Every job gets a dedicated kernel, a fresh filesystem, and nothing from the job before it. Finished in seconds, gone completely. No per-minute GitHub pricing. No secret bleed. No shared state.
+      Set <code>BURSTGRID_MODE=simulate</code> to run the full scheduler/worker loop on any machine — no KVM required.
     </p>
     <div class="hero-actions" style="justify-content:center;">
       <a href="#get-started" class="btn btn-accent">Set it up</a>
@@ -559,7 +560,7 @@
           GitHub will retry the delivery for up to <strong>72 hours</strong>, so nothing is lost.
         </div>
         <div class="snippet">
-          <div class="snippet-tab">POST /v1/webhook &nbsp;&mdash;&nbsp; X-GitHub-Event: workflow_job</div>
+          <div class="snippet-tab">POST /webhook/github &nbsp;&mdash;&nbsp; X-GitHub-Event: workflow_job</div>
           <div class="snippet-body"><span class="s-cm">{</span>
   <span class="s-key">"action"</span>:       <span class="s-str">"queued"</span>,
   <span class="s-key">"workflow_job"</span>: {
@@ -666,9 +667,15 @@
         </div>
         <div class="snippet">
           <div class="snippet-tab">Scheduler environment variables</div>
-          <div class="snippet-body"><span class="s-key">GITHUB_APP_ID</span>=<span class="s-str">123456</span>
+          <div class="snippet-body"><span class="s-cm"># GitHub App (full CI integration, recommended for orgs)</span>
+<span class="s-key">GITHUB_APP_ID</span>=<span class="s-str">123456</span>
 <span class="s-key">GITHUB_PRIVATE_KEY_PATH</span>=<span class="s-str">/run/secrets/burstgrid.pem</span>
-<span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">your-webhook-secret</span></div>
+<span class="s-cm"># — or — GITHUB_TOKEN=ghp_xxx  (personal access token, simpler for single-repo testing)</span>
+
+<span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">your-webhook-secret</span>
+<span class="s-key">BURSTGRID_WORKER_TOKEN</span>=<span class="s-str">your-shared-secret</span>   <span class="s-cm"># workers must present this as Bearer token</span>
+<span class="s-key">BURSTGRID_PORT</span>=<span class="s-num">8080</span>                         <span class="s-cm"># default; set BURSTGRID_ADDR to restrict bind</span>
+<span class="s-cm"># optional: set OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318 to enable telemetry</span></div>
         </div>
       </div>
     </div>
@@ -681,17 +688,54 @@
           A single Node.js process. Runs on any standard EC2 instance; <code>t3.small</code> handles thousands of webhooks per minute.
           It needs outbound HTTPS to <code>api.github.com</code> and inbound port 8080 from GitHub&rsquo;s webhook IP ranges.
           No database required to start; add Redis later if you need queue durability across restarts.
+          Config lives in <code>burstgrid.config.yaml</code> (or set <code>BURSTGRID_CONFIG=/path/to/config.yaml</code>);
+          env vars always take precedence. All YAML keys are <strong>camelCase</strong> &mdash; the schema is strictly validated at startup and the process exits if a key is wrong or missing.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Docker</div>
-          <div class="snippet-body"><span class="s-cm"># Build from source</span>
+          <div class=\"snippet-body\"><span class=\"s-cm\"># Build from source</span>
 docker build --target scheduler -t burstgrid-scheduler .
 docker run -p 8080:8080 \
-  -e <span class="s-key">GITHUB_APP_ID</span>=<span class="s-num">123456</span> \
-  -e <span class="s-key">GITHUB_PRIVATE_KEY_PATH</span>=<span class="s-str">/run/secrets/key.pem</span> \
-  -e <span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">secret</span> \
+  -e <span class=\"s-key\">GITHUB_APP_ID</span>=<span class=\"s-num\">123456</span> \
+  -e <span class=\"s-key\">GITHUB_PRIVATE_KEY_PATH</span>=<span class=\"s-str\">/run/secrets/key.pem</span> \
+  -e <span class=\"s-key\">BURSTGRID_WEBHOOK_SECRET</span>=<span class=\"s-str\">secret</span> \
+  -e <span class=\"s-key\">BURSTGRID_WORKER_TOKEN</span>=<span class=\"s-str\">your-shared-secret</span> \
   -v /path/to/key.pem:/run/secrets/key.pem:ro \
-  burstgrid-scheduler</div>
+  burstgrid-scheduler
+
+<span class=\"s-cm\"># Readiness check (for load balancers / ECS health checks)</span>
+curl http://localhost:8080/health/ready</div>
+        </div>
+        <div class="snippet" style="margin-top:10px;">
+          <div class="snippet-tab">burstgrid.config.yaml — full reference (all fields optional)</div>
+          <div class="snippet-body"><span class="s-key">scheduler</span>:
+  <span class="s-key">maxQueueDepth</span>:     <span class="s-num">500</span>      <span class="s-cm"># 503 when queue exceeds this</span>
+  <span class="s-key">drainTimeoutMs</span>:   <span class="s-num">300000</span>   <span class="s-cm"># max wait on SIGTERM before force-exit (5 min)</span>
+
+<span class="s-key">worker</span>:
+  <span class="s-key">dispatchTimeoutMs</span>: <span class="s-num">60000</span>   <span class="s-cm"># fail jobs that never start running (60s)</span>
+  <span class="s-key">jobTimeoutMs</span>:      <span class="s-num">3600000</span> <span class="s-cm"># fail jobs still running after 1h</span>
+  <span class="s-key">registryMirror</span>:    <span class="s-str">http://10.0.1.50:5000</span>
+  <span class="s-key">images</span>:            <span class="s-cm"># rootfs image catalog</span>
+    - <span class="s-key">name</span>: <span class="s-str">ubuntu-docker</span>
+      <span class="s-key">path</span>: <span class="s-str">/opt/images/ubuntu-docker.img</span>
+
+<span class="s-key">autoscaler</span>:
+  <span class="s-key">enabled</span>:               <span class="s-str">true</span>
+  <span class="s-key">evaluationIntervalSec</span>: <span class="s-num">30</span>
+  <span class="s-key">fleets</span>:
+    - <span class="s-key">name</span>:             <span class="s-str">standard</span>
+      <span class="s-key">sizeTag</span>:          <span class="s-str">burstgrid:size=large</span>
+      <span class="s-key">launchTemplateId</span>: <span class="s-str">lt-0abc1234</span>
+      <span class="s-key">subnetIds</span>:        [subnet-aaa, subnet-bbb]
+      <span class="s-key">maxWorkers</span>:       <span class="s-num">10</span>
+      <span class="s-key">slotsPerWorker</span>:   <span class="s-num">8</span>
+      <span class="s-key">scaleUpThreshold</span>: <span class="s-num">0</span>
+      <span class="s-key">capacityType</span>:     <span class="s-str">spot</span>    <span class="s-cm"># spot | on-demand</span>
+
+<span class="s-key">backends</span>:
+  <span class="s-key">redis</span>:    { <span class="s-key">url</span>: <span class="s-str">redis://10.0.1.50:6379</span> }
+  <span class="s-key">dynamodb</span>: { <span class="s-key">tableName</span>: <span class="s-str">burstgrid-jobs</span>, <span class="s-key">region</span>: <span class="s-str">us-east-1</span> }</div>
         </div>
       </div>
     </div>
@@ -741,19 +785,24 @@ cp -r rootfs/template rootfs/my-image
           Firecracker requires KVM, so workers must run on <strong>bare-metal instances</strong>.
           <code>m7i.metal-24xl</code>, <code>m6g.metal</code>, and similar are supported. Standard virtualized instances cannot run nested VMs.
           Copy the rootfs image and kernel to each host, set the environment variables below, and start the agent.
-          The agent registers itself with the scheduler, opens an SSE stream, and starts accepting jobs immediately.
+          The agent auto-detects its EC2 instance ID, available vCPUs, and memory; every variable in the snippet below is overridable but most have sensible defaults.
+          For GPU hosts, set <code>BURSTGRID_MODE=process</code> — the runner executes directly on the host with no microVM in the path.
+          To test the full scheduler/worker loop without KVM or bare metal, set <code>BURSTGRID_MODE=simulate</code> on any dev machine.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Worker agent environment</div>
           <div class="snippet-body"><span class="s-key">BURSTGRID_SCHEDULER_URL</span>=<span class="s-str">http://10.0.1.50:8080</span>
-<span class="s-key">BURSTGRID_WORKER_ID</span>=<span class="s-str">$(curl -s http://169.254.169.254/latest/meta-data/instance-id)</span>
+<span class="s-key">BURSTGRID_WORKER_TOKEN</span>=<span class="s-str">your-shared-secret</span>     <span class="s-cm"># must match BURSTGRID_WORKER_TOKEN on scheduler</span>
 <span class="s-key">BURSTGRID_VM_IMAGE</span>=<span class="s-str">/var/lib/burstgrid/runner.img</span>
 <span class="s-key">BURSTGRID_KERNEL</span>=<span class="s-str">/var/lib/burstgrid/vmlinux</span>
-<span class="s-key">BURSTGRID_SLOTS</span>=<span class="s-num">8</span>       <span class="s-cm"># concurrent VMs per host</span>
-<span class="s-key">BURSTGRID_VCPUS</span>=<span class="s-num">48</span>      <span class="s-cm"># match your instance type</span>
-<span class="s-key">BURSTGRID_MEMORY_MIB</span>=<span class="s-num">98304</span>  <span class="s-cm"># 96 GiB</span>
+<span class="s-key">BURSTGRID_MODE</span>=<span class="s-str">firecracker</span>            <span class="s-cm"># firecracker | process (GPU hosts) | simulate (local dev)</span>
+<span class="s-key">BURSTGRID_SLOTS</span>=<span class="s-num">8</span>                      <span class="s-cm"># concurrent VMs per host</span>
+<span class="s-key">BURSTGRID_VCPUS</span>=<span class="s-num">48</span>                     <span class="s-cm"># match your instance type</span>
+<span class="s-key">BURSTGRID_MEMORY_MIB</span>=<span class="s-num">98304</span>              <span class="s-cm"># 96 GiB</span>
 <span class="s-key">BURSTGRID_CAPABILITIES</span>=<span class="s-str">linux,x86_64,docker</span>
-<span class="s-key">BURSTGRID_REGISTRY_MIRROR</span>=<span class="s-str">http://10.0.1.50:5000</span>  <span class="s-cm"># optional</span></div>
+<span class="s-key">BURSTGRID_REGISTRY_MIRROR</span>=<span class="s-str">http://10.0.1.50:5000</span>  <span class="s-cm"># optional pull-through cache</span>
+<span class="s-key">BURSTGRID_HEALTH_PORT</span>=<span class="s-num">9090</span>              <span class="s-cm"># /health/live + /health/ready</span>
+<span class="s-cm"># BURSTGRID_WORKER_ID auto-detected from EC2 instance metadata</span></div>
         </div>
       </div>
     </div>
@@ -895,20 +944,21 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
         <div class="flow-title">Define a GPU AMI profile</div>
         <div class="flow-body">
           Build an EC2 AMI with your GPU stack pre-installed (CUDA drivers, PyTorch, model weights, etc.).
-          Register it in <code>burstgrid.config.yaml</code> under <code>gpu_amis</code>.
+          Register it in <code>burstgrid.config.yaml</code> under <code>gpuAmis</code>.
+          All config keys use camelCase — snake_case keys will fail Zod validation at startup.
           Docker and the NVIDIA Container Toolkit can be included. <code>docker run --gpus all</code> works natively on the host.
         </div>
         <div class="snippet">
           <div class="snippet-tab">burstgrid.config.yaml</div>
-          <div class="snippet-body"><span class="s-key">gpu_amis</span>:
-  - <span class="s-key">id</span>:               <span class="s-str">ami-0abc1234</span>
-    <span class="s-key">name</span>:             <span class="s-str">cuda12-pytorch2</span>
-    <span class="s-key">cuda_version</span>:     <span class="s-str">"12.4"</span>
-    <span class="s-key">instance_families</span>: [g4dn, g5, p3]
-    <span class="s-key">docker_enabled</span>:   <span class="s-str">true</span>
-    <span class="s-key">cached_packages</span>:  [torch==2.3.0, transformers==4.40.0]
-    <span class="s-key">cached_models</span>:    [meta-llama/Llama-3-8B-Instruct]
-    <span class="s-key">pre_pulled_images</span>: [pytorch/pytorch:2.3.0-cuda12.1-runtime]
+          <div class="snippet-body"><span class="s-key">gpuAmis</span>:
+  - <span class="s-key">name</span>:            <span class="s-str">cuda12-pytorch2</span>
+    <span class="s-key">amiId</span>:           <span class="s-str">ami-0abc1234</span>
+    <span class="s-key">region</span>:          <span class="s-str">us-east-1</span>
+    <span class="s-key">cudaVersion</span>:     <span class="s-str">"12.4"</span>
+    <span class="s-key">instanceFamilies</span>: [g4dn, g5, p3]
+    <span class="s-key">dockerEnabled</span>:   <span class="s-str">true</span>
+    <span class="s-key">cachedPackages</span>:  [torch==2.3.0, transformers==4.40.0]
+    <span class="s-key">cachedModels</span>:    [meta-llama/Llama-3-8B-Instruct]
     <span class="s-key">env</span>:
       <span class="s-key">TORCH_HOME</span>: <span class="s-str">/opt/model-cache</span></div>
         </div>
@@ -920,29 +970,29 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
       <div class="flow-right">
         <div class="flow-title">Configure the GPU autoscaler fleet</div>
         <div class="flow-body">
-          Add a fleet entry with <code>gpu_ami_id</code> and <code>instance_type</code>.
-          The autoscaler passes these as overrides to <code>RunInstances</code> on top of your base Launch Template.
-          Workers on these instances should register with <code>gpu</code> and <code>cuda</code> in their capabilities;
+          Add a fleet entry with <code>gpuAmiId</code> and <code>instanceType</code> — these override the Launch Template's default AMI and instance type for this fleet.
+          Set <code>capacityType: spot</code> to use EC2 Spot (significant cost savings for ML workloads).
+          Workers on these instances should register with <code>BURSTGRID_MODE=process</code> and a <code>gpu</code> capability;
           only GPU-labelled jobs will land on them.
         </div>
         <div class="snippet">
           <div class="snippet-tab">autoscaler fleet + workflow label</div>
-          <div class="snippet-body"><span class="s-cm"># burstgrid.config.yaml</span>
+          <div class="snippet-body"><span class="s-cm"># burstgrid.config.yaml — all keys are camelCase</span>
 <span class="s-key">autoscaler</span>:
   <span class="s-key">fleets</span>:
-    - <span class="s-key">name</span>:              <span class="s-str">gpu-ai</span>
-      <span class="s-key">size_tag</span>:         <span class="s-str">burstgrid:gpu</span>
-      <span class="s-key">launch_template_id</span>: <span class="s-str">lt-gpu-base</span>
-      <span class="s-key">gpu_ami_id</span>:        <span class="s-str">ami-0abc1234</span>
-      <span class="s-key">instance_type</span>:     <span class="s-str">g4dn.xlarge</span>
-      <span class="s-key">max_workers</span>:       <span class="s-num">5</span>
-      <span class="s-key">slots_per_worker</span>:  <span class="s-num">1</span>     <span class="s-cm"># 1 job at a time on each GPU host</span>
-      <span class="s-key">scale_up_threshold</span>: <span class="s-num">0</span>
-      <span class="s-key">subnet_ids</span>:        [subnet-gpu-az1]
+    - <span class="s-key">name</span>:             <span class="s-str">gpu-ai</span>
+      <span class="s-key">sizeTag</span>:          <span class="s-str">burstgrid:gpu</span>
+      <span class="s-key">launchTemplateId</span>: <span class="s-str">lt-gpu-base</span>
+      <span class="s-key">gpuAmiId</span>:         <span class="s-str">ami-0abc1234</span>
+      <span class="s-key">instanceType</span>:     <span class="s-str">g4dn.xlarge</span>
+      <span class="s-key">capacityType</span>:     <span class="s-str">spot</span>          <span class="s-cm"># spot | on-demand</span>
+      <span class="s-key">maxWorkers</span>:       <span class="s-num">5</span>
+      <span class="s-key">slotsPerWorker</span>:   <span class="s-num">1</span>             <span class="s-cm"># 1 job at a time on each GPU host</span>
+      <span class="s-key">scaleUpThreshold</span>: <span class="s-num">0</span>
+      <span class="s-key">subnetIds</span>:        [subnet-gpu-az1]
 
-<span class="s-cm"># workflow</span>
-<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu</span>]         <span class="s-cm"># routes to gpu-ai tier</span>
-<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu-ai</span>]      <span class="s-cm"># equivalent alias</span></div>
+<span class="s-cm"># workflow label that routes to this fleet</span>
+<span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:gpu</span>]</div>
         </div>
       </div>
     </div>
@@ -992,6 +1042,22 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     <div class="feat-cell">
       <h3>Metrics from day one</h3>
       <p>Queue depth, dispatch latency, VM boot time, job duration, all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Watchdog reaps stuck jobs</h3>
+      <p>The <code>JobWatchdog</code> scans every 30s. Jobs that never report running are failed after <code>dispatchTimeoutMs</code> (default 60s); jobs that run too long are failed after <code>jobTimeoutMs</code> (default 1h). Both are configurable per deployment.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Graceful shutdown, no job loss</h3>
+      <p>On SIGTERM the scheduler stops accepting new webhooks and waits for in-flight jobs to finish before exiting. Timeout is configurable via <code>drainTimeoutMs</code>. Workers mirror the same behaviour.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Health endpoints out of the box</h3>
+      <p>Both the scheduler and every worker expose <code>/health/live</code> (liveness) and <code>/health/ready</code> (readiness). Wire them straight into ECS health checks, ALB target groups, or Kubernetes probes. Ready returns <code>503</code> during drain.</p>
+    </div>
+    <div class="feat-cell">
+      <h3>Simulate mode for local dev</h3>
+      <p>Set <code>BURSTGRID_MODE=simulate</code> on any worker to run jobs as local processes — no KVM, no bare metal, no EC2. The full scheduler/worker/webhook loop works on a laptop. Useful for testing config, routing, and workflows before going to metal.</p>
     </div>
   </div>
 </div>

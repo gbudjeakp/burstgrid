@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/gbudjeakp/burstgrid/compare/v1.3.0...v1.4.0) (2026-08-27)
+
+
+### Features
+
+* health/readiness endpoints, worker health server, autoscaler pending-launch guard ([af49a3b](https://github.com/gbudjeakp/burstgrid/commit/af49a3b14938aa1f59d7c1a82d9d7d128f6346f2))
+
 ## [1.3.0](https://github.com/gbudjeakp/burstgrid/compare/v1.2.0...v1.3.0) (2026-08-27)
 
 

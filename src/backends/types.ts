@@ -33,7 +33,7 @@ export interface IWorkerRegistryBackend {
 
 export interface JobEvent {
   jobId: string;
-  status: 'queued' | 'dispatched' | 'completed' | 'failed';
+  status: 'queued' | 'dispatched' | 'running' | 'completed' | 'failed';
   workerId?: string;
   owner: string;
   repo: string;

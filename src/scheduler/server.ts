@@ -3,7 +3,10 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { WorkerPool } from './worker-pool.js';
 import type { JobQueue } from './queue.js';
 import { selectTier } from './router.js';
-import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job } from '../types/index.js';
+import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job, JobStatus } from '../types/index.js';
+import type { JobMetaCache } from './job-meta-cache.js';
+import type { IJobHistoryBackend } from '../backends/types.js';
+import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../telemetry/index.js';
 
 /**
  * Returns a preHandler that enforces Bearer token auth on worker/job routes.
@@ -31,6 +34,7 @@ export function registerSchedulerRoutes(
   pool: WorkerPool,
   queue: JobQueue,
   workerToken = '',
+  opts: { cache?: JobMetaCache; history?: IJobHistoryBackend } = {},
 ): void {
   const workerAuth = makeWorkerAuth(workerToken);
   const preHandler = workerAuth ? [workerAuth] : [];
@@ -90,7 +94,34 @@ export function registerSchedulerRoutes(
     '/v1/jobs/:id/status',
     { preHandler },
     async (req, reply) => {
-      req.log.info({ jobId: req.params.id, status: req.body.status, workerId: req.body.workerId }, 'job status update');
+      const jobId = req.params.id;
+      const { status, workerId, error } = req.body;
+      const meta = opts.cache?.get(jobId);
+
+      req.log.info({ jobId, status, workerId, owner: meta?.owner, repo: meta?.repo, tier: meta?.tier, error }, 'job status update');
+      recordJobOutcome(status as string, meta?.tier ?? 'unknown', meta?.repo ?? 'unknown');
+      addJobSpanEvent(jobId, status as string, { workerId, ...(error ? { error } : {}) });
+
+      if (meta && opts.history) {
+        void opts.history.record({
+          jobId,
+          status:    status as 'running' | 'completed' | 'failed',
+          workerId,
+          owner:     meta.owner,
+          repo:      meta.repo,
+          runId:     meta.runId,
+          tier:      meta.tier,
+          labels:    meta.labels,
+          timestamp: new Date(),
+        }).catch(err => req.log.error({ err, jobId }, 'history record error'));
+      }
+
+      const isTerminal = (status as string) === 'completed' || (status as string) === 'failed';
+      if (isTerminal) {
+        endJobSpan(jobId, (status as string) === 'failed' ? 'error' : 'ok', error);
+        opts.cache?.delete(jobId);
+      }
+
       return reply.status(200).send();
     },
   );

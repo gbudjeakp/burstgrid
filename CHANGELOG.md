@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.2.0](https://github.com/gbudjeakp/burstgrid/compare/v1.1.0...v1.2.0) (2026-08-27)
+
+
+### Features
+
+* **observability:** job-level OTel metrics, DynamoDB lifecycle write… ([9f3e7f4](https://github.com/gbudjeakp/burstgrid/commit/9f3e7f49233036c5333919bfc79146f8d2c0ab2c))
+* **observability:** job-level OTel metrics, DynamoDB lifecycle writes, and traces ([62b4146](https://github.com/gbudjeakp/burstgrid/commit/62b41464e8ea726c6b615bec6377c42290d7753c))
+
 ## [1.1.0](https://github.com/gbudjeakp/burstgrid/compare/v1.0.0...v1.1.0) (2026-08-26)
 
 

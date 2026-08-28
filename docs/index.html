@@ -378,6 +378,12 @@
         <a href="#gpu-ami" class="sidebar-link sub">Pre-baked AMI</a>
         <a href="#gpu-fleet" class="sidebar-link sub">Fleet config</a>
       </div>
+      <div class="sidebar-group">
+        <div class="sidebar-group-label">Project</div>
+        <a href="https://github.com/gbudjeakp/burstgrid/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="sidebar-link">Changelog</a>
+        <a href="https://github.com/gbudjeakp/burstgrid/issues" target="_blank" rel="noopener" class="sidebar-link">Issues</a>
+        <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener" class="sidebar-link">GitHub</a>
+      </div>
     </div>
   </aside>
   <div class="docs-main">
@@ -1013,7 +1019,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     </div>
     <div class="feat-cell">
       <h3>Sub-5 ms dispatch</h3>
-      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued, with no polling, no broker, no cold-start reconnect per job.</p>
+      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued — no polling, no broker, no cold-start reconnect per job.</p>
     </div>
     <div class="feat-cell">
       <h3>Right-sized, not over-provisioned</h3>
@@ -1024,10 +1030,6 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
       <p>Register GPU hosts in <code>process</code> mode with a <code>gpu</code> capability label. Jobs that need GPU land exclusively on those hosts. Firecracker isn&rsquo;t in the critical path.</p>
     </div>
     <div class="feat-cell">
-      <h3>Docker pulls that don&rsquo;t start from zero</h3>
-      <p>Point workers at a local registry mirror. The first VM pulls from Docker Hub and caches on the host. Every VM after that is served at LAN speed. ECR pull-through cache works too.</p>
-    </div>
-    <div class="feat-cell">
       <h3>Scale the right fleet, not all of them</h3>
       <p>Separate EC2 launch templates per size tier. Each one scales independently against its own queue depth. Workers drain naturally, with no forced termination mid-job.</p>
     </div>
@@ -1036,28 +1038,12 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
       <p>The circuit breaker trips after 5 consecutive API failures and returns <code>503</code>. GitHub retries webhook deliveries for up to 72&nbsp;hours. No events are dropped.</p>
     </div>
     <div class="feat-cell">
-      <h3>Durable when you need it</h3>
-      <p>Attach Redis for queue persistence and worker state, SQS as a webhook alternative, or DynamoDB for an append-only job history log. All opt-in, all env-var configured.</p>
-    </div>
-    <div class="feat-cell">
       <h3>Metrics from day one</h3>
-      <p>Queue depth, dispatch latency, VM boot time, job duration, all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>Watchdog reaps stuck jobs</h3>
-      <p>The <code>JobWatchdog</code> scans every 30s. Jobs that never report running are failed after <code>dispatchTimeoutMs</code> (default 60s); jobs that run too long are failed after <code>jobTimeoutMs</code> (default 1h). Both are configurable per deployment.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>Graceful shutdown, no job loss</h3>
-      <p>On SIGTERM the scheduler stops accepting new webhooks and waits for in-flight jobs to finish before exiting. Timeout is configurable via <code>drainTimeoutMs</code>. Workers mirror the same behaviour.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>Health endpoints out of the box</h3>
-      <p>Both the scheduler and every worker expose <code>/health/live</code> (liveness) and <code>/health/ready</code> (readiness). Wire them straight into ECS health checks, ALB target groups, or Kubernetes probes. Ready returns <code>503</code> during drain.</p>
+      <p>Queue depth, dispatch latency, VM boot time, job duration — all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
     </div>
     <div class="feat-cell">
       <h3>Simulate mode for local dev</h3>
-      <p>Set <code>BURSTGRID_MODE=simulate</code> on any worker to run jobs as local processes — no KVM, no bare metal, no EC2. The full scheduler/worker/webhook loop works on a laptop. Useful for testing config, routing, and workflows before going to metal.</p>
+      <p>Set <code>BURSTGRID_MODE=simulate</code> on any worker to run jobs as local processes — no KVM, no bare metal, no EC2. The full scheduler/worker/webhook loop works on a laptop.</p>
     </div>
   </div>
 </div>
@@ -1071,6 +1057,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
   <footer>
     <span>BurstGrid &mdash; open source, MIT License</span>
     <div class="footer-links">
+      <a href="https://github.com/gbudjeakp/burstgrid/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
       <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener">GitHub</a>
       <a href="https://github.com/gbudjeakp/burstgrid/issues" target="_blank" rel="noopener">Issues</a>
       <a href="https://github.com/gbudjeakp/burstgrid/blob/main/LICENSE" target="_blank" rel="noopener">License</a>

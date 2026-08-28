@@ -80,6 +80,7 @@ export class Router {
 
       recordJobDispatched(job.tier, job.queuedAt);
       addJobSpanEvent(job.id, 'dispatched', { workerId });
+      this.pool.trackJob(workerId, job);
       this.metaCache?.set(job.id, { owner: job.owner, repo: job.repo, runId: job.runId, tier: job.tier, labels: job.labels });
       void this.jobHistory?.record({
         jobId:             job.id,

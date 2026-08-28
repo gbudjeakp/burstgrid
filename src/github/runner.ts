@@ -77,6 +77,48 @@ export class AppClient {
     );
   }
 
+  async listRunners(owner: string, repo: string): Promise<Array<{ id: number; name: string; status: string }>> {
+    return this.breaker.execute(() =>
+      withRetry(() => this._listRunners(owner, repo)),
+    );
+  }
+
+  async deleteRunner(owner: string, repo: string, runnerId: number): Promise<void> {
+    return this.breaker.execute(() =>
+      withRetry(() => this._deleteRunner(owner, repo, runnerId)),
+    );
+  }
+
+  private async _listRunners(owner: string, repo: string): Promise<Array<{ id: number; name: string; status: string }>> {
+    if (this.token) {
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/actions/runners?per_page=100`,
+        { headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
+      );
+      if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+      const data = await res.json() as { runners: Array<{ id: number; name: string; status: string }> };
+      return data.runners;
+    }
+    const installationId = await this.getInstallationId(owner);
+    const octokit = await this.app!.getInstallationOctokit(installationId);
+    const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runners', { owner, repo, per_page: 100 });
+    return data.runners as Array<{ id: number; name: string; status: string }>;
+  }
+
+  private async _deleteRunner(owner: string, repo: string, runnerId: number): Promise<void> {
+    if (this.token) {
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/actions/runners/${runnerId}`,
+        { method: 'DELETE', headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
+      );
+      if (!res.ok && res.status !== 404) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+      return;
+    }
+    const installationId = await this.getInstallationId(owner);
+    const octokit = await this.app!.getInstallationOctokit(installationId);
+    await octokit.request('DELETE /repos/{owner}/{repo}/actions/runners/{runner_id}', { owner, repo, runner_id: runnerId });
+  }
+
   private async _createRunnerToken(owner: string, repo: string): Promise<string> {
     if (this.token) {
       return this.createRunnerTokenWithPAT(owner, repo, this.token);

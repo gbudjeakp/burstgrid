@@ -32,9 +32,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
 
 RUN npm install -g pnpm
 
-# Install GitHub Actions runner
+# Install GitHub Actions runner — arch-aware (amd64 → x64, arm64 → arm64)
+ARG TARGETARCH=amd64
 ARG RUNNER_VERSION=2.317.0
-RUN mkdir -p /opt/actions-runner && cd /opt/actions-runner \
- && curl -fsSL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+RUN RUNNER_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x64") \
+ && mkdir -p /opt/actions-runner && cd /opt/actions-runner \
+ && curl -fsSL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
     | tar -xz \
  && ./bin/installdependencies.sh

@@ -7,7 +7,7 @@ output "scheduler_public_ip" {
 # events: workflow_job, secret: var.github_webhook_secret
 output "github_webhook_url" {
   description = "GitHub webhook URL — set events=[workflow_job], content-type=application/json"
-  value       = "http://${module.scheduler.public_ip}:8080/webhook"
+  value       = "http://${module.scheduler.public_ip}:8080/webhook/github"
 }
 
 output "scheduler_health_url" {

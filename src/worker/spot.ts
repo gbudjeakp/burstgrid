@@ -81,9 +81,20 @@ export class SpotMonitor extends EventEmitter {
     const event = JSON.parse(body) as Record<string, unknown>;
     if (event['detail-type'] !== 'EC2 Spot Instance Interruption Warning') return;
 
-    const detail = event['detail'] as SpotTerminationDetail;
-    console.warn(`[spot] interruption warning — instance ${detail.instanceId} terminates at ${detail.terminationTime}`);
-    this.emit('terminating', detail);
+    // EventBridge uses 'instance-id' (hyphenated), not 'instanceId'
+    const detail = event['detail'] as Record<string, string>;
+    const instanceId = detail['instance-id'];
+    const terminationTime = (event['time'] as string | undefined) ?? 'unknown';
+
+    // Only react if this is our instance
+    const myId = process.env.BURSTGRID_WORKER_ID;
+    if (myId && instanceId && instanceId !== myId) {
+      console.info(`[spot] ignoring interruption for ${instanceId} (we are ${myId})`);
+      return;
+    }
+
+    console.warn(`[spot] interruption warning — instance ${instanceId} terminates at ${terminationTime}`);
+    this.emit('terminating', { instanceId, terminationTime });
   }
 }
 

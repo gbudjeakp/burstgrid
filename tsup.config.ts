@@ -5,8 +5,9 @@ export default defineConfig({
     scheduler: 'bin/scheduler.ts',
     'worker-agent': 'bin/worker-agent.ts',
   },
-  format: ['cjs'],
-  target: 'node24',
+  format: ['esm'],
+  target: 'node20',
+  outExtension: () => ({ js: '.mjs' }),
   clean: true,
   splitting: false,
 });

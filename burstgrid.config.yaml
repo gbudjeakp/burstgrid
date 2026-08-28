@@ -12,36 +12,62 @@ autoscaler:
   evaluationIntervalSec: 30 # how often to check queue depth vs. capacity
 
   fleets:
-    # Default fleet — handles all jobs without a burstgrid:size= label
-    - name: standard
-      sizeTag: ""
-      launchTemplateId: lt-xxxxxxxxxxxxxxxxx  # BURSTGRID_LAUNCH_TEMPLATE_ID
+    # medium — m6g.large (2 vCPU / 8 GiB) — typecheck jobs
+    - name: medium
+      sizeTag: "burstgrid:size=medium"
+      launchTemplateId: lt-0226a7adbaddc3f61
       subnetIds:
-        - subnet-xxxxxxxxxxxxxxxxx             # BURSTGRID_SUBNET_IDS
-        - subnet-yyyyyyyyyyyyyyyyy
-      maxWorkers: 50
-      slotsPerWorker: 8
-      scaleUpThreshold: 4
+        - subnet-1ff2e911
+        - subnet-2fe9c849
+        - subnet-23f58012
+        - subnet-7e67485f
+        - subnet-350afb79
+        - subnet-fcefcda3
+      maxWorkers: 5
+      slotsPerWorker: 2
+      scaleUpThreshold: 1
+      capacityType: spot
 
-    # Large fleet — c7i.2xlarge (8 vCPU / 16 GiB), 4 slots per host
+    # large — m6g.2xlarge (8 vCPU / 32 GiB) — test jobs
     - name: large
-      sizeTag: burstgrid:size=large
-      launchTemplateId: lt-yyyyyyyyyyyyyyyyy
+      sizeTag: "burstgrid:size=large"
+      launchTemplateId: lt-041747510417976d3
       subnetIds:
-        - subnet-xxxxxxxxxxxxxxxxx
+        - subnet-1ff2e911
+        - subnet-2fe9c849
+        - subnet-23f58012
+        - subnet-7e67485f
+        - subnet-350afb79
+        - subnet-fcefcda3
       maxWorkers: 10
       slotsPerWorker: 4
       scaleUpThreshold: 2
+      capacityType: spot
 
-    # XLarge fleet — c7i.8xlarge (32 vCPU / 64 GiB), 1 slot per host (e.g. big memory jobs)
+    # xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — build jobs
     - name: xlarge
-      sizeTag: burstgrid:size=xlarge
-      launchTemplateId: lt-zzzzzzzzzzzzzzzzz
+      sizeTag: "burstgrid:size=xlarge"
+      launchTemplateId: lt-095f1eca61cca94d7
       subnetIds:
-        - subnet-xxxxxxxxxxxxxxxxx
+        - subnet-1ff2e911
+        - subnet-2fe9c849
+        - subnet-23f58012
       maxWorkers: 5
-      slotsPerWorker: 1
+      slotsPerWorker: 8
       scaleUpThreshold: 1
+      capacityType: spot
+
+    # 2xlarge — m6g.16xlarge (64 vCPU / 256 GiB) — stress jobs
+    - name: 2xlarge
+      sizeTag: "burstgrid:size=2xlarge"
+      launchTemplateId: lt-0c87057049309a525
+      subnetIds:
+        - subnet-1ff2e911
+        - subnet-2fe9c849
+      maxWorkers: 3
+      slotsPerWorker: 16
+      scaleUpThreshold: 1
+      capacityType: spot
 
 # ── Optional backends ──────────────────────────────────────────────────────────
 # All fields are also settable via env vars (env takes precedence).

@@ -103,6 +103,7 @@ export interface BurstGridConfig {
 export function loadConfig(configPath?: string): BurstGridConfig {
   const filePath = configPath
     ?? process.env.BURSTGRID_CONFIG
+    ?? process.env.BURSTGRID_CONFIG_PATH   // alias accepted for compatibility
     ?? path.join(process.cwd(), 'burstgrid.config.yaml');
 
   if (!fs.existsSync(filePath)) return {};

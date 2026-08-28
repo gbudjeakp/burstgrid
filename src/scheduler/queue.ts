@@ -66,6 +66,12 @@ export class JobQueue extends EventEmitter {
     );
   }
 
+  /** Re-add a job that was skipped this drain cycle — appended at the back to avoid head-of-line blocking. */
+  enqueueSkipped(job: Job): void {
+    this.queues.get(job.tier)!.push(job);
+    // No 'job' event — the drain already ran; next timer tick will retry.
+  }
+
   /** Iterates all queued jobs across all tiers in priority order (for autoscaler counting). */
   *jobs(): IterableIterator<Job> {
     for (const tier of TIER_PRIORITY) {

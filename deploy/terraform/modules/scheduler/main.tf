@@ -2,16 +2,32 @@ variable "vpc_id"              { type = string }
 variable "subnet_id"           { type = string }
 variable "ami"                 { type = string }
 variable "instance_type"       { type = string }
-variable "webhook_secret"      { type = string; sensitive = true }
-variable "worker_token"        { type = string; sensitive = true }
-variable "github_token"        { type = string; sensitive = true; default = "" }
-variable "github_app_id"       { type = number; default = 0 }
+variable "webhook_secret" {
+  type      = string
+  sensitive = true
+}
+variable "worker_token" {
+  type      = string
+  sensitive = true
+}
+variable "github_token" {
+  type      = string
+  sensitive = true
+  default   = ""
+}
+variable "github_app_id" {
+  type    = number
+  default = 0
+}
 variable "burstgrid_fleets"    { type = string }   # JSON — rendered in root module
 variable "s3_artifacts_bucket" { type = string }
 variable "spot_queue_url"      { type = string }
 variable "worker_iam_role_arn" { type = string }
 variable "aws_region"          { type = string }
-variable "tags"                { type = map(string); default = {} }
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 # ── Security group ────────────────────────────────────────────────────────────
 

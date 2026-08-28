@@ -1,10 +1,16 @@
 variable "vpc_id"              { type = string }
 variable "subnet_ids"          { type = list(string) }
 variable "ami"                 { type = string }
-variable "worker_token"        { type = string; sensitive = true }
+variable "worker_token" {
+  type      = string
+  sensitive = true
+}
 variable "s3_artifacts_bucket" { type = string }
 variable "aws_region"          { type = string }
-variable "tags"                { type = map(string); default = {} }
+variable "tags" {
+  type    = map(string)
+  default = {}
+}
 
 variable "fleets" {
   type = list(object({

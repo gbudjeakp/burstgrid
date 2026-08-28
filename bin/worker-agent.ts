@@ -3,7 +3,7 @@ import { WorkerAgent } from '../src/worker/agent.js';
 import { detectCapabilities, detectWorkerId } from '../src/worker/detect.js';
 import { loadConfig } from '../src/config/index.js';
 import { startWorkerHealthServer } from '../src/worker/health.js';
-import { watchSpotTermination } from '../src/worker/spot.js';
+import { SpotMonitor } from '../src/worker/spot.js';
 
 const cfg = loadConfig();
 
@@ -27,6 +27,8 @@ const {
   BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
   BURSTGRID_WORKER_TOKEN = '',
   BURSTGRID_HEALTH_PORT = '9090',
+  // SQS queue URL for EventBridge spot interruption warnings (optional)
+  BURSTGRID_SPOT_QUEUE_URL,
 } = process.env;
 
 const cpuCount = os.cpus().length;
@@ -50,8 +52,18 @@ const controller = new AbortController();
 process.once('SIGINT',  () => controller.abort());
 process.once('SIGTERM', () => controller.abort());
 
-// Also abort on EC2 spot 2-minute termination notice
-const drainSignal = watchSpotTermination(controller.signal);
+if (BURSTGRID_SPOT_QUEUE_URL) {
+  const spotMonitor = new SpotMonitor(BURSTGRID_SPOT_QUEUE_URL);
+  spotMonitor.once('terminating', () => {
+    console.warn('[worker-agent] spot termination imminent — draining');
+    controller.abort();
+  });
+  spotMonitor.on('error', err => console.error('[worker-agent] spot monitor error', err));
+  spotMonitor.start();
+  controller.signal.addEventListener('abort', () => spotMonitor.stop(), { once: true });
+} else {
+  console.info('[worker-agent] BURSTGRID_SPOT_QUEUE_URL not set — spot interruption handling disabled');
+}
 
 const agent = new WorkerAgent({
   schedulerUrl: BURSTGRID_SCHEDULER_URL,
@@ -71,11 +83,11 @@ const agent = new WorkerAgent({
 
 const healthServer = startWorkerHealthServer(
   Number(BURSTGRID_HEALTH_PORT),
-  () => agent.isReady() && !drainSignal.aborted,
+  () => agent.isReady() && !controller.signal.aborted,
 );
 
 try {
-  await agent.run(drainSignal);
+  await agent.run(controller.signal);
 } catch (err) {
   if (!controller.signal.aborted) {
     console.error('[worker-agent] fatal error', err);

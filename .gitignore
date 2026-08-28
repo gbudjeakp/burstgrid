@@ -5,4 +5,4 @@ dist/
 .env.*
 !.env.example
 *.pem
-*.key
+*.keydeploy/terraform/.terraform/

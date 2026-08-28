@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.0](https://github.com/gbudjeakp/burstgrid/compare/v1.4.0...v1.5.0) (2026-08-28)
+
+
+### Features
+
+* Grafana dashboard, changelog link, make demo ([662a860](https://github.com/gbudjeakp/burstgrid/commit/662a8601c088dff1d3a93254d737c748c9ac7e25))
+* Grafana dashboard, changelog link, make demo ([966df7b](https://github.com/gbudjeakp/burstgrid/commit/966df7be041b854118c2fd3afb27be67bc8eaf18))
+
 ## [1.4.0](https://github.com/gbudjeakp/burstgrid/compare/v1.3.0...v1.4.0) (2026-08-27)
 
 

@@ -1,56 +1,92 @@
-import http from 'node:http';
+import { EventEmitter } from 'node:events';
+import {
+  SQSClient,
+  ReceiveMessageCommand,
+  DeleteMessageCommand,
+} from '@aws-sdk/client-sqs';
 
-const IMDS_TERMINATION_URL = 'http://169.254.169.254/latest/meta-data/spot/termination-time';
-const POLL_INTERVAL_MS = 5_000;
+export interface SpotTerminationDetail {
+  instanceId: string;
+  terminationTime: string;
+}
 
-/** GET the IMDS spot termination endpoint; resolves to true if termination is imminent. */
-function checkTermination(): Promise<boolean> {
-  return new Promise(resolve => {
-    const req = http.get(IMDS_TERMINATION_URL, { timeout: 2_000 }, res => {
-      // 200 means a termination time is set; 404 means no pending termination
-      resolve(res.statusCode === 200);
-      res.resume();
-    });
-    req.on('error', () => resolve(false));
-    req.on('timeout', () => { req.destroy(); resolve(false); });
-  });
+export interface SpotMonitorEvents {
+  terminating: [detail: SpotTerminationDetail];
+  error: [err: Error];
 }
 
 /**
- * Polls the EC2 instance metadata service every 5 s for a spot termination notice.
- * When the 2-minute warning fires, aborts the returned signal so the worker can drain
- * gracefully before the instance is reclaimed.
+ * Listens for EC2 spot interruption warnings via SQS long-poll.
  *
- * On non-EC2 hosts the IMDS call always returns ECONNREFUSED, so this is a no-op.
+ * Setup: create an EventBridge rule matching
+ *   { source: ['aws.ec2'], detail-type: ['EC2 Spot Instance Interruption Warning'] }
+ * and route it to an SQS queue. Pass that queue URL as BURSTGRID_SPOT_QUEUE_URL.
+ *
+ * The SQS ReceiveMessage call uses WaitTimeSeconds=20 — AWS holds the connection open
+ * and responds only when an event arrives, so no polling timer is needed.
  */
-export function watchSpotTermination(parentSignal: AbortSignal): AbortSignal {
-  const controller = new AbortController();
+export class SpotMonitor extends EventEmitter {
+  private readonly client: SQSClient;
+  private running = false;
 
-  if (parentSignal.aborted) {
-    controller.abort();
-    return controller.signal;
+  constructor(
+    private readonly queueUrl: string,
+    region = process.env.AWS_REGION ?? 'us-east-1',
+  ) {
+    super();
+    this.client = new SQSClient({ region });
   }
 
-  const timer = setInterval(async () => {
-    if (parentSignal.aborted || controller.signal.aborted) {
-      clearInterval(timer);
-      return;
+  start(): void {
+    if (this.running) return;
+    this.running = true;
+    void this.listen();
+  }
+
+  stop(): void {
+    this.running = false;
+  }
+
+  private async listen(): Promise<void> {
+    while (this.running) {
+      try {
+        const result = await this.client.send(new ReceiveMessageCommand({
+          QueueUrl:            this.queueUrl,
+          MaxNumberOfMessages: 1,
+          // Blocks up to 20 s — AWS responds as soon as an event arrives
+          WaitTimeSeconds:     20,
+        }));
+
+        for (const msg of result.Messages ?? []) {
+          try {
+            await this.handleMessage(msg.Body ?? '');
+          } catch (err) {
+            this.emit('error', err instanceof Error ? err : new Error(String(err)));
+          } finally {
+            await this.client.send(new DeleteMessageCommand({
+              QueueUrl:      this.queueUrl,
+              ReceiptHandle: msg.ReceiptHandle!,
+            }));
+          }
+        }
+      } catch (err) {
+        if (!this.running) return;
+        this.emit('error', err instanceof Error ? err : new Error(String(err)));
+        await sleep(5_000);
+      }
     }
-    const terminating = await checkTermination();
-    if (terminating) {
-      console.warn('[spot] EC2 spot termination notice received — triggering graceful drain');
-      clearInterval(timer);
-      controller.abort();
-    }
-  }, POLL_INTERVAL_MS);
+  }
 
-  // Don't keep the process alive just for polling
-  timer.unref();
+  private handleMessage(body: string): void {
+    const event = JSON.parse(body) as Record<string, unknown>;
+    if (event['detail-type'] !== 'EC2 Spot Instance Interruption Warning') return;
 
-  parentSignal.addEventListener('abort', () => {
-    clearInterval(timer);
-    controller.abort();
-  }, { once: true });
+    const detail = event['detail'] as SpotTerminationDetail;
+    console.warn(`[spot] interruption warning — instance ${detail.instanceId} terminates at ${detail.terminationTime}`);
+    this.emit('terminating', detail);
+  }
+}
 
-  return controller.signal;
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms));
 }

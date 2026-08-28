@@ -13,6 +13,12 @@ REGION="${AZ%?}"
 
 echo "[bootstrap] instance=$INSTANCE_ID az=$AZ region=$REGION"
 
+# ── Release apt lock held by unattended-upgrades ──────────────────────────────
+# Ubuntu 24.04 runs unattended-upgrades on boot and holds dpkg lock for 40-60 min
+systemctl stop unattended-upgrades 2>/dev/null || true
+systemctl disable unattended-upgrades 2>/dev/null || true
+while fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do sleep 2; done
+
 # ── Base packages ─────────────────────────────────────────────────────────────
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
@@ -33,6 +39,12 @@ unzip -q /tmp/awscliv2.zip -d /tmp/awscliv2
 /tmp/awscliv2/aws/install
 rm -rf /tmp/awscliv2 /tmp/awscliv2.zip
 
+# ── SSM agent (enables AWS Systems Manager access for debugging) ──────────────
+snap install amazon-ssm-agent --classic 2>/dev/null || \
+  apt-get install -y amazon-ssm-agent 2>/dev/null || true
+systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent 2>/dev/null || \
+  systemctl enable --now amazon-ssm-agent 2>/dev/null || true
+
 # ── Tag self with role for IAM self-terminate condition ───────────────────────
 /usr/local/bin/aws ec2 create-tags --region "$REGION" \
   --resources "$INSTANCE_ID" \
@@ -46,7 +58,7 @@ node --version
 # ── GitHub Actions runner (ARM64) ────────────────────────────────────────────
 RUNNER_VERSION="2.319.1"
 mkdir -p /opt/actions-runner && cd /opt/actions-runner
-curl -sO "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz"
+curl -fsSLO "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz"
 tar xzf "actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz"
 ./bin/installdependencies.sh
 

@@ -3,7 +3,7 @@ import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import type { WorkerPool } from './worker-pool.js';
 import type { JobQueue } from './queue.js';
 import { selectTier } from './router.js';
-import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job, JobStatus } from '../types/index.js';
+import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job } from '../types/index.js';
 import type { JobMetaCache } from './job-meta-cache.js';
 import type { IJobHistoryBackend } from '../backends/types.js';
 import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../telemetry/index.js';

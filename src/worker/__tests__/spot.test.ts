@@ -19,7 +19,8 @@ function makeInterruptionEvent(instanceId = 'i-1234', terminationTime = '2026-08
   return JSON.stringify({
     'detail-type': 'EC2 Spot Instance Interruption Warning',
     source: 'aws.ec2',
-    detail: { instanceId, terminationTime },
+    time: terminationTime,
+    detail: { 'instance-id': instanceId, 'instance-action': 'terminate' },
   });
 }
 

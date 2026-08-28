@@ -1,6 +1,7 @@
 import type { JobQueue } from './queue.js';
 import type { WorkerPool } from './worker-pool.js';
 import { ExecutionTier, vmSizeFromLabels } from '../types/index.js';
+import type { Job } from '../types/index.js';
 import { recordJobDispatched, addJobSpanEvent } from '../telemetry/index.js';
 import type { IJobHistoryBackend } from '../backends/types.js';
 import type { JobMetaCache } from './job-meta-cache.js';
@@ -45,9 +46,11 @@ export class Router {
   }
 
   private drain(): void {
+    // Collect jobs that can't be dispatched this cycle and re-add them after
+    const skipped: Job[] = [];
     for (;;) {
       const job = this.queue.dequeue();
-      if (!job) return;
+      if (!job) break;
 
       const { vcpus, memoryMiB } = vmSizeFromLabels(job.labels);
       const workerId = this.pool.bestWorker(job.labels, vcpus, memoryMiB);
@@ -57,8 +60,8 @@ export class Router {
             && !this.pool.canAnyWorkerEverHandle(vcpus, memoryMiB, job.labels)) {
           console.warn(`[router] job ${job.id} queued ${Math.round((Date.now() - job.queuedAt.getTime()) / 60_000)}m with no capable workers — check fleet config for size ${vcpus}vCPU/${memoryMiB}MiB`);
         }
-        this.queue.requeue(job);
-        return;
+        skipped.push(job);
+        continue;
       }
 
       const ok = this.pool.assign(workerId, {
@@ -74,8 +77,8 @@ export class Router {
       });
 
       if (!ok) {
-        this.queue.requeue(job);
-        return;
+        skipped.push(job);
+        continue;
       }
 
       recordJobDispatched(job.tier, job.queuedAt);
@@ -95,5 +98,7 @@ export class Router {
         dispatchLatencyMs: Date.now() - job.queuedAt.getTime(),
       }).catch(err => console.error('[router] history record error:', err));
     }
+    // Re-add jobs that couldn't be dispatched this cycle (at back of queue to avoid starvation)
+    for (const job of skipped) this.queue.enqueueSkipped(job);
   }
 }

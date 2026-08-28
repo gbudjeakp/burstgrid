@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.2](https://github.com/gbudjeakp/burstgrid/compare/v1.5.1...v1.5.2) (2026-08-28)
+
+
+### Bug Fixes
+
+* **ci:** update spot test fixture to real EventBridge format; terraform fmt ([90973e4](https://github.com/gbudjeakp/burstgrid/commit/90973e425970a1dbe0ae50945f77ccb99e49a7a8))
+* resolve 7 bugs found during live load-test run ([bef8ebf](https://github.com/gbudjeakp/burstgrid/commit/bef8ebf9c43d20ee48d5d85cbecdc50cab2a9dde))
+
 ## [1.5.1](https://github.com/gbudjeakp/burstgrid/compare/v1.5.0...v1.5.1) (2026-08-28)
 
 

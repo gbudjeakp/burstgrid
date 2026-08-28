@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import Fastify from 'fastify';
 import { JobQueue } from '../../scheduler/queue.js';
 import { registerWebhookRoute, verifySignature } from '../webhook.js';
+import { AppClientRegistry } from '../runner.js';
 import type { AppClient } from '../runner.js';
 
 const SECRET = 'test-webhook-secret';
@@ -17,6 +18,7 @@ function buildApp(secret = SECRET) {
   const mockClient = {
     createRunnerToken: vi.fn().mockResolvedValue('runner-token-xyz'),
   } as unknown as AppClient;
+  const registry = AppClientRegistry.fromDefault(mockClient);
 
   // Mirror the content type parser in bin/scheduler.ts
   app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
@@ -24,7 +26,7 @@ function buildApp(secret = SECRET) {
     try { done(null, JSON.parse((body as Buffer).toString())); }
     catch (err) { done(err as Error, undefined); }
   });
-  registerWebhookRoute(app, secret, queue, mockClient);
+  registerWebhookRoute(app, secret, queue, registry);
   return { app, queue, mockClient };
 }
 
@@ -190,7 +192,7 @@ describe('POST /webhook/github', () => {
       try { done(null, JSON.parse((body as Buffer).toString())); }
       catch (err) { done(err as Error, undefined); }
     });
-    registerWebhookRoute(app, SECRET, queue, mockClient, 500, () => true);
+    registerWebhookRoute(app, SECRET, queue, AppClientRegistry.fromDefault(mockClient), 500, () => true);
 
     const body = JSON.stringify(workflowJobPayload('queued'));
     const res = await app.inject({
@@ -207,5 +209,32 @@ describe('POST /webhook/github', () => {
     expect(res.statusCode).toBe(503);
     expect(queue.depth).toBe(0);
     expect(mockClient.createRunnerToken).not.toHaveBeenCalled();
+  });
+
+  it('routes to the per-org client when one is registered', async () => {
+    const app = Fastify({ logger: false });
+    const queue = new JobQueue();
+    const defaultClient = { createRunnerToken: vi.fn().mockResolvedValue('default-token') } as unknown as AppClient;
+    const orgClient = { createRunnerToken: vi.fn().mockResolvedValue('org-token') } as unknown as AppClient;
+    const registry = AppClientRegistry.fromDefault(defaultClient);
+    registry.register('org', orgClient);
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      req.rawBody = body as Buffer;
+      try { done(null, JSON.parse((body as Buffer).toString())); }
+      catch (err) { done(err as Error, undefined); }
+    });
+    registerWebhookRoute(app, SECRET, queue, registry);
+
+    const body = JSON.stringify(workflowJobPayload('queued'));
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhook/github',
+      headers: { 'x-github-event': 'workflow_job', 'x-hub-signature-256': sign(body), 'content-type': 'application/json' },
+      payload: body,
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(orgClient.createRunnerToken).toHaveBeenCalledWith('org', 'repo');
+    expect(defaultClient.createRunnerToken).not.toHaveBeenCalled();
   });
 });

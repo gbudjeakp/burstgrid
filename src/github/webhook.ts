@@ -2,7 +2,7 @@ import crypto from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { selectTier } from '../scheduler/router.js';
 import type { JobQueue } from '../scheduler/queue.js';
-import { CircuitOpenError, type AppClient } from './runner.js';
+import { CircuitOpenError, AppClientRegistry } from './runner.js';
 import type { Job } from '../types/index.js';
 import { openJobSpan } from '../telemetry/index.js';
 
@@ -23,7 +23,7 @@ export function registerWebhookRoute(
   app: FastifyInstance,
   webhookSecret: string,
   queue: JobQueue,
-  ghClient: AppClient,
+  ghClient: AppClientRegistry,
   maxQueueDepth = 500,
   isDraining: () => boolean = () => false,
 ): void {
@@ -52,9 +52,10 @@ export function registerWebhookRoute(
     const { run_id, labels } = payload.workflow_job;
     const { owner, name: repo, full_name } = payload.repository;
 
+    const client = ghClient.clientFor(owner.login);
     let runnerToken: string;
     try {
-      runnerToken = await ghClient.createRunnerToken(owner.login, repo);
+      runnerToken = await client.createRunnerToken(owner.login, repo);
     } catch (err) {
       if (err instanceof CircuitOpenError) {
         // Circuit open = GitHub API down; 503 keeps the event in GitHub's retry queue

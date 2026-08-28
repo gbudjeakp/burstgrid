@@ -4,7 +4,7 @@ import { JobQueue } from '../src/scheduler/queue.js';
 import { WorkerPool } from '../src/scheduler/worker-pool.js';
 import { Router } from '../src/scheduler/router.js';
 import { registerSchedulerRoutes } from '../src/scheduler/server.js';
-import { AppClient } from '../src/github/runner.js';
+import { AppClient, AppClientRegistry } from '../src/github/runner.js';
 import { registerWebhookRoute } from '../src/github/webhook.js';
 import { Autoscaler, type TierFleet } from '../src/fleet/autoscaler.js';
 import { loadConfig } from '../src/config/index.js';
@@ -45,7 +45,12 @@ if (cfg.backends?.dynamodb?.region)    process.env.BURSTGRID_DYNAMODB_REGION??= 
 const maxQueueDepth = Number(BURSTGRID_MAX_QUEUE_DEPTH ?? cfg.scheduler?.maxQueueDepth ?? 500);
 
 const queue = new JobQueue();
-const pool  = new WorkerPool();
+const pool  = new WorkerPool((lostJobs) => {
+  for (const job of lostJobs) {
+    console.warn(`[scheduler] re-queuing job ${job.id} from reaped worker`);
+    queue.requeue(job);
+  }
+});
 const router = new Router(queue, pool);
 const metaCache = new JobMetaCache();
 let draining = false;
@@ -89,6 +94,17 @@ const ghClient = GITHUB_TOKEN
   ? AppClient.fromGitHubAppKey(Number(GITHUB_APP_ID), GITHUB_PRIVATE_KEY.replace(/\\n/g, '\n'))
   : AppClient.fromGitHubApp(Number(GITHUB_APP_ID), GITHUB_PRIVATE_KEY_PATH!);
 
+const registry = AppClientRegistry.fromDefault(ghClient);
+for (const [org, orgCfg] of Object.entries(cfg.orgs ?? {})) {
+  const key = orgCfg.privateKeyEnv
+    ? (process.env[orgCfg.privateKeyEnv] ?? '').replace(/\\n/g, '\n')
+    : null;
+  const orgClient = key
+    ? AppClient.fromGitHubAppKey(orgCfg.appId, key)
+    : AppClient.fromGitHubApp(orgCfg.appId, orgCfg.privateKeyPath!);
+  registry.register(org, orgClient);
+}
+
 const app = Fastify({ logger: { level: 'info' } });
 
 // Buffer the body before JSON parsing so the webhook handler can verify HMAC
@@ -109,7 +125,7 @@ await app.register(rateLimit, {
 
 registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN,
   { cache: metaCache, history: backends.jobHistory, isDraining: () => draining });
-registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, ghClient, maxQueueDepth, () => draining);
+registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, registry, maxQueueDepth, () => draining);
 
 // Fleet config: BURSTGRID_FLEETS env (JSON) > burstgrid.config.yaml > legacy single-template env vars
 const fleets: TierFleet[] = BURSTGRID_FLEETS

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ServerResponse } from 'node:http';
 import { WorkerPool } from '../worker-pool.js';
 import { ExecutionTier } from '../../types/index.js';
-import type { WorkerRegistration, JobAssignment } from '../../types/index.js';
+import type { WorkerRegistration, JobAssignment, Job } from '../../types/index.js';
 
 function reg(workerId: string, totalSlots = 4, capabilities = ['linux']): WorkerRegistration {
   return { workerId, instanceId: workerId, region: 'us-east-1', availabilityZone: 'a', totalSlots, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities };
@@ -10,6 +10,10 @@ function reg(workerId: string, totalSlots = 4, capabilities = ['linux']): Worker
 
 function assignment(jobId: string): JobAssignment {
   return { jobId, owner: 'org', repo: 'repo', runId: 1, runnerToken: 't', labels: ['linux'], tier: ExecutionTier.Standard, vcpus: 2, memoryMiB: 2_048 };
+}
+
+function job(id: string): Job {
+  return { id, owner: 'org', repo: 'repo', runId: 1, labels: ['linux'], tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't' };
 }
 
 function mockStream(writable = true) {
@@ -153,6 +157,82 @@ describe('WorkerPool', () => {
       pool.register(reg('w1', 4));
       pool.register(reg('w2', 8));
       expect(pool.totalFreeSlots).toBe(12);
+    });
+  });
+
+  describe('job tracking', () => {
+    it('trackJob records a job for a worker; drainWorkerJobs returns and clears it', () => {
+      pool.register(reg('w1'));
+      const j = job('job-1');
+      pool.trackJob('w1', j);
+
+      const drained = pool.drainWorkerJobs('w1');
+      expect(drained).toHaveLength(1);
+      expect(drained[0].id).toBe('job-1');
+
+      // drainWorkerJobs clears the entry
+      expect(pool.drainWorkerJobs('w1')).toHaveLength(0);
+    });
+
+    it('releaseJob removes a specific job without affecting others', () => {
+      pool.register(reg('w1'));
+      pool.trackJob('w1', job('job-a'));
+      pool.trackJob('w1', job('job-b'));
+
+      pool.releaseJob('w1', 'job-a');
+
+      const drained = pool.drainWorkerJobs('w1');
+      expect(drained).toHaveLength(1);
+      expect(drained[0].id).toBe('job-b');
+    });
+
+    it('releaseJob on unknown workerId is a no-op', () => {
+      expect(() => pool.releaseJob('ghost', 'job-x')).not.toThrow();
+    });
+
+    it('unregister clears tracked jobs for that worker', () => {
+      pool.register(reg('w1'));
+      pool.trackJob('w1', job('job-1'));
+      pool.unregister('w1');
+
+      expect(pool.drainWorkerJobs('w1')).toHaveLength(0);
+    });
+  });
+
+  describe('reapStale', () => {
+    it('returns inflight jobs from reaped workers', () => {
+      pool.register(reg('w1'));
+      pool.trackJob('w1', job('job-lost'));
+      // Advance past the 30 s stale timeout so the worker is eligible for reaping
+      vi.advanceTimersByTime(31_000);
+
+      const lost = pool.reapStale();
+      expect(lost).toHaveLength(1);
+      expect(lost[0].id).toBe('job-lost');
+    });
+
+    it('does not reap workers that are still within the stale window', () => {
+      pool.register(reg('w1'));
+      pool.trackJob('w1', job('job-active'));
+      vi.advanceTimersByTime(15_000);
+
+      const lost = pool.reapStale();
+      expect(lost).toHaveLength(0);
+    });
+
+    it('fires onJobsLost callback with reaped jobs', () => {
+      const onJobsLost = vi.fn();
+      const p = new WorkerPool(onJobsLost);
+      p.register(reg('w1'));
+      p.trackJob('w1', job('job-cb'));
+      vi.advanceTimersByTime(31_000);
+
+      // The internal reap timer fires every 15 s; advance it
+      vi.advanceTimersByTime(15_000);
+
+      expect(onJobsLost).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ id: 'job-cb' }),
+      ]));
     });
   });
 });

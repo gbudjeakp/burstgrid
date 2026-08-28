@@ -59,4 +59,39 @@ describe('loadConfig', () => {
     expect(() => loadConfig('/fake.yaml')).toThrow('process.exit called');
     expect(exit).toHaveBeenCalledWith(1);
   });
+
+  it('parses a valid orgs block', () => {
+    mockYaml([
+      'orgs:',
+      '  acme:',
+      '    appId: 123',
+      '    privateKeyPath: /run/secrets/acme.pem',
+      '  other-org:',
+      '    appId: 456',
+      '    privateKeyEnv: OTHER_ORG_KEY',
+    ].join('\n'));
+    const cfg = loadConfig('/fake.yaml');
+    expect(cfg.orgs?.['acme']).toEqual({ appId: 123, privateKeyPath: '/run/secrets/acme.pem' });
+    expect(cfg.orgs?.['other-org']).toEqual({ appId: 456, privateKeyEnv: 'OTHER_ORG_KEY' });
+  });
+
+  it('parses an orgs block with only appId', () => {
+    mockYaml('orgs:\n  myorg:\n    appId: 789\n');
+    const cfg = loadConfig('/fake.yaml');
+    expect(cfg.orgs?.['myorg']).toEqual({ appId: 789 });
+  });
+
+  it('exits with code 1 when orgs appId is not a number', () => {
+    mockYaml('orgs:\n  badorg:\n    appId: "not-a-number"\n');
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('process.exit called'); });
+    expect(() => loadConfig('/fake.yaml')).toThrow('process.exit called');
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('exits with code 1 on an unknown field inside an org entry', () => {
+    mockYaml('orgs:\n  badorg:\n    appId: 1\n    unknownField: oops\n');
+    const exit = vi.spyOn(process, 'exit').mockImplementation(() => { throw new Error('process.exit called'); });
+    expect(() => loadConfig('/fake.yaml')).toThrow('process.exit called');
+    expect(exit).toHaveBeenCalledWith(1);
+  });
 });

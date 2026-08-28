@@ -18,6 +18,8 @@ export interface VMConfig {
   runnerLabels: string;
   /** Pull-through registry mirror URL injected as REGISTRY_MIRROR boot arg; init reads /proc/cmdline. */
   registryMirror?: string;
+  /** When true, passes runner_ephemeral=1 as a boot arg so the init script runs the runner with --ephemeral. */
+  runnerEphemeral?: boolean;
 }
 
 export class FirecrackerVM {
@@ -69,9 +71,10 @@ export class FirecrackerVM {
   private async configure(): Promise<void> {
     // Runner token + labels are passed as kernel boot args; the rootfs init reads /proc/cmdline
     const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
+    const ephemeralArg = this.cfg.runnerEphemeral ? ' runner_ephemeral=1' : '';
     await this.apiPut('/boot-source', {
       kernel_image_path: this.cfg.kernelPath,
-      boot_args: `console=ttyS0 reboot=k panic=1 pci=off RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels}${mirrorArg}`,
+      boot_args: `console=ttyS0 reboot=k panic=1 pci=off RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels}${mirrorArg}${ephemeralArg}`,
     });
     await this.apiPut('/drives/rootfs', {
       drive_id: 'rootfs',

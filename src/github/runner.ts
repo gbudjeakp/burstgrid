@@ -140,6 +140,7 @@ export class AppClient {
   }
 
   private async createRunnerTokenWithPAT(owner: string, repo: string, token: string): Promise<string> {
+
     const res = await fetch(
       `https://api.github.com/repos/${owner}/${repo}/actions/runners/registration-token`,
       {
@@ -153,5 +154,24 @@ export class AppClient {
     if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
     const data = await res.json() as { token: string };
     return data.token;
+  }
+}
+
+/** Routes GitHub API calls to per-org AppClients, falling back to a default. */
+export class AppClientRegistry {
+  private readonly clients = new Map<string, AppClient>();
+
+  constructor(private readonly defaultClient: AppClient) {}
+
+  static fromDefault(client: AppClient): AppClientRegistry {
+    return new AppClientRegistry(client);
+  }
+
+  register(org: string, client: AppClient): void {
+    this.clients.set(org.toLowerCase(), client);
+  }
+
+  clientFor(owner: string): AppClient {
+    return this.clients.get(owner.toLowerCase()) ?? this.defaultClient;
   }
 }

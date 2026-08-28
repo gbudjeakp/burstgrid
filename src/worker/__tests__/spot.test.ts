@@ -73,7 +73,7 @@ describe('SpotMonitor', () => {
     await flush();
 
     const deleteCall = mockSend.mock.calls.find(
-      ([cmd]: [{ input?: { ReceiptHandle?: string } }]) => cmd?.input?.ReceiptHandle === 'rh-del',
+      (args) => (args[0] as { input?: { ReceiptHandle?: string } })?.input?.ReceiptHandle === 'rh-del',
     );
     expect(deleteCall).toBeDefined();
     monitor.stop();

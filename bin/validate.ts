@@ -11,6 +11,7 @@ const sections = [
   cfg.scheduler    && 'scheduler',
   cfg.worker       && 'worker',
   cfg.autoscaler   && `autoscaler (${cfg.autoscaler.fleets?.length ?? 0} fleet(s))`,
+  cfg.orgs         && `orgs (${Object.keys(cfg.orgs).join(', ')})`,
   cfg.backends     && `backends (${Object.keys(cfg.backends).join(', ')})`,
   cfg.gpuAmis      && `gpuAmis (${cfg.gpuAmis.length})`,
 ].filter(Boolean);

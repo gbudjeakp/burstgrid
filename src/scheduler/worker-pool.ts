@@ -1,5 +1,5 @@
 import type { ServerResponse } from 'node:http';
-import type { WorkerRegistration, WorkerHeartbeat, JobAssignment } from '../types/index.js';
+import type { WorkerRegistration, WorkerHeartbeat, JobAssignment, Job } from '../types/index.js';
 import type { RedisWorkerRegistryBackend } from '../backends/redis.js';
 
 const STALE_TIMEOUT_MS = 30_000;
@@ -14,6 +14,7 @@ interface WorkerState extends WorkerRegistration {
 
 export class WorkerPool {
   private readonly workers = new Map<string, WorkerState>();
+  private readonly inflightJobs = new Map<string, Map<string, Job>>();
   private readonly reapTimer: NodeJS.Timeout;
   private redisWorkers?: RedisWorkerRegistryBackend;
 
@@ -22,8 +23,11 @@ export class WorkerPool {
     this.redisWorkers = backend;
   }
 
-  constructor() {
-    this.reapTimer = setInterval(() => this.reapStale(), 15_000);
+  constructor(private readonly onJobsLost?: (jobs: Job[]) => void) {
+    this.reapTimer = setInterval(() => {
+      const lost = this.reapStale();
+      if (lost.length > 0) this.onJobsLost?.(lost);
+    }, 15_000);
     this.reapTimer.unref();
   }
 
@@ -56,9 +60,28 @@ export class WorkerPool {
 
   unregister(workerId: string): void {
     this.workers.delete(workerId);
+    this.inflightJobs.delete(workerId);
     void this.redisWorkers?.remove(workerId).catch(err =>
       console.error('[pool] Redis worker remove error:', err),
     );
+  }
+
+  /** Record that a job has been dispatched to a worker (for re-queue on worker loss). */
+  trackJob(workerId: string, job: Job): void {
+    if (!this.inflightJobs.has(workerId)) this.inflightJobs.set(workerId, new Map());
+    this.inflightJobs.get(workerId)!.set(job.id, job);
+  }
+
+  /** Remove a job from inflight tracking once it reaches a terminal status. */
+  releaseJob(workerId: string, jobId: string): void {
+    this.inflightJobs.get(workerId)?.delete(jobId);
+  }
+
+  /** Return all inflight jobs for a worker and clear the tracking entry. */
+  drainWorkerJobs(workerId: string): Job[] {
+    const jobs = [...(this.inflightJobs.get(workerId)?.values() ?? [])];
+    this.inflightJobs.delete(workerId);
+    return jobs;
   }
 
   heartbeat(hb: WorkerHeartbeat): void {
@@ -162,14 +185,18 @@ export class WorkerPool {
     return false;
   }
 
-  private reapStale(): void {
+  /** Reap stale workers and return any inflight jobs that were on them for re-queuing. */
+  reapStale(): Job[] {
     const cutoff = Date.now() - STALE_TIMEOUT_MS;
+    const lostJobs: Job[] = [];
     for (const [id, w] of this.workers) {
       if (w.lastSeen < cutoff) {
         this.workers.delete(id);
+        lostJobs.push(...this.drainWorkerJobs(id));
         console.warn(`[pool] reaped stale worker ${id}`);
       }
     }
+    return lostJobs;
   }
 }
 

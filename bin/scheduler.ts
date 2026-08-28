@@ -45,7 +45,12 @@ if (cfg.backends?.dynamodb?.region)    process.env.BURSTGRID_DYNAMODB_REGION??= 
 const maxQueueDepth = Number(BURSTGRID_MAX_QUEUE_DEPTH ?? cfg.scheduler?.maxQueueDepth ?? 500);
 
 const queue = new JobQueue();
-const pool  = new WorkerPool();
+const pool  = new WorkerPool((lostJobs) => {
+  for (const job of lostJobs) {
+    console.warn(`[scheduler] re-queuing job ${job.id} from reaped worker`);
+    queue.requeue(job);
+  }
+});
 const router = new Router(queue, pool);
 const metaCache = new JobMetaCache();
 let draining = false;

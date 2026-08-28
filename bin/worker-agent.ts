@@ -3,6 +3,7 @@ import { WorkerAgent } from '../src/worker/agent.js';
 import { detectCapabilities, detectWorkerId } from '../src/worker/detect.js';
 import { loadConfig } from '../src/config/index.js';
 import { startWorkerHealthServer } from '../src/worker/health.js';
+import { watchSpotTermination } from '../src/worker/spot.js';
 
 const cfg = loadConfig();
 
@@ -46,8 +47,11 @@ console.info(
 );
 
 const controller = new AbortController();
-process.once('SIGINT', () => controller.abort());
+process.once('SIGINT',  () => controller.abort());
 process.once('SIGTERM', () => controller.abort());
+
+// Also abort on EC2 spot 2-minute termination notice
+const drainSignal = watchSpotTermination(controller.signal);
 
 const agent = new WorkerAgent({
   schedulerUrl: BURSTGRID_SCHEDULER_URL,
@@ -67,11 +71,11 @@ const agent = new WorkerAgent({
 
 const healthServer = startWorkerHealthServer(
   Number(BURSTGRID_HEALTH_PORT),
-  () => agent.isReady() && !controller.signal.aborted,
+  () => agent.isReady() && !drainSignal.aborted,
 );
 
 try {
-  await agent.run(controller.signal);
+  await agent.run(drainSignal);
 } catch (err) {
   if (!controller.signal.aborted) {
     console.error('[worker-agent] fatal error', err);

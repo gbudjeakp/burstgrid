@@ -121,6 +121,7 @@ export function registerSchedulerRoutes(
       if (isTerminal) {
         endJobSpan(jobId, (status as string) === 'failed' ? 'error' : 'ok', error);
         opts.cache?.delete(jobId);
+        pool.releaseJob(workerId, jobId);
       }
 
       return reply.status(200).send();

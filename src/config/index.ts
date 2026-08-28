@@ -55,11 +55,12 @@ const ConfigSchema = z.object({
   }).strict().optional(),
   gpuAmis: z.array(z.object({ name: z.string(), amiId: z.string(), region: z.string() }).passthrough()).optional(),
   orgs: z.record(z.string(), OrgAppSchema).optional(),
+  // nullable() handles the common YAML case of an all-commented-out section parsing as null
   backends: z.object({
     redis: z.object({ url: z.string() }).strict().optional(),
     sqs: z.object({ queueUrl: z.string(), region: z.string().optional() }).strict().optional(),
     dynamodb: z.object({ tableName: z.string(), region: z.string().optional() }).strict().optional(),
-  }).strict().optional(),
+  }).strict().nullable().optional(),
 }).strict();
 
 export interface BurstGridConfig {

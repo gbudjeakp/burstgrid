@@ -1,6 +1,7 @@
 import type { JobQueue } from './queue.js';
 import type { WorkerPool } from './worker-pool.js';
 import { ExecutionTier, vmSizeFromLabels } from '../types/index.js';
+import type { Job } from '../types/index.js';
 import { recordJobDispatched, addJobSpanEvent } from '../telemetry/index.js';
 import type { IJobHistoryBackend } from '../backends/types.js';
 import type { JobMetaCache } from './job-meta-cache.js';

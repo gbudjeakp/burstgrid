@@ -1,7 +1,7 @@
-variable "vpc_id"              { type = string }
-variable "subnet_id"           { type = string }
-variable "ami"                 { type = string }
-variable "instance_type"       { type = string }
+variable "vpc_id" { type = string }
+variable "subnet_id" { type = string }
+variable "ami" { type = string }
+variable "instance_type" { type = string }
 variable "webhook_secret" {
   type      = string
   sensitive = true
@@ -19,11 +19,11 @@ variable "github_app_id" {
   type    = number
   default = 0
 }
-variable "burstgrid_fleets"    { type = string }   # JSON — rendered in root module
+variable "burstgrid_fleets" { type = string } # JSON — rendered in root module
 variable "s3_artifacts_bucket" { type = string }
-variable "spot_queue_url"      { type = string }
+variable "spot_queue_url" { type = string }
 variable "worker_iam_role_arn" { type = string }
-variable "aws_region"          { type = string }
+variable "aws_region" { type = string }
 variable "tags" {
   type    = map(string)
   default = {}
@@ -59,7 +59,7 @@ resource "aws_security_group" "scheduler" {
 resource "aws_iam_role" "scheduler" {
   name_prefix = "burstgrid-scheduler-"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
+    Version   = "2012-10-17"
     Statement = [{ Action = "sts:AssumeRole", Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" } }]
   })
   tags = var.tags
@@ -72,9 +72,9 @@ resource "aws_iam_role_policy" "scheduler" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid      = "LaunchWorkers"
-        Effect   = "Allow"
-        Action   = [
+        Sid    = "LaunchWorkers"
+        Effect = "Allow"
+        Action = [
           "ec2:RunInstances",
           "ec2:TerminateInstances",
           "ec2:DescribeInstances",
@@ -97,9 +97,9 @@ resource "aws_iam_role_policy" "scheduler" {
         Resource = "*"
       },
       {
-        Sid      = "S3Artifacts"
-        Effect   = "Allow"
-        Action   = ["s3:GetObject", "s3:ListBucket"]
+        Sid    = "S3Artifacts"
+        Effect = "Allow"
+        Action = ["s3:GetObject", "s3:ListBucket"]
         Resource = [
           "arn:aws:s3:::${var.s3_artifacts_bucket}",
           "arn:aws:s3:::${var.s3_artifacts_bucket}/*",
@@ -169,6 +169,6 @@ resource "aws_instance" "scheduler" {
   }
 }
 
-output "public_ip"         { value = aws_eip.scheduler.public_ip }
-output "private_ip"        { value = aws_instance.scheduler.private_ip }
-output "instance_id"       { value = aws_instance.scheduler.id }
+output "public_ip" { value = aws_eip.scheduler.public_ip }
+output "private_ip" { value = aws_instance.scheduler.private_ip }
+output "instance_id" { value = aws_instance.scheduler.id }

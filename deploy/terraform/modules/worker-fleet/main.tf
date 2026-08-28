@@ -1,12 +1,12 @@
-variable "vpc_id"              { type = string }
-variable "subnet_ids"          { type = list(string) }
-variable "ami"                 { type = string }
+variable "vpc_id" { type = string }
+variable "subnet_ids" { type = list(string) }
+variable "ami" { type = string }
 variable "worker_token" {
   type      = string
   sensitive = true
 }
 variable "s3_artifacts_bucket" { type = string }
-variable "aws_region"          { type = string }
+variable "aws_region" { type = string }
 variable "tags" {
   type    = map(string)
   default = {}
@@ -47,7 +47,7 @@ resource "aws_security_group" "worker" {
 resource "aws_iam_role" "worker" {
   name_prefix = "burstgrid-worker-"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
+    Version   = "2012-10-17"
     Statement = [{ Action = "sts:AssumeRole", Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" } }]
   })
   tags = var.tags
@@ -110,7 +110,7 @@ resource "aws_iam_instance_profile" "worker" {
 
 resource "aws_sqs_queue" "spot_interruptions" {
   name                       = "burstgrid-spot-interruptions"
-  message_retention_seconds  = 300    # 2-minute warning; 5-minute window is enough
+  message_retention_seconds  = 300 # 2-minute warning; 5-minute window is enough
   visibility_timeout_seconds = 30
   tags                       = var.tags
 }
@@ -180,16 +180,16 @@ resource "aws_launch_template" "fleet" {
   tag_specifications {
     resource_type = "instance"
     tags = merge(var.tags, {
-      Name               = "burstgrid-worker-${each.key}"
-      "burstgrid:role"   = "runner"
-      "burstgrid:fleet"  = each.key
+      Name              = "burstgrid-worker-${each.key}"
+      "burstgrid:role"  = "runner"
+      "burstgrid:fleet" = each.key
     })
   }
 
   lifecycle { create_before_destroy = true }
 }
 
-output "worker_role_arn"      { value = aws_iam_role.worker.arn }
-output "launch_template_ids"  { value = { for k, lt in aws_launch_template.fleet : k => lt.id } }
-output "spot_queue_url"       { value = aws_sqs_queue.spot_interruptions.url }
-output "spot_queue_arn"       { value = aws_sqs_queue.spot_interruptions.arn }
+output "worker_role_arn" { value = aws_iam_role.worker.arn }
+output "launch_template_ids" { value = { for k, lt in aws_launch_template.fleet : k => lt.id } }
+output "spot_queue_url" { value = aws_sqs_queue.spot_interruptions.url }
+output "spot_queue_arn" { value = aws_sqs_queue.spot_interruptions.arn }

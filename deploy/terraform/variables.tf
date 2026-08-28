@@ -51,11 +51,11 @@ variable "scheduler_instance_type" {
 variable "fleets" {
   description = "Worker fleet tiers. Each creates one launch template and one autoscaler tier."
   type = list(object({
-    name               = string        # e.g. "medium" — must be unique
-    instance_type      = string        # e.g. "m6g.large"
-    slots_per_worker   = number        # concurrent jobs per host
-    max_workers        = number        # autoscaler ceiling
-    scale_up_threshold = optional(number, 1)  # queued jobs before launching a new host
+    name               = string              # e.g. "medium" — must be unique
+    instance_type      = string              # e.g. "m6g.large"
+    slots_per_worker   = number              # concurrent jobs per host
+    max_workers        = number              # autoscaler ceiling
+    scale_up_threshold = optional(number, 1) # queued jobs before launching a new host
     capacity_type      = optional(string, "spot")
   }))
   default = [

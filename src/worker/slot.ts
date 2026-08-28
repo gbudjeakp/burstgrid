@@ -42,6 +42,8 @@ export interface SlotConfig {
   runnerPath?: string;
   /** Docker registry mirror URL passed to VMs as a boot arg (e.g. http://10.0.0.1:5000). */
   registryMirror?: string;
+  /** When true, runner is started with --ephemeral so it auto-deregisters after one job. */
+  runnerEphemeral?: boolean;
   /** Extra env vars from GpuAmiProfile forwarded to the runner process in 'process' mode. */
   env?: Record<string, string>;
 }
@@ -70,6 +72,7 @@ export class Slot {
         runnerToken,
         runnerLabels: labels.join(','),
         registryMirror: this.cfg.registryMirror,
+        runnerEphemeral: this.cfg.runnerEphemeral ?? true,
       };
       this.vm = new FirecrackerVM(vmCfg);
       await this.vm.boot();
@@ -79,7 +82,13 @@ export class Slot {
     // process mode: spawn the runner script directly without a VM (bare-metal / GPU hosts)
     const child = spawn(this.cfg.runnerPath ?? './run.sh', [], {
       stdio: 'inherit',
-      env: { ...process.env, ...sanitizeEnv(this.cfg.env ?? {}), RUNNER_TOKEN: runnerToken, RUNNER_LABELS: labels.join(',') },
+      env: {
+        ...process.env,
+        ...sanitizeEnv(this.cfg.env ?? {}),
+        RUNNER_TOKEN: runnerToken,
+        RUNNER_LABELS: labels.join(','),
+        RUNNER_EPHEMERAL: this.cfg.runnerEphemeral ?? true ? '1' : '0',
+      },
     });
     this.proc = child;
     this.procExit = new Promise((resolve, reject) => {

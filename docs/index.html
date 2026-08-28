@@ -218,11 +218,19 @@
     .sidebar::-webkit-scrollbar { width: 3px; }
     .sidebar::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 2px; }
     .sidebar-brand { display: none; }
-    .sidebar-group { margin-bottom: 20px; }
+    .sidebar-group { margin-bottom: 4px; }
     .sidebar-group-label {
+      display: flex; align-items: center; justify-content: space-between;
+      width: 100%; background: none; border: none; cursor: pointer; text-align: left;
       font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
-      text-transform: uppercase; color: var(--dim); padding: 0 20px 5px;
+      text-transform: uppercase; color: var(--dim); padding: 6px 16px 6px 20px;
+      border-radius: 5px; transition: color 0.1s;
     }
+    .sidebar-group-label:hover { color: var(--sub); }
+    .sidebar-chevron { flex-shrink: 0; transition: transform 0.18s ease; color: var(--dim); }
+    .sidebar-group.collapsed .sidebar-chevron { transform: rotate(-90deg); }
+    .sidebar-group-items { overflow: hidden; }
+    .sidebar-group.collapsed .sidebar-group-items { display: none; }
     .sidebar-link {
       display: block; padding: 5px 20px; font-size: 13px;
       color: var(--sub); line-height: 1.45; white-space: nowrap;
@@ -340,49 +348,84 @@
     </div>
     <div class="sidebar-nav">
       <div class="sidebar-group">
-        <div class="sidebar-group-label">Overview</div>
-        <a href="#" class="sidebar-link">Introduction</a>
-        <a href="#who-its-for" class="sidebar-link">Who it's for</a>
-        <a href="#how-it-works" class="sidebar-link">Architecture</a>
+        <button class="sidebar-group-label" data-group>
+          <span>Overview</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#" class="sidebar-link">Introduction</a>
+          <a href="#who-its-for" class="sidebar-link">Who it's for</a>
+          <a href="#how-it-works" class="sidebar-link">Architecture</a>
+        </div>
       </div>
       <div class="sidebar-group">
-        <div class="sidebar-group-label">The flow</div>
-        <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
-        <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
-        <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
-        <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
+        <button class="sidebar-group-label" data-group>
+          <span>The flow</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
+          <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
+          <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
+          <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
+        </div>
       </div>
       <div class="sidebar-group">
-        <div class="sidebar-group-label">Set it up</div>
-        <a href="#get-started" class="sidebar-link">Setup guide</a>
-        <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
-        <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
-        <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
-        <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
-        <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
+        <button class="sidebar-group-label" data-group>
+          <span>Set it up</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#get-started" class="sidebar-link">Setup guide</a>
+          <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
+          <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
+          <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
+          <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
+          <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
+        </div>
       </div>
       <div class="sidebar-group">
-        <div class="sidebar-group-label">Why BurstGrid</div>
-        <a href="#features" class="sidebar-link">Features</a>
+        <button class="sidebar-group-label" data-group>
+          <span>Why BurstGrid</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#features" class="sidebar-link">Features</a>
+        </div>
       </div>
       <div class="sidebar-group">
-        <div class="sidebar-group-label">Custom images</div>
-        <a href="#custom-images" class="sidebar-link">Image catalog</a>
-        <a href="#image-template" class="sidebar-link sub">Dockerfile template</a>
-        <a href="#image-build" class="sidebar-link sub">Build the .img</a>
-        <a href="#image-register" class="sidebar-link sub">Register + use</a>
+        <button class="sidebar-group-label" data-group>
+          <span>Custom images</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#custom-images" class="sidebar-link">Image catalog</a>
+          <a href="#image-template" class="sidebar-link sub">Dockerfile template</a>
+          <a href="#image-build" class="sidebar-link sub">Build the .img</a>
+          <a href="#image-register" class="sidebar-link sub">Register + use</a>
+        </div>
       </div>
       <div class="sidebar-group">
-        <div class="sidebar-group-label">GPU / AI</div>
-        <a href="#gpu-ai" class="sidebar-link">GPU workloads</a>
-        <a href="#gpu-ami" class="sidebar-link sub">Pre-baked AMI</a>
-        <a href="#gpu-fleet" class="sidebar-link sub">Fleet config</a>
+        <button class="sidebar-group-label" data-group>
+          <span>GPU / AI</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#gpu-ai" class="sidebar-link">GPU workloads</a>
+          <a href="#gpu-ami" class="sidebar-link sub">Pre-baked AMI</a>
+          <a href="#gpu-fleet" class="sidebar-link sub">Fleet config</a>
+        </div>
       </div>
       <div class="sidebar-group">
-        <div class="sidebar-group-label">Project</div>
-        <a href="https://github.com/gbudjeakp/burstgrid/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="sidebar-link">Changelog</a>
-        <a href="https://github.com/gbudjeakp/burstgrid/issues" target="_blank" rel="noopener" class="sidebar-link">Issues</a>
-        <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener" class="sidebar-link">GitHub</a>
+        <button class="sidebar-group-label" data-group>
+          <span>Project</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="https://github.com/gbudjeakp/burstgrid/blob/main/CHANGELOG.md" target="_blank" rel="noopener" class="sidebar-link">Changelog</a>
+          <a href="https://github.com/gbudjeakp/burstgrid/issues" target="_blank" rel="noopener" class="sidebar-link">Issues</a>
+          <a href="https://github.com/gbudjeakp/burstgrid" target="_blank" rel="noopener" class="sidebar-link">GitHub</a>
+        </div>
       </div>
     </div>
   </aside>
@@ -1067,6 +1110,13 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
 
 <script>
   (function () {
+    // Collapsible sidebar groups
+    document.querySelectorAll('[data-group]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        btn.closest('.sidebar-group').classList.toggle('collapsed');
+      });
+    });
+
     // Sidebar mobile drawer
     const sidebar = document.getElementById('sidebar');
     const overlay = document.getElementById('sidebarOverlay');

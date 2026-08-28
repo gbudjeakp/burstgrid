@@ -29,6 +29,12 @@ const TierFleetSchema = z.object({
   capacityType: z.enum(['spot', 'on-demand']).optional(),
 }).strict();
 
+const OrgAppSchema = z.object({
+  appId: z.number().int().positive(),
+  privateKeyPath: z.string().optional(),
+  privateKeyEnv: z.string().optional(),
+}).strict();
+
 const ConfigSchema = z.object({
   scheduler: z.object({
     maxQueueDepth: z.number().int().positive().optional(),
@@ -48,6 +54,7 @@ const ConfigSchema = z.object({
     fleets: z.array(TierFleetSchema).optional(),
   }).strict().optional(),
   gpuAmis: z.array(z.object({ name: z.string(), amiId: z.string(), region: z.string() }).passthrough()).optional(),
+  orgs: z.record(z.string(), OrgAppSchema).optional(),
   backends: z.object({
     redis: z.object({ url: z.string() }).strict().optional(),
     sqs: z.object({ queueUrl: z.string(), region: z.string().optional() }).strict().optional(),
@@ -77,6 +84,15 @@ export interface BurstGridConfig {
     fleets?: TierFleet[];
   };
   gpuAmis?: GpuAmiProfile[];
+  orgs?: {
+    [org: string]: {
+      appId: number;
+      /** Path to PEM file on disk. */
+      privateKeyPath?: string;
+      /** Name of env var containing the PEM value. */
+      privateKeyEnv?: string;
+    };
+  };
   backends?: {
     redis?: { url?: string };
     sqs?: { queueUrl?: string; region?: string };

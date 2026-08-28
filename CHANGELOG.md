@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1](https://github.com/gbudjeakp/burstgrid/compare/v1.5.0...v1.5.1) (2026-08-28)
+
+
+### Bug Fixes
+
+* **build:** bundle all deps for standalone EC2 deployment ([154c017](https://github.com/gbudjeakp/burstgrid/commit/154c01760e627297659c871ac28d27a58214076d))
+* **deploy:** fix 28 bugs found during live load-test setup ([b627f3d](https://github.com/gbudjeakp/burstgrid/commit/b627f3d2829eb8759d667eea9859bb5b70601082))
+
 ## [1.5.0](https://github.com/gbudjeakp/burstgrid/compare/v1.4.0...v1.5.0) (2026-08-28)
 
 

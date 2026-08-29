@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.1](https://github.com/gbudjeakp/burstgrid/compare/v1.7.0...v1.7.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* unmark provisioned state on runner failure so reconciler retries immediately ([95e7f9e](https://github.com/gbudjeakp/burstgrid/commit/95e7f9e))
+* schedule follow-up probe when per-run lock is held to prevent sibling job starvation ([f241637](https://github.com/gbudjeakp/burstgrid/commit/f241637))
+
 ## [1.7.0](https://github.com/gbudjeakp/burstgrid/compare/v1.6.2...v1.7.0) (2026-08-29)
 
 

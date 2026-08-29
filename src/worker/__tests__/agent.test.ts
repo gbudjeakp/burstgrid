@@ -58,7 +58,7 @@ function freeIndices(agent: WorkerAgent): number[] {
 }
 
 function callRunJob(agent: WorkerAgent, job: ReturnType<typeof makeJob>) {
-  vi.spyOn(agent as never, 'reportStatus').mockResolvedValue(undefined);
+  vi.spyOn(agent as unknown as { reportStatus: () => Promise<void> }, 'reportStatus').mockResolvedValue(undefined);
   return (agent as unknown as { runJob(j: typeof job): Promise<void> }).runJob(job);
 }
 

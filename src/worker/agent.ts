@@ -55,6 +55,7 @@ export class WorkerAgent {
     const reg: WorkerRegistration = {
       workerId: this.cfg.workerId,
       instanceId: this.cfg.workerId,
+      ec2InstanceId: await fetchEC2InstanceId(),
       region: process.env.AWS_REGION ?? 'us-east-1',
       availabilityZone: process.env.AWS_AZ ?? '',
       totalSlots: this.cfg.maxSlots,
@@ -195,6 +196,18 @@ export class WorkerAgent {
 
   private authHeader(): Record<string, string> {
     return this.cfg.workerToken ? { Authorization: `Bearer ${this.cfg.workerToken}` } : {};
+  }
+}
+
+/** Fetches the EC2 instance ID from the IMDS; returns undefined when not on EC2. */
+async function fetchEC2InstanceId(): Promise<string | undefined> {
+  try {
+    const res = await fetch('http://169.254.169.254/latest/meta-data/instance-id', {
+      signal: AbortSignal.timeout(1_500),
+    });
+    return res.ok ? (await res.text()).trim() : undefined;
+  } catch {
+    return undefined;
   }
 }
 

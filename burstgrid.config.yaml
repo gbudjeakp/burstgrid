@@ -46,9 +46,8 @@ autoscaler:
       maxWorkers: 5
       slotsPerWorker: 2
       scaleUpThreshold: 1
+      scaleDownAfterIdleSec: 300  # terminate instances idle longer than this (default: 300 s)
       capacityType: spot
-
-    # large — m6g.2xlarge (8 vCPU / 32 GiB) — test jobs
     - name: large
       sizeTag: "burstgrid:size=large"
       launchTemplateId: lt-REPLACE_ME

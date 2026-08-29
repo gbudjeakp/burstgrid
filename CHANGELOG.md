@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.8.0](https://github.com/gbudjeakp/burstgrid/compare/v1.7.3...v1.8.0) (2026-08-29)
+
+
+### Features
+
+* add burstgrid init command to scaffold config from AWS ([#32](https://github.com/gbudjeakp/burstgrid/issues/32)) ([45de022](https://github.com/gbudjeakp/burstgrid/commit/45de02290df7479e0f742c80956323ca2b5ae653))
+* autoscaler scale-down — terminate idle EC2 workers ([#33](https://github.com/gbudjeakp/burstgrid/issues/33)) ([1e5529b](https://github.com/gbudjeakp/burstgrid/commit/1e5529b4a19ac00f8c43530411f24fbe38851715))
+
 ## [1.7.3](https://github.com/gbudjeakp/burstgrid/compare/v1.7.2...v1.7.3) (2026-08-29)
 
 

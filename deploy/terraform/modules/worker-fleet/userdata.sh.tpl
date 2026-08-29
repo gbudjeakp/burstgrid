@@ -55,7 +55,7 @@ tar xzf "actions-runner-linux-arm64-$${RUNNER_VERSION}.tar.gz"
 cat > /opt/actions-runner/burstgrid-run.sh << 'RUNSCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
-cd "${RUNNER_SLOT_DIR:-/opt/actions-runner}"
+cd "$${RUNNER_SLOT_DIR:-/opt/actions-runner}"
 # Clean up stale state (config.sh remove requires a separate removal token)
 rm -f .runner .credentials .env
 ./config.sh \

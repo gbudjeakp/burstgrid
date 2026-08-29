@@ -4,7 +4,9 @@ export default defineConfig({
   entry: {
     scheduler: 'bin/scheduler.ts',
     'worker-agent': 'bin/worker-agent.ts',
+    burstgrid: 'bin/burstgrid.ts',
     init: 'bin/init.ts',
+    validate: 'bin/validate.ts',
   },
   format: ['esm'],
   platform: 'node',

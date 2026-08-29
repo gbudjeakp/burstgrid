@@ -33,57 +33,49 @@ autoscaler:
     #                 --output table
     #   Use private subnets with a NAT gateway (workers only need outbound internet).
 
-    # medium — m6g.large (2 vCPU / 8 GiB) — typecheck jobs
+    # Run `npx burstgrid init` to auto-populate launchTemplateId and subnetIds from your AWS account.
+
+    # medium — m6g.large (2 vCPU / 8 GiB)
     - name: medium
       sizeTag: "burstgrid:size=medium"
-      launchTemplateId: lt-0226a7adbaddc3f61
+      launchTemplateId: lt-CHANGE_ME   # aws ec2 describe-launch-templates --query 'LaunchTemplates[*].[LaunchTemplateId,LaunchTemplateName]' --output table
       subnetIds:
-        - subnet-2fe9c849
-        - subnet-23f58012
-        - subnet-7e67485f
-        - subnet-350afb79
-        - subnet-fcefcda3
+        - subnet-CHANGE_ME             # aws ec2 describe-subnets --query 'Subnets[*].[SubnetId,AvailabilityZone]' --output table
       maxWorkers: 5
       slotsPerWorker: 2
       scaleUpThreshold: 1
+      scaleDownAfterIdleSec: 300
       capacityType: spot
 
-    # large — m6g.2xlarge (8 vCPU / 32 GiB) — test jobs
+    # large — m6g.2xlarge (8 vCPU / 32 GiB)
     - name: large
       sizeTag: "burstgrid:size=large"
-      launchTemplateId: lt-041747510417976d3
+      launchTemplateId: lt-CHANGE_ME
       subnetIds:
-        - subnet-2fe9c849
-        - subnet-23f58012
-        - subnet-7e67485f
-        - subnet-350afb79
-        - subnet-fcefcda3
+        - subnet-CHANGE_ME
       maxWorkers: 10
       slotsPerWorker: 4
       scaleUpThreshold: 2
       capacityType: spot
 
-    # xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — build jobs
+    # xlarge — m6g.4xlarge (16 vCPU / 64 GiB)
     - name: xlarge
       sizeTag: "burstgrid:size=xlarge"
-      launchTemplateId: lt-095f1eca61cca94d7
+      launchTemplateId: lt-CHANGE_ME
       subnetIds:
-        - subnet-2fe9c849
-        - subnet-23f58012
+        - subnet-CHANGE_ME
       maxWorkers: 5
       slotsPerWorker: 8
       scaleUpThreshold: 1
       capacityType: spot
 
-    # 2xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — stress jobs; spot w/ on-demand fallback
+    # 2xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — spot w/ on-demand fallback
     - name: 2xlarge
       sizeTag: "burstgrid:size=2xlarge"
-      launchTemplateId: lt-0c87057049309a525
+      launchTemplateId: lt-CHANGE_ME
       instanceType: m6g.4xlarge
       subnetIds:
-        - subnet-7e67485f
-        - subnet-350afb79
-        - subnet-fcefcda3
+        - subnet-CHANGE_ME
       maxWorkers: 3
       slotsPerWorker: 2
       scaleUpThreshold: 1

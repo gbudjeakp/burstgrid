@@ -1,6 +1,6 @@
 {
   "name": "burstgrid",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "bin": {
     "burstgrid": "dist/burstgrid.mjs"
   },

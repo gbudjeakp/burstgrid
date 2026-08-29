@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.3](https://github.com/gbudjeakp/burstgrid/compare/v1.7.2...v1.7.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* speed up job pickup by probing all active runs immediately on webhook receipt; lower fallback reconciler interval from 60 s to 15 s ([07b22bc](https://github.com/gbudjeakp/burstgrid/commit/07b22bc))
+* isolate runner work directory per slot index to prevent concurrent action-download races ([07b22bc](https://github.com/gbudjeakp/burstgrid/commit/07b22bc))
+
 ## [1.7.2](https://github.com/gbudjeakp/burstgrid/compare/v1.7.1...v1.7.2) (2026-08-29)
 
 

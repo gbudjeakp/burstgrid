@@ -56,13 +56,14 @@ cat > /opt/actions-runner/burstgrid-run.sh << 'RUNSCRIPT'
 #!/usr/bin/env bash
 set -euo pipefail
 cd /opt/actions-runner
-[[ -f .runner ]] && ./config.sh remove --token "$RUNNER_TOKEN" 2>/dev/null || true
+# Clean up stale state (config.sh remove requires a separate removal token)
+rm -f .runner .credentials .env
 ./config.sh \
   --url "$RUNNER_REPO_URL" \
   --token "$RUNNER_TOKEN" \
   --labels "$RUNNER_LABELS,self-hosted,linux,arm64" \
   --name "burstgrid-$(hostname)-$$" \
-  --unattended --ephemeral
+  --unattended --ephemeral --replace
 ./run.sh
 RUNSCRIPT
 chmod +x /opt/actions-runner/burstgrid-run.sh

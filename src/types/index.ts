@@ -23,6 +23,8 @@ export interface Job {
   tier: ExecutionTier;
   queuedAt: Date;
   runnerToken: string;
+  /** GitHub Actions job ID — set so we can unmarkProvisioned on runner failure. */
+  githubJobId?: number;
 }
 
 export interface WorkerRegistration {

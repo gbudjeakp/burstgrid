@@ -46,6 +46,8 @@ export interface SlotConfig {
   runnerEphemeral?: boolean;
   /** Extra env vars from GpuAmiProfile forwarded to the runner process in 'process' mode. */
   env?: Record<string, string>;
+  /** GitHub repo URL passed as RUNNER_REPO_URL to the runner script (e.g. https://github.com/owner/repo). */
+  repoUrl?: string;
 }
 
 export class Slot {
@@ -85,6 +87,7 @@ export class Slot {
       env: {
         ...process.env,
         ...sanitizeEnv(this.cfg.env ?? {}),
+        RUNNER_REPO_URL: this.cfg.repoUrl ?? '',
         RUNNER_TOKEN: runnerToken,
         RUNNER_LABELS: labels.join(','),
         RUNNER_EPHEMERAL: this.cfg.runnerEphemeral ?? true ? '1' : '0',

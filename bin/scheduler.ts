@@ -13,6 +13,7 @@ import { createBackends } from '../src/backends/index.js';
 import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
 import { JobWatchdog } from '../src/scheduler/watchdog.js';
 import { awaitDrain } from '../src/scheduler/drain.js';
+import { Reconciler } from '../src/scheduler/reconciler.js';
 import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../src/telemetry/index.js';
 import type { IJobHistoryBackend } from '../src/backends/types.js';
 
@@ -29,6 +30,7 @@ const {
   BURSTGRID_LAUNCH_TEMPLATE_ID = '',
   BURSTGRID_SUBNET_IDS = '',
   BURSTGRID_FLEETS,
+  BURSTGRID_WATCHED_REPOS = '',
   GITHUB_APP_ID,
   GITHUB_PRIVATE_KEY_PATH,
   GITHUB_PRIVATE_KEY,
@@ -125,7 +127,12 @@ await app.register(rateLimit, {
 
 registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN,
   { cache: metaCache, history: backends.jobHistory, isDraining: () => draining });
-registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, registry, maxQueueDepth, () => draining);
+
+const reconciler = new Reconciler(
+  registry, queue, () => draining, maxQueueDepth,
+  BURSTGRID_WATCHED_REPOS.split(',').map(r => r.trim()).filter(Boolean),
+);
+registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, registry, maxQueueDepth, () => draining, reconciler);
 
 // Fleet config: BURSTGRID_FLEETS env (JSON) > burstgrid.config.yaml > legacy single-template env vars
 const fleets: TierFleet[] = BURSTGRID_FLEETS
@@ -157,6 +164,7 @@ const shutdown = async () => {
   }
   watchdog.stop();
   autoscaler.stop();
+  reconciler.stop();
   metaCache.destroy();
   await app.close();
   await backends.close();
@@ -166,3 +174,4 @@ process.once('SIGINT', shutdown);
 process.once('SIGTERM', shutdown);
 
 await app.listen({ host: BURSTGRID_ADDR, port: Number(BURSTGRID_PORT) });
+reconciler.start();

@@ -1,6 +1,6 @@
 {
   "name": "burstgrid",
-  "version": "1.7.1",
+  "version": "1.7.2",
   "description": "CI runner scheduling and execution platform — diversified EC2 worker fleet with Firecracker microVM isolation",
   "private": true,
   "type": "module",

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import path from 'node:path';
 import { Slot } from '../slot.js';
 import { VM_BOOT_TARGET_MS } from '../firecracker.js';
@@ -134,5 +134,88 @@ describe('simulate mode cold-start contract', () => {
     await p;
     expect(done).toBe(true);
     vi.useRealTimers();
+  });
+});
+
+// ─── Process mode env vars ────────────────────────────────────────────────────
+
+const SPAWN_MOCK = vi.hoisted(() => vi.fn());
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, spawn: SPAWN_MOCK };
+});
+
+function makeFakeChild() {
+  const listeners: Record<string, ((...args: unknown[]) => void)[]> = {};
+  return {
+    on(event: string, cb: (...args: unknown[]) => void) {
+      (listeners[event] ??= []).push(cb);
+      return this;
+    },
+    emit(event: string, ...args: unknown[]) {
+      listeners[event]?.forEach(cb => cb(...args));
+    },
+  };
+}
+
+describe('process mode — runner env vars', () => {
+  beforeEach(() => { SPAWN_MOCK.mockReset(); });
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  function spawnSlot(overrides: Partial<Parameters<typeof Slot>[0]> = {}) {
+    const child = makeFakeChild();
+    SPAWN_MOCK.mockReturnValue(child);
+    const slot = new Slot({
+      jobId: 'j1',
+      mode: 'process',
+      vmImagePath: '/img',
+      kernelPath: '/k',
+      runnerPath: '/opt/actions-runner/burstgrid-run.sh',
+      repoUrl: 'https://github.com/owner/repo',
+      slotIndex: 3,
+      ...overrides,
+    });
+    const promise = slot.start('tok', ['self-hosted', 'linux', 'burstgrid:size=large']);
+    child.emit('exit', 0);
+    return { promise, env: SPAWN_MOCK.mock.calls[0]?.[2]?.env as Record<string, string> };
+  }
+
+  it('sets RUNNER_REPO_URL from repoUrl', async () => {
+    const { promise, env } = spawnSlot();
+    await promise;
+    expect(env.RUNNER_REPO_URL).toBe('https://github.com/owner/repo');
+  });
+
+  it('sets RUNNER_SLOT_DIR from slotIndex', async () => {
+    const { promise, env } = spawnSlot();
+    await promise;
+    expect(env.RUNNER_SLOT_DIR).toBe('/opt/actions-runner-3');
+  });
+
+  it('defaults RUNNER_SLOT_DIR to index 0 when slotIndex is omitted', async () => {
+    const { promise, env } = spawnSlot({ slotIndex: undefined });
+    await promise;
+    expect(env.RUNNER_SLOT_DIR).toBe('/opt/actions-runner-0');
+  });
+
+  it('sets RUNNER_ALLOW_RUNASROOT', async () => {
+    const { promise, env } = spawnSlot();
+    await promise;
+    expect(env.RUNNER_ALLOW_RUNASROOT).toBe('1');
+  });
+
+  it('sets RUNNER_TOKEN', async () => {
+    const { promise, env } = spawnSlot();
+    await promise;
+    expect(env.RUNNER_TOKEN).toBe('tok');
+  });
+
+  it('rejects when the child exits non-zero', async () => {
+    const child = makeFakeChild();
+    SPAWN_MOCK.mockReturnValue(child);
+    const slot = new Slot({ jobId: 'j2', mode: 'process', vmImagePath: '/img', kernelPath: '/k' });
+    const p = slot.start('tok', []);
+    child.emit('exit', 1);
+    await expect(p).rejects.toThrow('runner exited 1');
   });
 });

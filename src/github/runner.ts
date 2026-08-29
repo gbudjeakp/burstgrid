@@ -89,6 +89,60 @@ export class AppClient {
     );
   }
 
+  async listActiveRuns(owner: string, repo: string): Promise<Array<{ id: number }>> {
+    return this.breaker.execute(() =>
+      withRetry(() => this._listActiveRuns(owner, repo)),
+    );
+  }
+
+  private async _listActiveRuns(owner: string, repo: string): Promise<Array<{ id: number }>> {
+    const fetchRuns = async (status: string): Promise<Array<{ id: number }>> => {
+      if (this.token) {
+        const res = await fetch(
+          `https://api.github.com/repos/${owner}/${repo}/actions/runs?status=${status}&per_page=50`,
+          { headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
+        );
+        if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+        const data = await res.json() as { workflow_runs: Array<{ id: number }> };
+        return data.workflow_runs;
+      }
+      const installationId = await this.getInstallationId(owner);
+      const octokit = await this.app!.getInstallationOctokit(installationId);
+      const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs', {
+        owner, repo, status: status as 'queued' | 'in_progress', per_page: 50,
+      });
+      return data.workflow_runs as Array<{ id: number }>;
+    };
+
+    const [queued, inProgress] = await Promise.all([fetchRuns('queued'), fetchRuns('in_progress')]);
+    const seen = new Set<number>();
+    return [...queued, ...inProgress].filter(r => seen.has(r.id) ? false : (seen.add(r.id), true));
+  }
+
+  async listJobsForRun(owner: string, repo: string, runId: number): Promise<Array<{ id: number; status: string; labels: string[] }>> {
+    return this.breaker.execute(() =>
+      withRetry(() => this._listJobsForRun(owner, repo, runId)),
+    );
+  }
+
+  private async _listJobsForRun(owner: string, repo: string, runId: number): Promise<Array<{ id: number; status: string; labels: string[] }>> {
+    if (this.token) {
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`,
+        { headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
+      );
+      if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`);
+      const data = await res.json() as { jobs: Array<{ id: number; status: string; labels: string[] }> };
+      return data.jobs;
+    }
+    const installationId = await this.getInstallationId(owner);
+    const octokit = await this.app!.getInstallationOctokit(installationId);
+    const { data } = await octokit.request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/jobs', {
+      owner, repo, run_id: runId, filter: 'latest', per_page: 100,
+    });
+    return data.jobs as Array<{ id: number; status: string; labels: string[] }>;
+  }
+
   private async _listRunners(owner: string, repo: string): Promise<Array<{ id: number; name: string; status: string }>> {
     if (this.token) {
       const res = await fetch(

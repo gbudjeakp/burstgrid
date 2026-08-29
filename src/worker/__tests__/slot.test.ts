@@ -162,7 +162,7 @@ describe('process mode — runner env vars', () => {
   beforeEach(() => { SPAWN_MOCK.mockReset(); });
   afterEach(() => { vi.restoreAllMocks(); });
 
-  function spawnSlot(overrides: Partial<Parameters<typeof Slot>[0]> = {}) {
+  function spawnSlot(overrides: Partial<ConstructorParameters<typeof Slot>[0]> = {}) {
     const child = makeFakeChild();
     SPAWN_MOCK.mockReturnValue(child);
     const slot = new Slot({

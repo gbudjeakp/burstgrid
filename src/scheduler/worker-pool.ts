@@ -163,6 +163,12 @@ export class WorkerPool {
     return [...this.workers.values()].filter(w => w.stream?.writable).length;
   }
 
+  get totalFreeVcpus(): number {
+    return [...this.workers.values()]
+      .filter(w => w.stream?.writable)
+      .reduce((s, w) => s + w.freeVcpus, 0);
+  }
+
   get totalFreeSlots(): number {
     return [...this.workers.values()].reduce((s, w) => s + w.freeSlots, 0);
   }

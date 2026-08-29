@@ -88,6 +88,7 @@ export class Slot {
         RUNNER_TOKEN: runnerToken,
         RUNNER_LABELS: labels.join(','),
         RUNNER_EPHEMERAL: this.cfg.runnerEphemeral ?? true ? '1' : '0',
+        RUNNER_ALLOW_RUNASROOT: '1',
       },
     });
     this.proc = child;

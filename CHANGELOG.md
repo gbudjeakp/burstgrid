@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.3](https://github.com/gbudjeakp/burstgrid/compare/v1.7.2...v1.7.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* speed up job pickup and isolate runner work dirs ([07b22bc](https://github.com/gbudjeakp/burstgrid/commit/07b22bc076af2d41f7c141526b59d0e6e5dcf295))
+
 ## [1.7.2](https://github.com/gbudjeakp/burstgrid/compare/v1.7.1...v1.7.2) (2026-08-29)
 
 

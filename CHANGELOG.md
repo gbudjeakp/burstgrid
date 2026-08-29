@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.0](https://github.com/gbudjeakp/burstgrid/compare/v1.6.2...v1.7.0) (2026-08-29)
+
+
+### Features
+
+* GitHub-native job reconciliation for self-hosted runners ([f2c1ada](https://github.com/gbudjeakp/burstgrid/commit/f2c1adab942c2944b6ae8c05b2ee5e9d7c188d97))
+* GitHub-native job reconciliation for self-hosted runners ([068ae2d](https://github.com/gbudjeakp/burstgrid/commit/068ae2dba28cf1019ecfd781def42bbd28818bcd))
+
 ## [1.6.2](https://github.com/gbudjeakp/burstgrid/compare/v1.6.1...v1.6.2) (2026-08-29)
 
 

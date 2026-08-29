@@ -17,6 +17,8 @@ function buildApp(secret = SECRET) {
   const queue = new JobQueue();
   const mockClient = {
     createRunnerToken: vi.fn().mockResolvedValue('runner-token-xyz'),
+    // Return empty list so fire-and-forget probeRun does nothing
+    listJobsForRun: vi.fn().mockResolvedValue([]),
   } as unknown as AppClient;
   const registry = AppClientRegistry.fromDefault(mockClient);
 
@@ -30,10 +32,12 @@ function buildApp(secret = SECRET) {
   return { app, queue, mockClient };
 }
 
+// Auto-incrementing ID prevents markProvisioned module state from leaking across tests
+let nextWebhookJobId = 1;
 function workflowJobPayload(action = 'queued') {
   return {
     action,
-    workflow_job: { id: 1, run_id: 42, labels: ['self-hosted', 'linux'] },
+    workflow_job: { id: nextWebhookJobId++, run_id: 42, labels: ['self-hosted', 'linux'] },
     repository: { full_name: 'org/repo', name: 'repo', owner: { login: 'org' } },
   };
 }
@@ -186,7 +190,7 @@ describe('POST /webhook/github', () => {
   it('returns 503 and does not enqueue when isDraining is true', async () => {
     const app = Fastify({ logger: false });
     const queue = new JobQueue();
-    const mockClient = { createRunnerToken: vi.fn() } as unknown as AppClient;
+    const mockClient = { createRunnerToken: vi.fn(), listJobsForRun: vi.fn().mockResolvedValue([]) } as unknown as AppClient;
     app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
       req.rawBody = body as Buffer;
       try { done(null, JSON.parse((body as Buffer).toString())); }
@@ -211,11 +215,56 @@ describe('POST /webhook/github', () => {
     expect(mockClient.createRunnerToken).not.toHaveBeenCalled();
   });
 
+  it('returns 200 for a duplicate queued event for the same GitHub job ID', async () => {
+    const { app, queue } = buildApp();
+    const payload = workflowJobPayload('queued');
+    const body = JSON.stringify(payload);
+    const headers = {
+      'x-github-event': 'workflow_job',
+      'x-hub-signature-256': sign(body),
+      'content-type': 'application/json',
+    };
+
+    const first  = await app.inject({ method: 'POST', url: '/webhook/github', headers, payload: body });
+    // Send the exact same payload again (same workflow_job.id)
+    const second = await app.inject({ method: 'POST', url: '/webhook/github', headers, payload: body });
+
+    expect(first.statusCode).toBe(202);
+    expect(second.statusCode).toBe(200);  // deduped via markProvisioned
+    expect(queue.depth).toBe(1);           // only provisioned once
+  });
+
+  it('calls reconciler.trackRepo with the repo from the webhook', async () => {
+    const app = Fastify({ logger: false });
+    const queue = new JobQueue();
+    const mockClient = {
+      createRunnerToken: vi.fn().mockResolvedValue('tok'),
+      listJobsForRun: vi.fn().mockResolvedValue([]),
+    } as unknown as AppClient;
+    const reconciler = { trackRepo: vi.fn() };
+    app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
+      req.rawBody = body as Buffer;
+      try { done(null, JSON.parse((body as Buffer).toString())); }
+      catch (err) { done(err as Error, undefined); }
+    });
+    registerWebhookRoute(app, SECRET, queue, AppClientRegistry.fromDefault(mockClient), 500, () => false, reconciler as any);
+
+    const body = JSON.stringify(workflowJobPayload('queued'));
+    await app.inject({
+      method: 'POST',
+      url: '/webhook/github',
+      headers: { 'x-github-event': 'workflow_job', 'x-hub-signature-256': sign(body), 'content-type': 'application/json' },
+      payload: body,
+    });
+
+    expect(reconciler.trackRepo).toHaveBeenCalledWith('org', 'repo');
+  });
+
   it('routes to the per-org client when one is registered', async () => {
     const app = Fastify({ logger: false });
     const queue = new JobQueue();
-    const defaultClient = { createRunnerToken: vi.fn().mockResolvedValue('default-token') } as unknown as AppClient;
-    const orgClient = { createRunnerToken: vi.fn().mockResolvedValue('org-token') } as unknown as AppClient;
+    const defaultClient = { createRunnerToken: vi.fn().mockResolvedValue('default-token'), listJobsForRun: vi.fn().mockResolvedValue([]) } as unknown as AppClient;
+    const orgClient = { createRunnerToken: vi.fn().mockResolvedValue('org-token'), listJobsForRun: vi.fn().mockResolvedValue([]) } as unknown as AppClient;
     const registry = AppClientRegistry.fromDefault(defaultClient);
     registry.register('org', orgClient);
     app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {

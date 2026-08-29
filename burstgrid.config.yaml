@@ -12,6 +12,27 @@ autoscaler:
   evaluationIntervalSec: 30 # how often to check queue depth vs. capacity
 
   fleets:
+    # Each fleet maps a job size label to an EC2 launch template + subnet set.
+    #
+    # launchTemplateId — the ID of the EC2 Launch Template that BurstGrid will use
+    #   when launching spot/on-demand instances for this fleet.
+    #   Find yours:
+    #     AWS Console → EC2 → Launch Templates (copy the "Launch template ID" column)
+    #     AWS CLI:  aws ec2 describe-launch-templates \
+    #                 --query 'LaunchTemplates[*].[LaunchTemplateId,LaunchTemplateName]' \
+    #                 --output table
+    #   The template must configure the AMI, instance profile, security groups, and
+    #   a user-data script that installs and starts the burstgrid worker-agent.
+    #
+    # subnetIds — the VPC subnets BurstGrid may launch instances into.
+    #   Spread across multiple AZs so spot capacity is available even when one AZ is tight.
+    #   Find yours:
+    #     AWS Console → VPC → Subnets (copy the "Subnet ID" column)
+    #     AWS CLI:  aws ec2 describe-subnets \
+    #                 --query 'Subnets[*].[SubnetId,AvailabilityZone,CidrBlock]' \
+    #                 --output table
+    #   Use private subnets with a NAT gateway (workers only need outbound internet).
+
     # medium — m6g.large (2 vCPU / 8 GiB) — typecheck jobs
     - name: medium
       sizeTag: "burstgrid:size=medium"

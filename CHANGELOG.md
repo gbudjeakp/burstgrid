@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.2](https://github.com/gbudjeakp/burstgrid/compare/v1.7.1...v1.7.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* unmark provisioned state on any terminal job status to prevent 30-min stalls ([1dac963](https://github.com/gbudjeakp/burstgrid/commit/1dac96380baf2d29ef59b88e5fdf34196874d665))
+
 ## [1.7.1](https://github.com/gbudjeakp/burstgrid/compare/v1.7.0...v1.7.1) (2026-08-29)
 
 

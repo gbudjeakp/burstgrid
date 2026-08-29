@@ -76,7 +76,8 @@ rm -f .runner .credentials .env
   --name "burstgrid-$(hostname)-$$" \
   --unattended \
   --ephemeral \
-  --replace
+  --replace \
+  --work "${RUNNER_WORK_DIR:-${RUNNER_SLOT_DIR:-/opt/actions-runner}-work}"
 ./run.sh
 RUNSCRIPT
 chmod +x /opt/actions-runner/burstgrid-run.sh

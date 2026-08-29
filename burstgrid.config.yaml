@@ -54,16 +54,17 @@ autoscaler:
       scaleUpThreshold: 1
       capacityType: spot
 
-    # 2xlarge — m6g.16xlarge (64 vCPU / 256 GiB) — stress jobs
+    # 2xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — stress jobs; spot w/ on-demand fallback
     - name: 2xlarge
       sizeTag: "burstgrid:size=2xlarge"
       launchTemplateId: lt-0c87057049309a525
+      instanceType: m6g.4xlarge
       subnetIds:
         - subnet-7e67485f
         - subnet-350afb79
         - subnet-fcefcda3
       maxWorkers: 3
-      slotsPerWorker: 16
+      slotsPerWorker: 2
       scaleUpThreshold: 1
       capacityType: spot
 

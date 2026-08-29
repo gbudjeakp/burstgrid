@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.0](https://github.com/gbudjeakp/burstgrid/compare/v1.5.3...v1.6.0) (2026-08-29)
+
+
+### Features
+
+* **ci:** fix sudo prem ([c49224a](https://github.com/gbudjeakp/burstgrid/commit/c49224a6b178854945ce46d363d5c170e10ea06b))
+* **ci:** fix sudo prem ([917d5e2](https://github.com/gbudjeakp/burstgrid/commit/917d5e2b04a1394dbcd405b9f72600f4d24477bc))
+
 ## [1.5.3](https://github.com/gbudjeakp/burstgrid/compare/v1.5.2...v1.5.3) (2026-08-29)
 
 

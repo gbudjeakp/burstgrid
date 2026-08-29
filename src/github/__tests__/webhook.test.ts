@@ -234,14 +234,14 @@ describe('POST /webhook/github', () => {
     expect(queue.depth).toBe(1);           // only provisioned once
   });
 
-  it('calls reconciler.trackRepo with the repo from the webhook', async () => {
+  it('calls reconciler.triggerNow with the repo from the webhook', async () => {
     const app = Fastify({ logger: false });
     const queue = new JobQueue();
     const mockClient = {
       createRunnerToken: vi.fn().mockResolvedValue('tok'),
       listJobsForRun: vi.fn().mockResolvedValue([]),
     } as unknown as AppClient;
-    const reconciler = { trackRepo: vi.fn() };
+    const reconciler = { triggerNow: vi.fn() };
     app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
       req.rawBody = body as Buffer;
       try { done(null, JSON.parse((body as Buffer).toString())); }
@@ -257,7 +257,7 @@ describe('POST /webhook/github', () => {
       payload: body,
     });
 
-    expect(reconciler.trackRepo).toHaveBeenCalledWith('org', 'repo');
+    expect(reconciler.triggerNow).toHaveBeenCalledWith('org', 'repo');
   });
 
   it('routes to the per-org client when one is registered', async () => {

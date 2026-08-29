@@ -48,6 +48,8 @@ export interface SlotConfig {
   env?: Record<string, string>;
   /** GitHub repo URL passed as RUNNER_REPO_URL to the runner script (e.g. https://github.com/owner/repo). */
   repoUrl?: string;
+  /** Index of this slot (0-based); maps to /opt/actions-runner-<N> for credential isolation. */
+  slotIndex?: number;
 }
 
 export class Slot {
@@ -88,6 +90,7 @@ export class Slot {
         ...process.env,
         ...sanitizeEnv(this.cfg.env ?? {}),
         RUNNER_REPO_URL: this.cfg.repoUrl ?? '',
+        RUNNER_SLOT_DIR: `/opt/actions-runner-${this.cfg.slotIndex ?? 0}`,
         RUNNER_TOKEN: runnerToken,
         RUNNER_LABELS: labels.join(','),
         RUNNER_EPHEMERAL: this.cfg.runnerEphemeral ?? true ? '1' : '0',

@@ -123,9 +123,11 @@ export function registerSchedulerRoutes(
         endJobSpan(jobId, (status as string) === 'failed' ? 'error' : 'ok', error);
         opts.cache?.delete(jobId);
         pool.releaseJob(workerId, jobId);
-        // On failure, immediately allow re-provisioning so the reconciler can retry on the
-        // next cycle rather than waiting for the 30-minute markProvisioned TTL to expire.
-        if ((status as string) === 'failed' && meta?.githubJobId != null) {
+        // Always clear on any terminal status: the runner may have picked up a job from a
+        // different run, leaving this GitHub job still queued. The reconciler will re-provision
+        // only if the job is genuinely still queued; no re-provision if GitHub already shows it
+        // completed.
+        if (meta?.githubJobId != null) {
           unmarkProvisioned(meta.githubJobId);
         }
       }

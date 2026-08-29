@@ -69,18 +69,17 @@ cat > /opt/actions-runner/burstgrid-run.sh << 'RUNSCRIPT'
 set -euo pipefail
 cd /opt/actions-runner
 
-# Remove previous runner config if re-used (ephemeral skips this path)
-if [ -f .runner ]; then
-  ./config.sh remove --token "$RUNNER_TOKEN" 2>/dev/null || true
-fi
+# Clean up stale state from any previous run (config.sh remove needs a separate removal token)
+rm -f .runner .credentials .env
 
 ./config.sh \
-  --url "REPO_URL_PLACEHOLDER" \
+  --url "$RUNNER_REPO_URL" \
   --token "$RUNNER_TOKEN" \
   --labels "$RUNNER_LABELS,self-hosted,linux,arm64" \
   --name "burstgrid-$(hostname)-$$" \
   --unattended \
-  --ephemeral
+  --ephemeral \
+  --replace
 
 ./run.sh
 RUNSCRIPT

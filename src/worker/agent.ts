@@ -148,6 +148,7 @@ export class WorkerAgent {
       runnerPath: this.cfg.runnerPath,
       registryMirror: this.cfg.registryMirror,
       env: job.env,
+      repoUrl: `https://github.com/${job.owner}/${job.repo}`,
     });
 
     try {

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.3](https://github.com/gbudjeakp/burstgrid/compare/v1.5.2...v1.5.3) (2026-08-29)
+
+
+### Bug Fixes
+
+* **autoscaler:** spot → on-demand fallback; 2xlarge fleet uses m6g.4x… ([6ddf641](https://github.com/gbudjeakp/burstgrid/commit/6ddf641de1f016791ba727942e5a22da8b205ebd))
+* **autoscaler:** spot → on-demand fallback; 2xlarge fleet uses m6g.4xlarge ([26e900e](https://github.com/gbudjeakp/burstgrid/commit/26e900efdfac3f08b9ff537447ad8c8068d22e0c))
+
 ## [1.5.2](https://github.com/gbudjeakp/burstgrid/compare/v1.5.1...v1.5.2) (2026-08-28)
 
 

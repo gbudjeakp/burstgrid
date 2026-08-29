@@ -104,27 +104,37 @@ export class Autoscaler {
     const cursor = this.subnetCursors.get(fleet.name) ?? 0;
     for (let i = 0; i < count; i++) {
       const subnetId = fleet.subnetIds[(cursor + i) % fleet.subnetIds.length];
-      try {
-        const res = await this.ec2.send(new RunInstancesCommand({
-          LaunchTemplate: { LaunchTemplateId: fleet.launchTemplateId, Version: '$Latest' },
-          SubnetId: subnetId,
-          MinCount: 1,
-          MaxCount: 1,
-          ...(fleet.gpuAmiId ? { ImageId: fleet.gpuAmiId } : {}),
-          ...(fleet.instanceType ? { InstanceType: fleet.instanceType as _InstanceType } : {}),
-          ...(fleet.capacityType === 'spot'
-            ? { InstanceMarketOptions: { MarketType: 'spot' } as InstanceMarketOptionsRequest }
-            : {}),
-        }));
-        const id = res.Instances?.[0]?.InstanceId ?? 'unknown';
-        const launches = this.pendingLaunches.get(fleet.name) ?? [];
-        launches.push(Date.now());
-        this.pendingLaunches.set(fleet.name, launches);
-        console.info(`[autoscaler] fleet "${fleet.name}": launched ${id} (subnet ${subnetId})`);
-      } catch (err) {
-        console.error(`[autoscaler] fleet "${fleet.name}": launch failed`, err);
+      const launched = await this.tryLaunch(fleet, subnetId, fleet.capacityType ?? 'on-demand');
+      if (!launched && fleet.capacityType === 'spot') {
+        console.warn(`[autoscaler] fleet "${fleet.name}": spot unavailable, retrying on-demand`);
+        await this.tryLaunch(fleet, subnetId, 'on-demand');
       }
     }
     this.subnetCursors.set(fleet.name, cursor + count);
+  }
+
+  private async tryLaunch(fleet: TierFleet, subnetId: string, capacityType: 'spot' | 'on-demand'): Promise<boolean> {
+    try {
+      const res = await this.ec2.send(new RunInstancesCommand({
+        LaunchTemplate: { LaunchTemplateId: fleet.launchTemplateId, Version: '$Latest' },
+        SubnetId: subnetId,
+        MinCount: 1,
+        MaxCount: 1,
+        ...(fleet.gpuAmiId ? { ImageId: fleet.gpuAmiId } : {}),
+        ...(fleet.instanceType ? { InstanceType: fleet.instanceType as _InstanceType } : {}),
+        ...(capacityType === 'spot'
+          ? { InstanceMarketOptions: { MarketType: 'spot' } as InstanceMarketOptionsRequest }
+          : {}),
+      }));
+      const id = res.Instances?.[0]?.InstanceId ?? 'unknown';
+      const launches = this.pendingLaunches.get(fleet.name) ?? [];
+      launches.push(Date.now());
+      this.pendingLaunches.set(fleet.name, launches);
+      console.info(`[autoscaler] fleet "${fleet.name}": launched ${id} (subnet ${subnetId}, ${capacityType})`);
+      return true;
+    } catch (err) {
+      console.error(`[autoscaler] fleet "${fleet.name}": launch failed (${capacityType})`, err);
+      return false;
+    }
   }
 }

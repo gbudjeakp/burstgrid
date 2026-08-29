@@ -10,6 +10,8 @@ interface WorkerState extends WorkerRegistration {
   freeMemoryMiB: number;
   lastSeen: number;
   stream: ServerResponse | null;
+  /** Timestamp when the worker last became fully idle (freeSlots === totalSlots); null while busy. */
+  idleSince: number | null;
 }
 
 export class WorkerPool {
@@ -40,6 +42,7 @@ export class WorkerPool {
       freeMemoryMiB: reg.totalMemoryMiB,
       lastSeen:      Date.now(),
       stream:        existing?.stream ?? null,
+      idleSince:     existing?.idleSince ?? Date.now(),
     };
     this.workers.set(reg.workerId, state);
     void this.redisWorkers?.upsert({
@@ -75,6 +78,11 @@ export class WorkerPool {
   /** Remove a job from inflight tracking once it reaches a terminal status. */
   releaseJob(workerId: string, jobId: string): void {
     this.inflightJobs.get(workerId)?.delete(jobId);
+    const w = this.workers.get(workerId);
+    // Start idle timer when the last job on this worker finishes
+    if (w && this.inflightJobs.get(workerId)?.size === 0 && w.idleSince === null) {
+      w.idleSince = Date.now();
+    }
   }
 
   /** Return all inflight jobs for a worker and clear the tracking entry. */
@@ -129,6 +137,7 @@ export class WorkerPool {
     w.freeSlots--;
     w.freeVcpus -= assignment.vcpus;
     w.freeMemoryMiB -= assignment.memoryMiB;
+    w.idleSince = null; // worker is no longer idle
     w.stream.write(`data: ${JSON.stringify(assignment)}\n\n`);
     return true;
   }
@@ -169,6 +178,24 @@ export class WorkerPool {
     return [...this.workers.values()]
       .filter(w => w.stream?.writable && (!tag || w.capabilities.includes(tag)))
       .length;
+  }
+
+  /**
+   * Returns workers that have been fully idle for at least idleMs and have an ec2InstanceId,
+   * sorted oldest-idle-first. Used by the autoscaler for scale-down decisions.
+   */
+  idleWorkers(tag: string, idleMs: number): Array<{ workerId: string; ec2InstanceId: string }> {
+    const cutoff = Date.now() - idleMs;
+    return [...this.workers.values()]
+      .filter(w =>
+        w.stream?.writable &&
+        w.ec2InstanceId &&
+        (!tag || w.capabilities.includes(tag)) &&
+        w.idleSince !== null &&
+        w.idleSince <= cutoff,
+      )
+      .sort((a, b) => a.idleSince! - b.idleSince!)
+      .map(w => ({ workerId: w.workerId, ec2InstanceId: w.ec2InstanceId! }));
   }
 
   /**

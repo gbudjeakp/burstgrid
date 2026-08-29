@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { Autoscaler, type TierFleet } from '../autoscaler.js';
 import { WorkerPool } from '../../scheduler/worker-pool.js';
 import { JobQueue } from '../../scheduler/queue.js';
@@ -9,10 +9,11 @@ vi.mock('@aws-sdk/client-ec2', () => {
   const send = vi.fn().mockResolvedValue({ Instances: [{ InstanceId: 'i-test' }] });
   class EC2Client { send = send; }
   class RunInstancesCommand {}
-  return { EC2Client, RunInstancesCommand };
+  class TerminateInstancesCommand { constructor(public input: unknown) {} }
+  return { EC2Client, RunInstancesCommand, TerminateInstancesCommand };
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.clearAllMocks(); });
 
 const FLEET: TierFleet = {
   name: 'test', sizeTag: '', launchTemplateId: 'lt-123',
@@ -65,5 +66,65 @@ describe('Autoscaler pending launch guard', () => {
 
     autoscaler.stop();
     vi.useRealTimers();
+  });
+});
+
+describe('Autoscaler scale-down', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('terminates idle workers that have exceeded scaleDownAfterIdleSec', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    pool.register({ workerId: 'w1', instanceId: 'w1', ec2InstanceId: 'i-idle001',
+      region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+    pool.register({ workerId: 'w2', instanceId: 'w2', ec2InstanceId: 'i-idle002',
+      region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+    const stream = { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse;
+    pool.setStream('w1', stream);
+    pool.setStream('w2', stream);
+
+    vi.advanceTimersByTime(2_000); // 2 s > 1 s threshold, well within 30 s stale window
+
+    const queue = new JobQueue(); // empty — no jobs
+    const fleet = { ...FLEET, maxWorkers: 3, scaleDownAfterIdleSec: 1 }; // 1 s threshold
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminateCalls = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    );
+    expect(terminateCalls).toHaveLength(1);
+    // One worker kept alive as the warm standby, one terminated
+    const terminated = (terminateCalls[0][0] as { input: { InstanceIds: string[] } }).input.InstanceIds;
+    expect(terminated).toHaveLength(1);
+
+    autoscaler.stop();
+  });
+
+  it('does not terminate workers that are not yet idle long enough', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    pool.register({ workerId: 'w1', instanceId: 'w1', ec2InstanceId: 'i-recent',
+      region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+    pool.setStream('w1', { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse);
+
+    // No time advance — idle for 0 ms, threshold is 5 min
+
+    const queue = new JobQueue();
+    const fleet = { ...FLEET, scaleDownAfterIdleSec: 300 };
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminateCalls = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    );
+    expect(terminateCalls).toHaveLength(0);
+
+    autoscaler.stop();
   });
 });

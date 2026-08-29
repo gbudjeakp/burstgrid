@@ -30,6 +30,8 @@ export interface Job {
 export interface WorkerRegistration {
   workerId: string;
   instanceId: string;
+  /** Actual EC2 instance ID (i-xxxx); populated by the agent from the EC2 metadata service. */
+  ec2InstanceId?: string;
   region: string;
   availabilityZone: string;
   totalSlots: number;

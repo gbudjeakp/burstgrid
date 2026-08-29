@@ -199,6 +199,52 @@ describe('WorkerPool', () => {
     });
   });
 
+  describe('idleWorkers', () => {
+    it('returns workers idle longer than the threshold that have an ec2InstanceId', () => {
+      const pool2 = new WorkerPool();
+      const stream = mockStream();
+      pool2.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool2.setStream('w1', stream);
+
+      vi.advanceTimersByTime(2_000); // 2 s > 1 s threshold
+      expect(pool2.idleWorkers('linux', 1_000)).toEqual([{ workerId: 'w1', ec2InstanceId: 'i-abc123' }]);
+    });
+
+    it('excludes workers that are not yet idle long enough', () => {
+      const pool2 = new WorkerPool();
+      pool2.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool2.setStream('w1', mockStream());
+
+      // No time advance — idleSince is at most 0 ms ago
+      expect(pool2.idleWorkers('linux', 1_000)).toHaveLength(0);
+    });
+
+    it('excludes workers without an ec2InstanceId', () => {
+      const pool2 = new WorkerPool();
+      pool2.register(reg('w1')); // no ec2InstanceId
+      pool2.setStream('w1', mockStream());
+
+      vi.advanceTimersByTime(2_000);
+      expect(pool2.idleWorkers('linux', 1_000)).toHaveLength(0);
+    });
+
+    it('resets idleSince when a job is assigned and restarts it on releaseJob', () => {
+      const pool2 = new WorkerPool();
+      pool2.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool2.setStream('w1', mockStream());
+      const j = job('j1');
+      pool2.trackJob('w1', j);
+      pool2.assign('w1', assignment('j1'));
+
+      vi.advanceTimersByTime(2_000); // time passes but worker is busy
+      expect(pool2.idleWorkers('linux', 1_000)).toHaveLength(0);
+
+      pool2.releaseJob('w1', 'j1');
+      vi.advanceTimersByTime(2_000); // 2 s after job completes
+      expect(pool2.idleWorkers('linux', 1_000)).toHaveLength(1);
+    });
+  });
+
   describe('reapStale', () => {
     it('returns inflight jobs from reaped workers', () => {
       pool.register(reg('w1'));

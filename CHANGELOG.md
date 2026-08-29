@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.0](https://github.com/gbudjeakp/burstgrid/compare/v1.9.0...v1.10.0) (2026-08-29)
+
+
+### Features
+
+* dynamic bin-packing autoscaler — vCPU-demand-based scale-up ([d3133d3](https://github.com/gbudjeakp/burstgrid/commit/d3133d3e48022f1dab2e29e262a6923c1518e8ec))
+
 ## [1.9.0](https://github.com/gbudjeakp/burstgrid/compare/v1.8.0...v1.9.0) (2026-08-29)
 
 

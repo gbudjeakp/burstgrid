@@ -7,6 +7,8 @@ export interface CachedJobMeta {
   runId: number;
   tier: ExecutionTier;
   labels: string[];
+  /** GitHub Actions job ID — used to unmarkProvisioned on runner failure. */
+  githubJobId?: number;
   /** unix ms, set at insertion time */
   cachedAt: number;
   /** unix ms, updated whenever any status update arrives */

@@ -86,6 +86,7 @@ export function registerWebhookRoute(
       tier: selectTier(labels),
       queuedAt: new Date(),
       runnerToken,
+      githubJobId,
     };
 
     queue.enqueue(job);

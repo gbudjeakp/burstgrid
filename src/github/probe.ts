@@ -82,6 +82,7 @@ export async function probeRun(opts: ProbeOpts): Promise<void> {
         tier: selectTier(sibling.labels),
         queuedAt: new Date(),
         runnerToken,
+        githubJobId: sibling.id,
       };
       queue.enqueue(job);
       openJobSpan(job.id, job.owner, job.repo, job.tier);

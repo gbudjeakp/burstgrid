@@ -7,6 +7,7 @@ import type { WorkerRegistration, WorkerHeartbeat, JobUpdate, Job } from '../typ
 import type { JobMetaCache } from './job-meta-cache.js';
 import type { IJobHistoryBackend } from '../backends/types.js';
 import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../telemetry/index.js';
+import { unmarkProvisioned } from '../github/probe.js';
 
 /**
  * Returns a preHandler that enforces Bearer token auth on worker/job routes.
@@ -122,6 +123,11 @@ export function registerSchedulerRoutes(
         endJobSpan(jobId, (status as string) === 'failed' ? 'error' : 'ok', error);
         opts.cache?.delete(jobId);
         pool.releaseJob(workerId, jobId);
+        // On failure, immediately allow re-provisioning so the reconciler can retry on the
+        // next cycle rather than waiting for the 30-minute markProvisioned TTL to expire.
+        if ((status as string) === 'failed' && meta?.githubJobId != null) {
+          unmarkProvisioned(meta.githubJobId);
+        }
       }
 
       return reply.status(200).send();

@@ -84,6 +84,48 @@ describe('worker auth — token enforced', () => {
   });
 });
 
+// ─── Spot evict ─────────────────────────────────────────────────────────────
+
+describe('POST /v1/workers/:id/evict', () => {
+  it('requeues inflight jobs and unregisters the worker', async () => {
+    const pool = new WorkerPool();
+    const queue = new JobQueue();
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, pool, queue);
+
+    // Register worker
+    await app.inject({
+      method: 'POST', url: '/v1/workers/register',
+      headers: JSON_HEADERS, body: REG_BODY,
+    });
+
+    // Simulate a tracked inflight job
+    const job = {
+      id: 'j-1', owner: 'o', repo: 'r', runId: 1,
+      labels: ['linux'], tier: 'standard' as const, queuedAt: new Date(), runnerToken: 't',
+    };
+    pool.trackJob('w-1', job);
+
+    const res = await app.inject({ method: 'POST', url: '/v1/workers/w-1/evict', headers: JSON_HEADERS, body: '{}' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ requeued: 1 });
+    expect(queue.depth).toBe(1);
+    expect(pool.hasWorker('w-1')).toBe(false);
+  });
+
+  it('returns requeued: 0 and unregisters when no inflight jobs', async () => {
+    const pool = new WorkerPool();
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, pool, new JobQueue());
+    await app.inject({ method: 'POST', url: '/v1/workers/register', headers: JSON_HEADERS, body: REG_BODY });
+
+    const res = await app.inject({ method: 'POST', url: '/v1/workers/w-1/evict', headers: JSON_HEADERS, body: '{}' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ requeued: 0 });
+    expect(pool.hasWorker('w-1')).toBe(false);
+  });
+});
+
 // ─── Health / readiness endpoints ────────────────────────────────────────────
 
 describe('health and readiness', () => {

@@ -81,17 +81,72 @@ jobs:
 
 ## Configuration
 
-Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup. See the [setup guide](https://gbudjeakp.github.io/burstgrid/#get-started) for env vars and the full YAML reference.
+Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup.
 
-## Production
+## Production setup
 
-Workers must be **bare-metal EC2** (`m7i.metal-*`, `m6g.metal`, etc.) — Firecracker requires KVM. The scheduler runs on any standard instance (`t3.small` is fine).
+### 1. Create EC2 launch templates
 
-See [`deploy/terraform/`](deploy/terraform/) for AWS infra and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
+BurstGrid looks for launch templates named `burstgrid-<size>` (e.g. `burstgrid-large`). Each template must:
+- Use a BurstGrid worker AMI (with `burstgrid-worker-agent` installed and enabled as a systemd service)
+- Include an IAM instance profile with EC2 describe + SSM permissions
+- Have a security group with outbound HTTPS (443) to GitHub and your scheduler
 
 ```bash
-make infra-init && make infra-plan && make infra-apply
+aws ec2 create-launch-template \
+  --launch-template-name burstgrid-large \
+  --launch-template-data '{
+    "ImageId": "ami-XXXX",
+    "InstanceType": "m6g.2xlarge",
+    "IamInstanceProfile": {"Name": "burstgrid-worker"},
+    "SecurityGroupIds": ["sg-XXXX"],
+    "UserData": "<base64-encoded user-data>"
+  }'
 ```
+
+Workers must be **bare-metal or standard EC2** — Firecracker requires KVM (`m6g.metal`, `m7i.metal-*`, or any `.metal` type). Use standard instances (e.g. `m6g.2xlarge`) for `process` mode only.
+
+### 2. Generate config from AWS
+
+Once templates exist, `burstgrid init` auto-discovers them and your VPC subnets:
+
+```bash
+npx burstgrid init                   # writes burstgrid.config.yaml in the current directory
+npx burstgrid init --region us-west-2
+npx burstgrid init --out /etc/burstgrid/config.yaml
+```
+
+This queries your AWS account for:
+- All launch templates matching `burstgrid-*`
+- The VPC with the most AZ coverage, picks one subnet per AZ
+
+If no templates are found, the command prints the exact `aws ec2 create-launch-template` command needed and writes a config with placeholders.
+
+### 3. Deploy the scheduler
+
+```bash
+# Build
+pnpm build
+
+# Upload scheduler binary to S3
+aws s3 cp dist/scheduler.mjs s3://your-bucket/scheduler.mjs
+
+# Start on your scheduler EC2 instance
+BURSTGRID_GITHUB_TOKEN=ghp_xxx \
+BURSTGRID_WEBHOOK_SECRET=your-secret \
+BURSTGRID_CONFIG=/etc/burstgrid/config.yaml \
+node dist/scheduler.mjs
+```
+
+### 4. Register GitHub webhook
+
+Point your repo (or org) webhook at `https://scheduler-host:8080/webhook/github`, content type `application/json`, events: **Workflow jobs**.
+
+### 5. Scale-down
+
+Idle workers terminate automatically after `scaleDownAfterIdleSec` (default 300 s). One warm standby is kept per fleet to avoid cold-start latency on the next burst. Set `scaleDownAfterIdleSec: 0` to disable.
+
+See [`deploy/terraform/`](deploy/terraform/) for full AWS infra and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
 
 ## Build & test
 
@@ -99,6 +154,6 @@ make infra-init && make infra-plan && make infra-apply
 pnpm install
 pnpm build       # dist/
 pnpm typecheck
-pnpm test        # 134 tests
+pnpm test        # 184 tests
 pnpm lint        # oxlint
 ```

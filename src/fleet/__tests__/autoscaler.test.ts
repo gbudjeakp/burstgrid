@@ -69,6 +69,68 @@ describe('Autoscaler pending launch guard', () => {
   });
 });
 
+describe('Autoscaler bin-packing scale-up', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('uses largest fleet first to minimise instance count', async () => {
+    vi.useFakeTimers();
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    // 10 pending large jobs × 4 vCPU = 40 vCPU demand
+    const q = new JobQueue();
+    for (let i = 0; i < 10; i++) {
+      q.enqueue({ id: `j-${i}`, owner: 'o', repo: 'r', runId: i, labels: ['burstgrid:size=large'],
+        tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't',
+        vcpus: 4, memoryMiB: 4_096 } as Job);
+    }
+
+    const smallFleet: TierFleet = { ...FLEET, name: 'small', maxWorkers: 10, slotsPerWorker: 2, instanceVcpus: 4 };
+    const largeFleet: TierFleet = { ...FLEET, name: 'large', maxWorkers: 5,  slotsPerWorker: 4, instanceVcpus: 16 };
+
+    const autoscaler = new Autoscaler(pool, q, [smallFleet, largeFleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const launchCalls = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'RunInstancesCommand',
+    );
+    // 40 vCPU deficit / 16 vCPU per large instance = ceil(40/16) = 3 (not 10 small instances)
+    expect(launchCalls).toHaveLength(3);
+
+    autoscaler.stop();
+  });
+
+  it('falls back to smaller fleet when large fleet hits maxWorkers', async () => {
+    vi.useFakeTimers();
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    // 32 vCPU demand
+    const q = new JobQueue();
+    for (let i = 0; i < 8; i++) {
+      q.enqueue({ id: `j-${i}`, owner: 'o', repo: 'r', runId: i, labels: [],
+        tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't',
+        vcpus: 4, memoryMiB: 4_096 } as Job);
+    }
+
+    const largeFleet: TierFleet = { ...FLEET, name: 'large', maxWorkers: 1, slotsPerWorker: 4, instanceVcpus: 16 };
+    const smallFleet: TierFleet = { ...FLEET, name: 'small', maxWorkers: 5, slotsPerWorker: 2, instanceVcpus: 4 };
+
+    const autoscaler = new Autoscaler(pool, q, [largeFleet, smallFleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const launchCalls = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'RunInstancesCommand',
+    );
+    // 1 large (16 vCPU, capped at maxWorkers=1) + ceil(16 remaining / 4 vCPU) = 4 small = 5 total
+    expect(launchCalls).toHaveLength(5);
+
+    autoscaler.stop();
+  });
+});
+
 describe('Autoscaler scale-down', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());

@@ -7,6 +7,7 @@ import {
 } from '@aws-sdk/client-ec2';
 import type { WorkerPool } from '../scheduler/worker-pool.js';
 import type { JobQueue } from '../scheduler/queue.js';
+import { VM_SIZES, vmSizeFromLabels } from '../types/index.js';
 
 export interface TierFleet {
   /** Human-readable name for logging (e.g. 'standard', 'large', 'xlarge'). */
@@ -33,6 +34,12 @@ export interface TierFleet {
   capacityType?: 'spot' | 'on-demand';
   /** Seconds a fully-idle worker must stay quiet before being terminated. Default: 300 (5 min). */
   scaleDownAfterIdleSec?: number;
+  /**
+   * Total vCPUs on the EC2 instance launched from this fleet (e.g. 8 for m6g.2xlarge).
+   * Used by the autoscaler to calculate how many workers to launch to cover vCPU demand.
+   * Defaults to slotsPerWorker × vCPUs for the fleet's sizeTag job size.
+   */
+  instanceVcpus?: number;
 }
 
 export class Autoscaler {
@@ -65,47 +72,76 @@ export class Autoscaler {
   }
 
   private async evaluate(): Promise<void> {
-    for (const fleet of this.fleets) {
-      await this.evaluateFleet(fleet);
-    }
+    await this.scaleDownGlobal();
+    await this.scaleUpGlobal();
   }
 
-  private async evaluateFleet(fleet: TierFleet): Promise<void> {
-    await this.scaleDown(fleet);
-    await this.scaleUp(fleet);
-  }
+  /**
+   * Terminate workers that have been fully idle longer than the shortest
+   * scaleDownAfterIdleSec across all fleets. Keeps one warm standby alive globally.
+   */
+  private async scaleDownGlobal(): Promise<void> {
+    const idleMs = Math.min(...this.fleets.map(f => (f.scaleDownAfterIdleSec ?? 300))) * 1_000;
+    // '' tag = all workers regardless of capabilities
+    const idle = this.pool.idleWorkers('', idleMs);
+    if (idle.length <= 1) return; // keep one warm standby
 
-  private async scaleDown(fleet: TierFleet): Promise<void> {
-    const idleMs = (fleet.scaleDownAfterIdleSec ?? 300) * 1_000;
-    const idle = this.pool.idleWorkers(fleet.sizeTag, idleMs);
-    if (idle.length === 0) return;
-
-    // Keep at least one worker alive so the next job doesn't wait for a cold start
     const toTerminate = idle.slice(0, idle.length - 1);
-    if (toTerminate.length === 0) return;
-
     const ids = toTerminate.map(w => w.ec2InstanceId);
     try {
       await this.ec2.send(new TerminateInstancesCommand({ InstanceIds: ids }));
-      console.info(`[autoscaler] fleet "${fleet.name}": terminated ${ids.join(', ')} (idle >${idleMs / 1_000}s)`);
+      console.info(`[autoscaler] terminated ${ids.join(', ')} (idle >${idleMs / 1_000}s)`);
     } catch (err) {
-      console.error(`[autoscaler] fleet "${fleet.name}": terminate failed`, err);
+      console.error('[autoscaler] terminate failed', err);
     }
   }
 
-  private async scaleUp(fleet: TierFleet): Promise<void> {
-    const pending = this.jobCountForFleet(fleet);
-    const freeSlots = this.pool.freeSlotsWithCapability(fleet.sizeTag);
-    const workers = this.pool.workersWithCapability(fleet.sizeTag);
-    const pendingWorkers = this.activePendingCount(fleet.name);
+  /**
+   * Launch workers to cover total pending vCPU demand.
+   * Uses the largest-instance fleet first to minimise instance count (bin packing),
+   * capping each fleet at maxWorkers. Workers serve any job size via resource matching.
+   */
+  private async scaleUpGlobal(): Promise<void> {
+    const pendingJobs = [...this.queue.jobs()].filter(j => {
+      const labels = j.labels.map(l => l.toLowerCase());
+      return !labels.some(l => l === 'completed' || l === 'failed');
+    });
+    if (pendingJobs.length === 0) return;
 
-    if (pending <= fleet.scaleUpThreshold || workers + pendingWorkers >= fleet.maxWorkers) return;
+    const pendingVcpus = pendingJobs.reduce((s, j) =>
+      s + (j.vcpus ?? vmSizeFromLabels(j.labels).vcpus), 0);
 
-    const needed = Math.min(
-      Math.ceil((pending - freeSlots) / fleet.slotsPerWorker),
-      fleet.maxWorkers - workers - pendingWorkers,
+    if (pendingVcpus <= this.pool.totalFreeVcpus) return;
+
+    let deficit = pendingVcpus - this.pool.totalFreeVcpus;
+
+    // Largest-instance fleets first → fewest instances needed to cover demand
+    const sorted = [...this.fleets].sort(
+      (a, b) => this.instanceVcpusForFleet(b) - this.instanceVcpusForFleet(a),
     );
-    if (needed > 0) await this.launchWorkers(needed, fleet);
+
+    for (const fleet of sorted) {
+      if (deficit <= 0) break;
+      const pendingWorkers = this.activePendingCount(fleet.name);
+      if (pendingWorkers >= fleet.maxWorkers) continue;
+
+      const workerVcpus = this.instanceVcpusForFleet(fleet);
+      const needed = Math.min(
+        Math.ceil(deficit / workerVcpus),
+        fleet.maxWorkers - pendingWorkers,
+      );
+      if (needed > 0) {
+        await this.launchWorkers(needed, fleet);
+        deficit -= needed * workerVcpus;
+      }
+    }
+  }
+
+  /** vCPUs provided by one instance of this fleet. */
+  private instanceVcpusForFleet(fleet: TierFleet): number {
+    if (fleet.instanceVcpus) return fleet.instanceVcpus;
+    const sizeKey = fleet.sizeTag.replace(/^burstgrid:size=/i, '');
+    return fleet.slotsPerWorker * (VM_SIZES[sizeKey]?.vcpus ?? 2);
   }
 
   private activePendingCount(fleetName: string): number {
@@ -113,17 +149,6 @@ export class Autoscaler {
     const active = (this.pendingLaunches.get(fleetName) ?? []).filter(t => now - t < this.LAUNCH_TTL_MS);
     this.pendingLaunches.set(fleetName, active);
     return active.length;
-  }
-
-  private jobCountForFleet(fleet: TierFleet): number {
-    const tag = fleet.sizeTag.toLowerCase();
-    return [...this.queue.jobs()].filter(j => {
-      const labels = j.labels.map(l => l.toLowerCase());
-      return tag
-        ? labels.includes(tag)
-        // Default fleet: jobs without any burstgrid:size= label
-        : !labels.some(l => l.startsWith('burstgrid:size='));
-    }).length;
   }
 
   private async launchWorkers(count: number, fleet: TierFleet): Promise<void> {

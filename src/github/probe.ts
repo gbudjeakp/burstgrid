@@ -12,6 +12,8 @@ const PROVISION_TTL_MS = 30 * 60 * 1000;
 
 // Per-run lock: collapse concurrent probes for the same run into one GitHub API call.
 const reconciling = new Set<number>();
+// Runs that arrived while a probe was in-flight; one follow-up pass is scheduled after unlock.
+const pendingProbe = new Set<number>();
 
 export function markProvisioned(id: number): boolean {
   const now = Date.now();
@@ -40,7 +42,12 @@ export interface ProbeOpts {
 export async function probeRun(opts: ProbeOpts): Promise<void> {
   const { owner, repo, runId, client, queue, isDraining, maxQueueDepth } = opts;
 
-  if (reconciling.has(runId)) return;
+  if (reconciling.has(runId)) {
+    // Lock held — schedule one follow-up probe so siblings missed during the in-flight call
+    // are still provisioned once the current probe finishes.
+    pendingProbe.add(runId);
+    return;
+  }
   reconciling.add(runId);
 
   try {
@@ -86,5 +93,7 @@ export async function probeRun(opts: ProbeOpts): Promise<void> {
     }
   } finally {
     reconciling.delete(runId);
+    // If sibling webhook events arrived while we held the lock, run one more pass.
+    if (pendingProbe.delete(runId)) void probeRun(opts);
   }
 }

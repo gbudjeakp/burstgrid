@@ -127,25 +127,27 @@ describe('probeRun', () => {
     expect(markProvisioned(id1)).toBe(true); // id1 was unmarked on failure
   });
 
-  it('drops a concurrent probe for the same run (per-run lock)', async () => {
-    let resolveJobs!: (jobs: Array<{ id: number; status: string; labels: string[] }>) => void;
+  it('schedules a follow-up probe when lock is held; dedup prevents double-provisioning', async () => {
     const id = uid();
     const runId = uid();
     const client = {
-      listJobsForRun: vi.fn().mockImplementation(
-        () => new Promise(r => { resolveJobs = r as typeof resolveJobs; }),
-      ),
+      listJobsForRun: vi.fn().mockResolvedValue([{ id, status: 'queued', labels: ['self-hosted'] }]),
       createRunnerToken: vi.fn().mockResolvedValue('tok'),
     } as unknown as AppClient;
     const queue = new JobQueue();
 
-    const p1 = probeRun({ owner: 'org', repo: 'repo', runId, client, queue, isDraining: () => false, maxQueueDepth: 100 });
-    const p2 = probeRun({ owner: 'org', repo: 'repo', runId, client, queue, isDraining: () => false, maxQueueDepth: 100 });
-    resolveJobs([{ id, status: 'queued', labels: ['self-hosted'] }]);
-    await Promise.all([p1, p2]);
+    // Fire two concurrent probes for the same run
+    await Promise.all([
+      probeRun({ owner: 'org', repo: 'repo', runId, client, queue, isDraining: () => false, maxQueueDepth: 100 }),
+      probeRun({ owner: 'org', repo: 'repo', runId, client, queue, isDraining: () => false, maxQueueDepth: 100 }),
+    ]);
+    // Follow-up probe is fire-and-forget; flush it before asserting
+    await new Promise(r => setImmediate(r));
 
-    // Second probe was dropped by the per-run lock
-    expect(client.listJobsForRun).toHaveBeenCalledTimes(1);
+    // One main probe + one follow-up = two listJobsForRun calls
+    expect(client.listJobsForRun).toHaveBeenCalledTimes(2);
+    // markProvisioned prevents double-provisioning; only one runner token created
     expect(queue.depth).toBe(1);
+    expect(client.createRunnerToken).toHaveBeenCalledTimes(1);
   });
 });

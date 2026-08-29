@@ -1,6 +1,9 @@
 {
   "name": "burstgrid",
   "version": "1.8.0",
+  "bin": {
+    "burstgrid": "dist/burstgrid.mjs"
+  },
   "description": "CI runner scheduling and execution platform — diversified EC2 worker fleet with Firecracker microVM isolation",
   "private": true,
   "type": "module",

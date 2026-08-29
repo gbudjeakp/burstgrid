@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     scheduler: 'bin/scheduler.ts',
     'worker-agent': 'bin/worker-agent.ts',
+    init: 'bin/init.ts',
   },
   format: ['esm'],
   platform: 'node',

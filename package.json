@@ -12,6 +12,7 @@
     "build": "tsup",
     "dev:scheduler": "tsx bin/scheduler.ts",
     "dev:agent": "tsx bin/worker-agent.ts",
+    "dev:init": "tsx bin/init.ts",
     "lint": "oxlint src/ bin/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

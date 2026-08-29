@@ -55,8 +55,10 @@ process.once('SIGTERM', () => controller.abort());
 if (BURSTGRID_SPOT_QUEUE_URL) {
   const spotMonitor = new SpotMonitor(BURSTGRID_SPOT_QUEUE_URL);
   spotMonitor.once('terminating', () => {
-    console.warn('[worker-agent] spot termination imminent — draining');
-    controller.abort();
+    console.warn('[worker-agent] spot termination imminent — evicting jobs and draining');
+    // Proactively requeue inflight jobs now (2-min warning window).
+    // Falls back to the 30s heartbeat-stale requeue if the scheduler is unreachable.
+    void agent.evict().finally(() => controller.abort());
   });
   spotMonitor.on('error', err => console.error('[worker-agent] spot monitor error', err));
   spotMonitor.start();

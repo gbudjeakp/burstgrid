@@ -175,6 +175,13 @@ export class WorkerAgent {
     }
   }
 
+  /** Notify the scheduler to immediately requeue all inflight jobs for this worker. */
+  async evict(): Promise<void> {
+    await this.post(`/v1/workers/${this.cfg.workerId}/evict`, {}).catch(err =>
+      console.warn('[agent] evict request failed — scheduler will requeue via heartbeat timeout', err),
+    );
+  }
+
   private async reportStatus(jobId: string, status: JobStatus, error?: string): Promise<void> {
     const body: JobUpdate = { jobId, workerId: this.cfg.workerId, status, error };
     await this.post(`/v1/jobs/${jobId}/status`, body).catch(err =>

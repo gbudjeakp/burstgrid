@@ -1,4 +1,10 @@
-import { EC2Client, RunInstancesCommand, type _InstanceType, type InstanceMarketOptionsRequest } from '@aws-sdk/client-ec2';
+import {
+  EC2Client,
+  RunInstancesCommand,
+  TerminateInstancesCommand,
+  type _InstanceType,
+  type InstanceMarketOptionsRequest,
+} from '@aws-sdk/client-ec2';
 import type { WorkerPool } from '../scheduler/worker-pool.js';
 import type { JobQueue } from '../scheduler/queue.js';
 
@@ -25,6 +31,8 @@ export interface TierFleet {
   instanceType?: string;
   /** 'spot' uses EC2 spot market; 'on-demand' (default) launches regular instances. */
   capacityType?: 'spot' | 'on-demand';
+  /** Seconds a fully-idle worker must stay quiet before being terminated. Default: 300 (5 min). */
+  scaleDownAfterIdleSec?: number;
 }
 
 export class Autoscaler {
@@ -63,6 +71,29 @@ export class Autoscaler {
   }
 
   private async evaluateFleet(fleet: TierFleet): Promise<void> {
+    await this.scaleDown(fleet);
+    await this.scaleUp(fleet);
+  }
+
+  private async scaleDown(fleet: TierFleet): Promise<void> {
+    const idleMs = (fleet.scaleDownAfterIdleSec ?? 300) * 1_000;
+    const idle = this.pool.idleWorkers(fleet.sizeTag, idleMs);
+    if (idle.length === 0) return;
+
+    // Keep at least one worker alive so the next job doesn't wait for a cold start
+    const toTerminate = idle.slice(0, idle.length - 1);
+    if (toTerminate.length === 0) return;
+
+    const ids = toTerminate.map(w => w.ec2InstanceId);
+    try {
+      await this.ec2.send(new TerminateInstancesCommand({ InstanceIds: ids }));
+      console.info(`[autoscaler] fleet "${fleet.name}": terminated ${ids.join(', ')} (idle >${idleMs / 1_000}s)`);
+    } catch (err) {
+      console.error(`[autoscaler] fleet "${fleet.name}": terminate failed`, err);
+    }
+  }
+
+  private async scaleUp(fleet: TierFleet): Promise<void> {
     const pending = this.jobCountForFleet(fleet);
     const freeSlots = this.pool.freeSlotsWithCapability(fleet.sizeTag);
     const workers = this.pool.workersWithCapability(fleet.sizeTag);

@@ -55,7 +55,7 @@ export function registerWebhookRoute(
     const { id: githubJobId, run_id, labels } = payload.workflow_job;
     const { owner, name: repo, full_name } = payload.repository;
 
-    reconciler?.trackRepo(owner.login, repo);
+    reconciler?.triggerNow(owner.login, repo);
 
     // Deduplicate: job may have already been provisioned via a sibling probe
     if (!markProvisioned(githubJobId)) {

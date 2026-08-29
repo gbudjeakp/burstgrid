@@ -114,6 +114,54 @@ describe('Reconciler', () => {
     expect(clientB.listActiveRuns).toHaveBeenCalled(); // proceeds despite org-a error
   });
 
+  it('triggerNow reconciles the repo after a 250 ms debounce', async () => {
+    vi.useFakeTimers();
+    const { registry, client } = makeRegistry([{ id: 42 }]);
+    const queue = new JobQueue();
+    const r = new Reconciler(registry, queue, () => false, 500, []);
+
+    r.triggerNow('acme', 'api');
+    expect(client.listActiveRuns).not.toHaveBeenCalled(); // not yet
+
+    vi.runAllTimers();
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(client.listActiveRuns).toHaveBeenCalledWith('acme', 'api');
+    expect(mockedProbeRun).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('triggerNow debounces concurrent calls for the same repo into one reconcile', async () => {
+    vi.useFakeTimers();
+    const { registry, client } = makeRegistry([]);
+    const queue = new JobQueue();
+    const r = new Reconciler(registry, queue, () => false, 500, []);
+
+    r.triggerNow('org', 'repo');
+    r.triggerNow('org', 'repo');
+    r.triggerNow('org', 'repo');
+
+    vi.runAllTimers();
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(client.listActiveRuns).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('triggerNow skips reconcile when draining', async () => {
+    vi.useFakeTimers();
+    const { registry, client } = makeRegistry([{ id: 1 }]);
+    const queue = new JobQueue();
+    const r = new Reconciler(registry, queue, () => true, 500, []);
+
+    r.triggerNow('org', 'repo');
+    vi.runAllTimers();
+    await Promise.resolve(); await Promise.resolve();
+
+    expect(client.listActiveRuns).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('stop() cancels the recurring interval', async () => {
     vi.useFakeTimers();
     const { registry, client } = makeRegistry([]);

@@ -91,6 +91,8 @@ export class Slot {
         ...sanitizeEnv(this.cfg.env ?? {}),
         RUNNER_REPO_URL: this.cfg.repoUrl ?? '',
         RUNNER_SLOT_DIR: `/opt/actions-runner-${this.cfg.slotIndex ?? 0}`,
+        // Per-slot work dir isolates _work/_actions so concurrent slots don't clobber each other
+        RUNNER_WORK_DIR: `/opt/actions-runner-work-${this.cfg.slotIndex ?? 0}`,
         RUNNER_TOKEN: runnerToken,
         RUNNER_LABELS: labels.join(','),
         RUNNER_EPHEMERAL: this.cfg.runnerEphemeral ?? true ? '1' : '0',

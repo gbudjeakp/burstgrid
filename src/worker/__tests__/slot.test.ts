@@ -214,7 +214,9 @@ describe('process mode — runner env vars', () => {
     const child = makeFakeChild();
     SPAWN_MOCK.mockReturnValue(child);
     const slot = new Slot({ jobId: 'j2', mode: 'process', vmImagePath: '/img', kernelPath: '/k' });
-    const p = slot.start('tok', []);
+    // start() only stores procExit — wait() returns the rejection
+    await slot.start('tok', []);
+    const p = slot.wait();
     child.emit('exit', 1);
     await expect(p).rejects.toThrow('runner exited 1');
   });

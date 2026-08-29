@@ -63,15 +63,12 @@ tar xzf "actions-runner-linux-arm64-${RUNNER_VERSION}.tar.gz"
 ./bin/installdependencies.sh
 
 # ── run.sh: called by worker-agent slot in process mode ──────────────────────
-# Receives RUNNER_TOKEN, RUNNER_LABELS, RUNNER_EPHEMERAL from worker-agent
+# Receives RUNNER_TOKEN, RUNNER_LABELS, RUNNER_SLOT_DIR, RUNNER_REPO_URL from worker-agent
 cat > /opt/actions-runner/burstgrid-run.sh << 'RUNSCRIPT'
 #!/bin/bash
 set -euo pipefail
-cd /opt/actions-runner
-
-# Clean up stale state from any previous run (config.sh remove needs a separate removal token)
+cd "${RUNNER_SLOT_DIR:-/opt/actions-runner}"
 rm -f .runner .credentials .env
-
 ./config.sh \
   --url "$RUNNER_REPO_URL" \
   --token "$RUNNER_TOKEN" \
@@ -80,10 +77,16 @@ rm -f .runner .credentials .env
   --unattended \
   --ephemeral \
   --replace
-
 ./run.sh
 RUNSCRIPT
 chmod +x /opt/actions-runner/burstgrid-run.sh
+
+# Create per-slot runner directories using hard links (no extra disk space)
+for i in $(seq 0 $((SLOTS_PLACEHOLDER - 1))); do
+  cp -al /opt/actions-runner /opt/actions-runner-$i
+  rm -f /opt/actions-runner-$i/.runner /opt/actions-runner-$i/.credentials /opt/actions-runner-$i/.env
+  cp /opt/actions-runner/burstgrid-run.sh /opt/actions-runner-$i/burstgrid-run.sh
+done
 
 # ── BurstGrid worker-agent ────────────────────────────────────────────────────
 mkdir -p /opt/burstgrid

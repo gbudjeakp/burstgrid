@@ -33,10 +33,14 @@ export class WorkerAgent {
   private usedMemoryMiB = 0;
   private registered = false;
   private streamConnected = false;
+  // Each index maps to an isolated runner directory; pop on acquire, push on release.
+  private freeSlotIndices: number[];
 
   isReady(): boolean { return this.registered && this.streamConnected; }
 
-  constructor(private readonly cfg: AgentConfig) {}
+  constructor(private readonly cfg: AgentConfig) {
+    this.freeSlotIndices = Array.from({ length: cfg.maxSlots }, (_, i) => i);
+  }
 
   async run(signal: AbortSignal): Promise<void> {
     await this.register();
@@ -138,6 +142,7 @@ export class WorkerAgent {
     const jobStart = Date.now();
     this.usedVcpus += job.vcpus;
     this.usedMemoryMiB += job.memoryMiB;
+    const slotIndex = this.freeSlotIndices.pop() ?? 0;
     const slot = new Slot({
       jobId: job.jobId,
       mode: this.cfg.mode ?? 'firecracker',
@@ -149,6 +154,7 @@ export class WorkerAgent {
       registryMirror: this.cfg.registryMirror,
       env: job.env,
       repoUrl: `https://github.com/${job.owner}/${job.repo}`,
+      slotIndex,
     });
 
     try {
@@ -160,6 +166,7 @@ export class WorkerAgent {
       await this.reportStatus(job.jobId, Status.Failed, String(err));
     } finally {
       await slot.destroy().catch(err => console.warn('[agent] slot cleanup error', err));
+      this.freeSlotIndices.push(slotIndex);
       this.usedSlots--;
       this.usedVcpus -= job.vcpus;
       this.usedMemoryMiB -= job.memoryMiB;

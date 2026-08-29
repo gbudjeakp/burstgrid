@@ -183,7 +183,7 @@
 
     /* Features */
     .feat-grid {
-      display: grid; grid-template-columns: repeat(3, 1fr);
+      display: grid; grid-template-columns: repeat(2, 1fr);
       gap: 1px; background: var(--border);
       border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
     }
@@ -542,23 +542,15 @@
       <ul class="fit-list">
         <li class="fit-item">
           <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">High concurrency</div><div class="fit-item-desc">Running 20+ jobs simultaneously most of the day. Density on bare-metal beats per-instance EC2 pricing above roughly 15 concurrent jobs.</div></div>
+          <div><div class="fit-item-title">Security or compliance requirements</div><div class="fit-item-desc">SOC 2, HIPAA, or FedRAMP workloads that require kernel-level isolation per job. Containers share a kernel; Firecracker microVMs do not. Secrets and filesystem state are gone when the job exits.</div></div>
         </li>
         <li class="fit-item">
           <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Strict isolation requirements</div><div class="fit-item-desc">SOC 2, HIPAA, or FedRAMP workloads where kernel-level isolation per job is required. Containers share a kernel; microVMs do not.</div></div>
+          <div><div class="fit-item-title">High concurrency, steady load</div><div class="fit-item-desc">Running 20+ jobs simultaneously most of the day. Packing many microVMs onto bare metal beats per-instance EC2 pricing above roughly 15 concurrent jobs.</div></div>
         </li>
         <li class="fit-item">
           <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Reproducible build environments</div><div class="fit-item-desc">You own the rootfs image. Bake your exact toolchain once, version it in git, and every job boots from an identical filesystem. No runtime package downloads, no AMI drift.</div></div>
-        </li>
-        <li class="fit-item">
-          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Mixed CPU + GPU CI pipelines</div><div class="fit-item-desc">One scheduler routes both standard jobs to Firecracker microVMs and GPU/ML jobs to dedicated GPU EC2 hosts. No separate runner groups to manage.</div></div>
-        </li>
-        <li class="fit-item">
-          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(74,222,128,0.12)"/><path d="M4 7l2 2 4-4" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Fast feedback loops matter</div><div class="fit-item-desc">150ms VM boot vs 90s EC2 cold start. For short jobs on commit-heavy repos, that gap is most of the total CI wait time.</div></div>
+          <div><div class="fit-item-title">Short, frequent jobs</div><div class="fit-item-desc">150 ms VM boot versus 60&ndash;90 s EC2 cold start. On commit-heavy repos that gap is the CI wait time, not overhead.</div></div>
         </li>
       </ul>
     </div>
@@ -570,19 +562,15 @@
       <ul class="fit-list">
         <li class="fit-item">
           <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Low volume</div><div class="fit-item-desc">Under ~50 jobs per day, a per-job EC2 runner or GitHub-hosted runners are simpler and cheaper. Bare-metal has a floor cost even at zero jobs.</div></div>
+          <div><div class="fit-item-title">Spiky or low-volume load</div><div class="fit-item-desc">BurstGrid requires warm bare-metal capacity at a fixed floor cost. If load is unpredictable or under ~50 jobs per day, <a href="https://github.com/github-aws-runners/terraform-aws-github-runner" target="_blank" rel="noopener">terraform-aws-github-runner</a> provisions ephemeral EC2 spot instances and scales to zero &mdash; a better fit.</div></div>
         </li>
         <li class="fit-item">
           <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Already on Kubernetes</div><div class="fit-item-desc">ARC (Actions Runner Controller) integrates directly with your existing cluster. If you are already on EKS or GKE the operational overlap is zero and ARC is the right choice.</div></div>
+          <div><div class="fit-item-title">Already on Kubernetes</div><div class="fit-item-desc">ARC (Actions Runner Controller) integrates directly with an existing cluster. If you are already on EKS or GKE, ARC is the right call.</div></div>
         </li>
         <li class="fit-item">
           <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
           <div><div class="fit-item-title">Windows runners</div><div class="fit-item-desc">Firecracker is Linux-only. Windows jobs are not supported.</div></div>
-        </li>
-        <li class="fit-item">
-          <svg class="fit-icon" width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="7" fill="rgba(248,113,113,0.12)"/><path d="M5 5l4 4M9 5l-4 4" stroke="#f87171" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          <div><div class="fit-item-title">Highly variable load</div><div class="fit-item-desc">Warm bare-metal hosts are required for fast dispatch. Scaling to zero kills the DX. If your CI load is unpredictable and spiky, per-job EC2 runners are a better match.</div></div>
         </li>
       </ul>
     </div>
@@ -1057,36 +1045,20 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
   <p class="section-desc">When jobs handle secrets, run privileged operations, or modify the Docker daemon, sharing a kernel is a liability. VM-per-job removes the class of problem entirely.</p>
   <div class="feat-grid">
     <div class="feat-cell">
-      <h3>Separate kernel per job</h3>
-      <p>Not a container. Not a namespace. A real Firecracker microVM with its own kernel, booted in under 200&nbsp;ms and destroyed on exit. The disk never touches the next job.</p>
+      <h3>A real kernel per job</h3>
+      <p>Not a container &mdash; a Firecracker microVM with its own kernel, booted in under 200&nbsp;ms and destroyed on exit. Secrets, file descriptors, and kernel state vanish when the job does. No shared surface between jobs.</p>
     </div>
     <div class="feat-cell">
-      <h3>Sub-5 ms dispatch</h3>
-      <p>One persistent SSE connection per worker. The scheduler pushes job assignments the instant they&rsquo;re dequeued — no polling, no broker, no cold-start reconnect per job.</p>
+      <h3>150 ms to running, not 90 seconds</h3>
+      <p>EC2 cold starts take 60&ndash;90 seconds: provision, OS boot, runner registration. A microVM takes 150&nbsp;ms. On short, frequent jobs that gap is most of the CI wait time &mdash; not overhead.</p>
     </div>
     <div class="feat-cell">
-      <h3>Right-sized, not over-provisioned</h3>
-      <p>Seven sizes from <code>small</code> (1&nbsp;vCPU) to <code>8xlarge</code> (64&nbsp;vCPU&nbsp;/&nbsp;128&nbsp;GiB). Jobs only dispatch to workers with the headroom to match. No overcommit, ever.</p>
+      <h3>Dense scheduling on bare metal</h3>
+      <p>One host runs 20+ microVMs simultaneously with exact size matching and zero overcommit. Above roughly 15 concurrent jobs, that density makes bare metal cheaper per job than a fresh EC2 instance each time.</p>
     </div>
     <div class="feat-cell">
-      <h3>GPU jobs go straight to metal</h3>
-      <p>Register GPU hosts in <code>process</code> mode with a <code>gpu</code> capability label. Jobs that need GPU land exclusively on those hosts. Firecracker isn&rsquo;t in the critical path.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>Scale the right fleet, not all of them</h3>
-      <p>Separate EC2 launch templates per size tier. Each one scales independently against its own queue depth. Workers drain naturally, with no forced termination mid-job.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>GitHub goes down. Your queue doesn&rsquo;t.</h3>
-      <p>The circuit breaker trips after 5 consecutive API failures and returns <code>503</code>. GitHub retries webhook deliveries for up to 72&nbsp;hours. No events are dropped.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>Metrics from day one</h3>
-      <p>Queue depth, dispatch latency, VM boot time, job duration — all emitted as OTLP. Drop the included OTel Collector config on each host and ship to Grafana or Datadog.</p>
-    </div>
-    <div class="feat-cell">
-      <h3>Simulate mode for local dev</h3>
-      <p>Set <code>BURSTGRID_MODE=simulate</code> on any worker to run jobs as local processes — no KVM, no bare metal, no EC2. The full scheduler/worker/webhook loop works on a laptop.</p>
+      <h3>One binary. No orchestration layer.</h3>
+      <p>The scheduler is a single process: webhook in, SSE push to workers, done. No Lambda functions to package, no SQS queues to tune, no Terraform state to maintain.</p>
     </div>
   </div>
 </div>

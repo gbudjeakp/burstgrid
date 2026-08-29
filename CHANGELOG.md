@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.9.0](https://github.com/gbudjeakp/burstgrid/compare/v1.8.0...v1.9.0) (2026-08-29)
+
+
+### Features
+
+* add burstgrid CLI dispatcher with init and validate subcommands ([7574eb8](https://github.com/gbudjeakp/burstgrid/commit/7574eb82588feb79d19a722c0b9df17d99ea5e88))
+
+
+### Bug Fixes
+
+* pass --work to runner config.sh for per-slot work dir isolation ([2f50947](https://github.com/gbudjeakp/burstgrid/commit/2f509475b1f5c831c141ff0e37852811f7967e9b))
+
 ## [1.8.0](https://github.com/gbudjeakp/burstgrid/compare/v1.7.3...v1.8.0) (2026-08-29)
 
 

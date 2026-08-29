@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.2](https://github.com/gbudjeakp/burstgrid/compare/v1.6.1...v1.6.2) (2026-08-29)
+
+
+### Bug Fixes
+
+* **terraform:** escape bash default ${VAR:-fallback} in .tpl; add slot+agent tests ([4936e44](https://github.com/gbudjeakp/burstgrid/commit/4936e440873fd6c7a72546cf7f5da1fcb33ad1a1))
+* **tests:** fix agent test duplicate symbol ([8a18034](https://github.com/gbudjeakp/burstgrid/commit/8a1803423e3fd29bd84c0199f4b90a2de15070ea))
+* **tests:** fix TS errors — ConstructorParameters and spy cast ([4942cf6](https://github.com/gbudjeakp/burstgrid/commit/4942cf630b46f1102c54143dc4838b338f0179c8))
+* **tests:** use wait() for rejection in slot process mode test ([2c614f3](https://github.com/gbudjeakp/burstgrid/commit/2c614f3a9e7e8205bf605ba0ec4abd0ff2361412))
+* **worker:** per-slot runner directory isolation ([168b3c0](https://github.com/gbudjeakp/burstgrid/commit/168b3c025665059fcfc03aac99d1f0e69967aabf))
+* **worker:** per-slot runner directory isolation ([1429f3f](https://github.com/gbudjeakp/burstgrid/commit/1429f3f356c4e1d1d9d0867a56e1afa00985bb23))
+
 ## [1.6.1](https://github.com/gbudjeakp/burstgrid/compare/v1.6.0...v1.6.1) (2026-08-29)
 
 

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.6.1](https://github.com/gbudjeakp/burstgrid/compare/v1.6.0...v1.6.1) (2026-08-29)
+
+
+### Bug Fixes
+
+* **worker:** dynamic RUNNER_REPO_URL + clean stale runner state ([be8d722](https://github.com/gbudjeakp/burstgrid/commit/be8d722311b76fd32d6ee4a0c922cbaa025d704e))
+* **worker:** dynamic RUNNER_REPO_URL; clean stale runner state ([459af76](https://github.com/gbudjeakp/burstgrid/commit/459af7660b6e433ccbffa4408aa079f04cd7c249))
+
 ## [1.6.0](https://github.com/gbudjeakp/burstgrid/compare/v1.5.3...v1.6.0) (2026-08-29)
 
 

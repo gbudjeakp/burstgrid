@@ -122,7 +122,7 @@ export function loadConfig(configPath?: string): BurstGridConfig {
     ?? process.env.BURSTGRID_CONFIG_PATH   // alias accepted for compatibility
     ?? path.join(process.cwd(), 'burstgrid.config.yaml');
 
-  if (!fs.existsSync(filePath)) return {};
+  if (!fs.existsSync(filePath)) return mergeEnvOverrides({});
 
   let raw: unknown;
   try {
@@ -138,5 +138,55 @@ export function loadConfig(configPath?: string): BurstGridConfig {
     process.exit(1);
   }
 
-  return result.data as BurstGridConfig;
+  return mergeEnvOverrides(result.data as BurstGridConfig);
+}
+
+/**
+ * Apply env-var overrides on top of a parsed config (or an empty config when no YAML exists).
+ * This lets operators configure BurstGrid entirely through environment variables.
+ *
+ * Supported vars:
+ *   BURSTGRID_REDIS_URL          → backends.redis.url
+ *   BURSTGRID_SQS_QUEUE_URL      → backends.sqs.queueUrl
+ *   BURSTGRID_SQS_REGION         → backends.sqs.region
+ *   BURSTGRID_DYNAMODB_TABLE     → backends.dynamodb.tableName
+ *   BURSTGRID_DYNAMODB_REGION    → backends.dynamodb.region
+ *   BURSTGRID_AUTOSCALER         → autoscaler.enabled  (true|false|1|0)
+ *   BURSTGRID_REGISTRY_MIRROR    → worker.registryMirror
+ *   BURSTGRID_S3_CACHE_BUCKET    → worker.s3Cache.bucketName
+ *   BURSTGRID_S3_CACHE_REGION    → worker.s3Cache.region
+ *   BURSTGRID_SNAPSHOT_POOL_SIZE → worker.snapshotPool.size
+ */
+export function mergeEnvOverrides(cfg: BurstGridConfig): BurstGridConfig {
+  const e = process.env;
+
+  if (e.BURSTGRID_REDIS_URL) {
+    cfg.backends = { ...cfg.backends, redis: { url: e.BURSTGRID_REDIS_URL } };
+  }
+  if (e.BURSTGRID_SQS_QUEUE_URL) {
+    cfg.backends = { ...cfg.backends, sqs: { queueUrl: e.BURSTGRID_SQS_QUEUE_URL, region: e.BURSTGRID_SQS_REGION } };
+  }
+  if (e.BURSTGRID_DYNAMODB_TABLE) {
+    cfg.backends = { ...cfg.backends, dynamodb: { tableName: e.BURSTGRID_DYNAMODB_TABLE, region: e.BURSTGRID_DYNAMODB_REGION } };
+  }
+  if (e.BURSTGRID_AUTOSCALER !== undefined) {
+    cfg.autoscaler = { ...cfg.autoscaler, enabled: e.BURSTGRID_AUTOSCALER === 'true' || e.BURSTGRID_AUTOSCALER === '1' };
+  }
+  if (e.BURSTGRID_REGISTRY_MIRROR) {
+    cfg.worker = { ...cfg.worker, registryMirror: e.BURSTGRID_REGISTRY_MIRROR };
+  }
+  if (e.BURSTGRID_S3_CACHE_BUCKET) {
+    cfg.worker = {
+      ...cfg.worker,
+      s3Cache: { bucketName: e.BURSTGRID_S3_CACHE_BUCKET, region: e.BURSTGRID_S3_CACHE_REGION },
+    };
+  }
+  if (e.BURSTGRID_SNAPSHOT_POOL_SIZE) {
+    const size = parseInt(e.BURSTGRID_SNAPSHOT_POOL_SIZE, 10);
+    if (!isNaN(size) && size > 0) {
+      cfg.worker = { ...cfg.worker, snapshotPool: { ...cfg.worker?.snapshotPool, size } };
+    }
+  }
+
+  return cfg;
 }

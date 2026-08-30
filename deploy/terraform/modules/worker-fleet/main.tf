@@ -30,7 +30,7 @@ variable "fleets" {
 resource "aws_security_group" "worker" {
   name_prefix = "burstgrid-worker-"
   vpc_id      = var.vpc_id
-  description = "BurstGrid worker — egress only"
+  description = "BurstGrid worker - egress only"
 
   egress {
     from_port   = 0

@@ -723,21 +723,39 @@
       <div class="flow-right">
         <div class="flow-title">Edit <code>terraform.tfvars</code>, then run <code>burstgrid deploy</code></div>
         <div class="flow-body">
-          Fill in your VPC ID, AMI IDs (stock Ubuntu 24.04 — no custom image required), and S3 bucket name in
-          <code>deploy/terraform/terraform.tfvars</code>. Then run one command. It builds the scheduler and worker-agent
-          binaries, uploads them to S3, and calls <code>terraform apply</code> to provision the scheduler EC2 instance,
-          IAM roles, security groups, SQS queue, and EC2 launch templates for each worker fleet.
-          Workers are stock Ubuntu — they pull the agent binary from S3 at boot, install Node and the Actions runner,
-          and connect to the scheduler automatically. Nothing to bake into an AMI.
+          Fill in your VPC, subnet, AMI, and S3 bucket in <code>deploy/terraform/terraform.tfvars</code>, then run one command.
+          Most AWS accounts have a default VPC — the three commands below print every value you need.
+          The AMI IDs are stock Ubuntu 24.04; no custom image required.
+          <code>burstgrid deploy</code> builds the scheduler and worker-agent binaries, uploads them to S3,
+          and calls <code>terraform apply</code> to provision the EC2 instance, IAM roles, SQS queue, and worker fleet.
         </div>
         <div class="snippet">
-          <div class="snippet-tab">deploy/terraform/terraform.tfvars — minimal required fields</div>
+          <div class="snippet-tab">Find your VPC, subnet, and AMI IDs (AWS CLI)</div>
+          <div class="snippet-body"><span class="s-cm"># Default VPC</span>
+<span class="t-p">$</span> <span class="t-cmd">aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
+    --query 'Vpcs[0].VpcId' --output text</span>
+<span class="t-ok">vpc-0abc1234</span>
+
+<span class="s-cm"># First public subnet in that VPC (use the same value for both subnet fields)</span>
+<span class="t-p">$</span> <span class="t-cmd">aws ec2 describe-subnets \
+    --filters Name=vpc-id,Values=vpc-0abc1234 Name=map-public-ip-on-launch,Values=true \
+    --query 'Subnets[0].SubnetId' --output text</span>
+<span class="t-ok">subnet-0def5678</span>
+
+<span class="s-cm"># Latest Ubuntu 24.04 ARM64 AMI (use for both scheduler_ami and worker_ami)</span>
+<span class="t-p">$</span> <span class="t-cmd">aws ec2 describe-images --owners 099720109477 \
+    --filters 'Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*' \
+    --query 'sort_by(Images,&amp;CreationDate)[-1].ImageId' --output text</span>
+<span class="t-ok">ami-0abc123def456789</span></div>
+        </div>
+        <div class="snippet" style="margin-top:10px;">
+          <div class="snippet-tab">deploy/terraform/terraform.tfvars</div>
           <div class="snippet-body"><span class="s-key">aws_region</span>          = <span class="s-str">"us-east-1"</span>
-<span class="s-key">vpc_id</span>              = <span class="s-str">"vpc-xxxxxxxx"</span>
-<span class="s-key">scheduler_subnet_id</span> = <span class="s-str">"subnet-xxxxxxxx"</span>  <span class="s-cm"># public subnet (GitHub webhook source)</span>
-<span class="s-key">nat_subnet_id</span>       = <span class="s-str">"subnet-xxxxxxxx"</span>  <span class="s-cm"># same public subnet is fine for small setups</span>
-<span class="s-key">scheduler_ami</span>       = <span class="s-str">"ami-xxxxxxxx"</span>       <span class="s-cm"># Ubuntu 24.04 ARM64 (find at ubuntu.com/aws)</span>
-<span class="s-key">worker_ami</span>          = <span class="s-str">"ami-xxxxxxxx"</span>       <span class="s-cm"># same — workers are stock Ubuntu, no custom image needed</span>
+<span class="s-key">vpc_id</span>              = <span class="s-str">"vpc-0abc1234"</span>
+<span class="s-key">scheduler_subnet_id</span> = <span class="s-str">"subnet-0def5678"</span>
+<span class="s-key">nat_subnet_id</span>       = <span class="s-str">"subnet-0def5678"</span>   <span class="s-cm"># same subnet is fine</span>
+<span class="s-key">scheduler_ami</span>       = <span class="s-str">"ami-0abc123def456789"</span>
+<span class="s-key">worker_ami</span>          = <span class="s-str">"ami-0abc123def456789"</span>
 <span class="s-key">s3_artifacts_bucket</span> = <span class="s-str">"my-burstgrid-bucket"</span>
 <span class="s-key">webhook_secret</span>      = <span class="s-str">"your-webhook-secret"</span>
 <span class="s-key">worker_token</span>        = <span class="s-str">"your-worker-token"</span></div>

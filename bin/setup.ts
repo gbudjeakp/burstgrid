@@ -10,6 +10,7 @@
  *   npx burstgrid setup                     # bucket name derived from account ID
  *   npx burstgrid setup --bucket my-bucket
  *   npx burstgrid setup --region us-west-2
+ *   npx burstgrid setup --ami ami-0abc123456789   # skip detection, use this AMI
  *   npx burstgrid setup --force             # overwrite existing terraform.tfvars
  */
 
@@ -31,6 +32,7 @@ function opt(name: string): string | undefined {
 
 const force  = flag('force');
 const region = opt('region') ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
+const amiOverride = opt('ami');
 
 // ── AWS CLI helper ────────────────────────────────────────────────────────────
 
@@ -136,23 +138,29 @@ const subnetId = rawSubnet;
 ok('Public subnet', subnetId);
 
 // 4. Latest Ubuntu 24.04 ARM64 AMI (Canonical owner ID 099720109477)
-const rawAmi = awsCli(
-  ['ec2', 'describe-images',
-    '--owners', '099720109477',
-    '--filters', 'Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*',
-    '--query', 'sort_by(Images,&CreationDate)[-1].ImageId', '--output', 'text'],
-  'Could not find Ubuntu 24.04 ARM64 AMI.',
-);
-if (!rawAmi || rawAmi === 'None') {
-  bail(
-    `Ubuntu 24.04 ARM64 AMI not found in ${resolvedRegion}.`,
-    '  This AMI should exist in every commercial region.',
-    '  Fix: check your region spelling, or find the AMI manually at https://cloud-images.ubuntu.com/locator/ec2/',
-    '  then edit the generated terraform.tfvars.',
+let amiId: string;
+if (amiOverride) {
+  amiId = amiOverride;
+  ok('AMI', amiId);
+} else {
+  const rawAmi = awsCli(
+    ['ec2', 'describe-images',
+      '--owners', '099720109477',
+      '--filters', 'Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*',
+      '--query', 'sort_by(Images,&CreationDate)[-1].ImageId', '--output', 'text'],
+    'Could not find Ubuntu 24.04 ARM64 AMI.',
   );
+  if (!rawAmi || rawAmi === 'None') {
+    bail(
+      `Ubuntu 24.04 ARM64 AMI not found in ${resolvedRegion}.`,
+      '  This AMI should exist in every commercial region.',
+      '  Fix: check your region spelling, or find the AMI manually at https://cloud-images.ubuntu.com/locator/ec2/',
+      '  then edit the generated terraform.tfvars, or pass --ami <id> to skip detection.',
+    );
+  }
+  amiId = rawAmi;
+  ok('Ubuntu 24.04 ARM64 AMI', amiId);
 }
-const amiId = rawAmi;
-ok('Ubuntu 24.04 ARM64 AMI', amiId);
 
 // 5. S3 bucket name
 const bucket = opt('bucket') ?? process.env.BURSTGRID_S3_BUCKET ?? `burstgrid-${accountId}`;

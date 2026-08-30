@@ -1032,14 +1032,14 @@ RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
         <div class="snippet">
           <div class="snippet-tab">burstgrid.config.yaml</div>
           <div class="snippet-body"><span class="s-key">gpuAmis</span>:
-  - <span class="s-key">name</span>:            <span class="s-str">cuda12-pytorch2</span>
-    <span class="s-key">amiId</span>:           <span class="s-str">ami-0d3e4f5a6b7c8d9e0</span>
+  - <span class="s-key">name</span>:            <span class="s-str">my-gpu-profile</span>        <span class="s-cm"># referenced in runs-on label</span>
+    <span class="s-key">amiId</span>:           <span class="s-str">ami-xxxxxxxxxxxxxxxxx</span>  <span class="s-cm"># your pre-baked GPU AMI</span>
     <span class="s-key">region</span>:          <span class="s-str">us-east-1</span>
-    <span class="s-key">cudaVersion</span>:     <span class="s-str">"12.4"</span>
+    <span class="s-key">cudaVersion</span>:     <span class="s-str">"12.x"</span>                 <span class="s-cm"># informational only</span>
     <span class="s-key">instanceFamilies</span>: [g4dn, g5, p3]
     <span class="s-key">dockerEnabled</span>:   <span class="s-str">true</span>
-    <span class="s-key">cachedPackages</span>:  [torch==2.3.0, transformers==4.40.0]
-    <span class="s-key">cachedModels</span>:    [meta-llama/Llama-3-8B-Instruct]
+    <span class="s-key">cachedPackages</span>:  [torch, transformers]     <span class="s-cm"># pip packages pre-installed in the AMI</span>
+    <span class="s-key">cachedModels</span>:    [org/model-name]           <span class="s-cm"># HuggingFace model IDs pre-downloaded</span>
     <span class="s-key">env</span>:
       <span class="s-key">TORCH_HOME</span>: <span class="s-str">/opt/model-cache</span></div>
         </div>

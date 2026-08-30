@@ -354,20 +354,8 @@
         </button>
         <div class="sidebar-group-items">
           <a href="#" class="sidebar-link">Introduction</a>
-          <a href="#who-its-for" class="sidebar-link">Who it's for</a>
-          <a href="#how-it-works" class="sidebar-link">Architecture</a>
-        </div>
-      </div>
-      <div class="sidebar-group">
-        <button class="sidebar-group-label" data-group>
-          <span>The flow</span>
-          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
-        </button>
-        <div class="sidebar-group-items">
-          <a href="#flow-webhook" class="sidebar-link sub">Webhook received</a>
-          <a href="#flow-token" class="sidebar-link sub">Token &amp; queue</a>
-          <a href="#flow-dispatch" class="sidebar-link sub">Dispatch over SSE</a>
-          <a href="#flow-boot" class="sidebar-link sub">VM boot</a>
+          <a href="#who-its-for" class="sidebar-link">Who it&rsquo;s for</a>
+          <a href="#how-it-works" class="sidebar-link">How it works</a>
         </div>
       </div>
       <div class="sidebar-group">
@@ -378,19 +366,32 @@
         <div class="sidebar-group-items">
           <a href="#get-started" class="sidebar-link">Setup guide</a>
           <a href="#step-github-app" class="sidebar-link sub">GitHub App</a>
-          <a href="#step-scheduler" class="sidebar-link sub">Deploy scheduler</a>
-          <a href="#step-rootfs" class="sidebar-link sub">Build rootfs</a>
-          <a href="#step-workers" class="sidebar-link sub">Worker agents</a>
+          <a href="#step-scheduler" class="sidebar-link sub">Setup &amp; deploy</a>
+          <a href="#step-rootfs" class="sidebar-link sub">Workers boot</a>
           <a href="#step-workflows" class="sidebar-link sub">Workflows</a>
         </div>
       </div>
       <div class="sidebar-group">
         <button class="sidebar-group-label" data-group>
-          <span>Why BurstGrid</span>
+          <span>Configuration</span>
           <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
         </button>
         <div class="sidebar-group-items">
-          <a href="#features" class="sidebar-link">Features</a>
+          <a href="#config-cache" class="sidebar-link sub">Actions cache</a>
+          <a href="#config-concurrency" class="sidebar-link sub">Per-repo limits</a>
+          <a href="#config-dynamodb" class="sidebar-link sub">DynamoDB</a>
+          <a href="#config-redis" class="sidebar-link sub">Redis queue</a>
+          <a href="#config-sqs" class="sidebar-link sub">SQS queue</a>
+          <a href="#config-snapshot" class="sidebar-link sub">Snapshot pool</a>
+        </div>
+      </div>
+      <div class="sidebar-group">
+        <button class="sidebar-group-label" data-group>
+          <span>Features</span>
+          <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
+        </button>
+        <div class="sidebar-group-items">
+          <a href="#features" class="sidebar-link">Why BurstGrid</a>
         </div>
       </div>
       <div class="sidebar-group">
@@ -834,6 +835,74 @@ Next steps:
     <span class="s-key">steps</span>:
       - <span class="s-key">run</span>: <span class="s-str">python train.py</span></div>
         </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<hr class="rule" />
+
+<!-- Configuration -->
+<div class="section" id="configuration">
+  <div class="label">Configuration</div>
+  <h2>Optional features, all env vars</h2>
+  <p class="section-desc">No config file required. Each feature below activates with one environment variable — set them on the scheduler unless otherwise noted.</p>
+  <div class="feat-grid">
+
+    <div class="feat-cell" id="config-cache">
+      <h3>GitHub Actions cache (S3)</h3>
+      <p>BurstGrid serves the GitHub Actions cache protocol directly over S3. Set the bucket and <code>actions/cache</code> works in every job without any workflow changes. Cache keys are scoped per repo.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">BURSTGRID_S3_CACHE_BUCKET</span>=<span class="s-str">my-cache-bucket</span>
+<span class="s-key">BURSTGRID_S3_CACHE_REGION</span>=<span class="s-str">us-east-1</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-concurrency">
+      <h3>Per-repo concurrency limits</h3>
+      <p>Cap how many jobs a single repo runs at once. Org wildcards apply fleet-wide; repo-specific entries take priority. Jobs over the cap stay queued — not dropped.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">BURSTGRID_REPO_CONCURRENCY</span>=<span class="s-num">10</span>  <span class="s-cm"># default for any repo</span>
+<span class="s-cm"># — or in burstgrid.config.yaml —</span>
+<span class="s-key">scheduler</span>:
+  <span class="s-key">concurrencyLimits</span>:
+    <span class="s-key">myorg/*</span>: <span class="s-num">20</span>
+    <span class="s-key">myorg/monorepo</span>: <span class="s-num">5</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-dynamodb">
+      <h3>DynamoDB deduplication</h3>
+      <p>Store job state in DynamoDB so duplicate webhook deliveries are silently dropped and already-running jobs survive a scheduler restart. The table is created by the Terraform module.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">BURSTGRID_DYNAMODB_TABLE</span>=<span class="s-str">burstgrid-jobs</span>
+<span class="s-key">BURSTGRID_DYNAMODB_REGION</span>=<span class="s-str">us-east-1</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-redis">
+      <h3>Redis queue</h3>
+      <p>Replace the in-memory queue with Redis. Required if you run more than one scheduler replica or want queued jobs to survive process restarts. ElastiCache or any Redis-compatible endpoint works.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">BURSTGRID_REDIS_URL</span>=<span class="s-str">redis://your-elasticache:6379</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-sqs">
+      <h3>SQS queue</h3>
+      <p>Use SQS as the durable queue backend — no Redis needed. Jobs survive restarts and can be retried on failure. Useful when you want AWS-native durability without a separate cache cluster.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">BURSTGRID_SQS_QUEUE_URL</span>=<span class="s-str">https://sqs.us-east-1.amazonaws.com/123456/burstgrid</span>
+<span class="s-key">BURSTGRID_SQS_REGION</span>=<span class="s-str">us-east-1</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-snapshot">
+      <h3>Snapshot pool (fast boot)</h3>
+      <p>Pre-boot <em>N</em> Firecracker VMs and hold them as memory snapshots so the first job on a fresh worker starts instantly instead of waiting 150&nbsp;ms. Set on workers, not the scheduler. The pool refills in the background after each use.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">BURSTGRID_SNAPSHOT_POOL_SIZE</span>=<span class="s-num">4</span>  <span class="s-cm"># set on the worker agent</span></div>
       </div>
     </div>
 

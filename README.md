@@ -81,7 +81,16 @@ jobs:
 
 ## Configuration
 
-Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup. Every YAML key can also be set via environment variable — see `mergeEnvOverrides` in `src/config/index.ts`.
+Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup. Every YAML key can also be set via environment variable — no config file required.
+
+| Env var | What it does |
+|---|---|
+| `BURSTGRID_REDIS_URL` | Redis queue backend (default: in-memory) |
+| `BURSTGRID_SQS_QUEUE_URL` + `BURSTGRID_SQS_REGION` | SQS queue backend — durable, no Redis needed |
+| `BURSTGRID_DYNAMODB_TABLE` + `BURSTGRID_DYNAMODB_REGION` | DynamoDB job deduplication — drops duplicate webhook deliveries, survives restarts |
+| `BURSTGRID_S3_CACHE_BUCKET` + `BURSTGRID_S3_CACHE_REGION` | Serve GitHub Actions cache protocol over S3 — `actions/cache` works with no workflow changes |
+| `BURSTGRID_REPO_CONCURRENCY` | Default per-repo concurrency cap (int) |
+| `BURSTGRID_SNAPSHOT_POOL_SIZE` | Pre-boot N Firecracker VMs per worker for sub-millisecond first dispatch |
 
 ### Per-repo concurrency limits
 

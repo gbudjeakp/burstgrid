@@ -8,6 +8,7 @@ const HELP = `
 Usage: burstgrid <command> [options]
 
 Commands:
+  setup     Auto-detect VPC/subnet/AMI and write deploy/terraform/terraform.tfvars
   deploy    Build, upload artefacts to S3, and optionally run terraform apply
   init      Scaffold burstgrid.config.yaml from live AWS resources
   validate  Parse and validate an existing burstgrid.config.yaml
@@ -29,6 +30,9 @@ const __dirname = path.dirname(__filename);
 const ext = __filename.endsWith('.mjs') ? '.mjs' : '.js';
 
 switch (cmd) {
+  case 'setup':
+    await import(path.join(__dirname, `setup${ext}`));
+    break;
   case 'deploy':
     await import(path.join(__dirname, `deploy${ext}`));
     break;

@@ -101,68 +101,55 @@ Jobs over the limit stay queued and are dispatched as running jobs complete — 
 
 ## Production setup
 
-### 1. Create EC2 launch templates
+Workers run on stock Ubuntu 24.04 — no custom AMI required. They pull the agent binary from S3 at boot, install the Actions runner, and connect to the scheduler automatically.
 
-BurstGrid looks for launch templates named `burstgrid-<size>` (e.g. `burstgrid-large`). Each template must:
-- Use a BurstGrid worker AMI (with `burstgrid-worker-agent` installed and enabled as a systemd service)
-- Include an IAM instance profile with EC2 describe + SSM permissions
-- Have a security group with outbound HTTPS (443) to GitHub and your scheduler
+### 1. Configure Terraform
 
-```bash
-aws ec2 create-launch-template \
-  --launch-template-name burstgrid-large \
-  --launch-template-data '{
-    "ImageId": "ami-XXXX",
-    "InstanceType": "m6g.2xlarge",
-    "IamInstanceProfile": {"Name": "burstgrid-worker"},
-    "SecurityGroupIds": ["sg-XXXX"],
-    "UserData": "<base64-encoded user-data>"
-  }'
+Fill in `deploy/terraform/terraform.tfvars`:
+
+```hcl
+aws_region          = "us-east-1"
+vpc_id              = "vpc-xxxxxxxx"
+scheduler_subnet_id = "subnet-xxxxxxxx"   # public subnet (receives GitHub webhooks)
+nat_subnet_id       = "subnet-xxxxxxxx"
+scheduler_ami       = "ami-xxxxxxxx"       # stock Ubuntu 24.04 ARM64
+worker_ami          = "ami-xxxxxxxx"       # same — no custom image needed
+s3_artifacts_bucket = "my-burstgrid-bucket"
+webhook_secret      = "your-webhook-secret"
+worker_token        = "your-worker-token"
 ```
 
-Workers must be **bare-metal or standard EC2** — Firecracker requires KVM (`m6g.metal`, `m7i.metal-*`, or any `.metal` type). Use standard instances (e.g. `m6g.2xlarge`) for `process` mode only.
-
-### 2. Generate config from AWS
-
-Once templates exist, `burstgrid init` auto-discovers them and your VPC subnets:
+### 2. Deploy — one command
 
 ```bash
-npx burstgrid init                   # writes burstgrid.config.yaml in the current directory
-npx burstgrid init --region us-west-2
-npx burstgrid init --out /etc/burstgrid/config.yaml
+npx burstgrid deploy
+# builds dist/, uploads scheduler.mjs + worker-agent.mjs to S3, runs terraform apply
+
+# options
+npx burstgrid deploy --bucket my-bucket          # explicit bucket (skips tfvars detection)
+npx burstgrid deploy --no-terraform --dry-run    # preview without changing anything
 ```
 
-This queries your AWS account for:
-- All launch templates matching `burstgrid-*`
-- The VPC with the most AZ coverage, picks one subnet per AZ
+### 3. Register the GitHub App (or PAT)
 
-If no templates are found, the command prints the exact `aws ec2 create-launch-template` command needed and writes a config with placeholders.
+Create a GitHub App with **Administration: read & write** + **Actions: read** permissions, subscribe to `workflow_job` events, and set the webhook URL to `https://your-scheduler:8080/webhook/github`.
+For single-repo testing a PAT (`GITHUB_TOKEN=ghp_xxx`) is fine.
 
-### 3. Deploy the scheduler
+### 4. Point workflows
 
-```bash
-# Build
-pnpm build
-
-# Upload scheduler binary to S3
-aws s3 cp dist/scheduler.mjs s3://your-bucket/scheduler.mjs
-
-# Start on your scheduler EC2 instance
-BURSTGRID_GITHUB_TOKEN=ghp_xxx \
-BURSTGRID_WEBHOOK_SECRET=your-secret \
-BURSTGRID_CONFIG=/etc/burstgrid/config.yaml \
-node dist/scheduler.mjs
+```yaml
+jobs:
+  test:
+    runs-on: [self-hosted, linux, burstgrid:size=large]
 ```
 
-### 4. Register GitHub webhook
+That's the only change needed in your workflow files.
 
-Point your repo (or org) webhook at `https://scheduler-host:8080/webhook/github`, content type `application/json`, events: **Workflow jobs**.
+### Scale-down
 
-### 5. Scale-down
+Idle workers terminate automatically after 300 s. One warm standby is kept per fleet to eliminate cold-start latency. Set `scaleDownAfterIdleSec: 0` to disable.
 
-Idle workers terminate automatically after `scaleDownAfterIdleSec` (default 300 s). One warm standby is kept per fleet to avoid cold-start latency on the next burst. Set `scaleDownAfterIdleSec: 0` to disable.
-
-See [`deploy/terraform/`](deploy/terraform/) for full AWS infra and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
+See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
 
 ## Build & test
 
@@ -170,6 +157,6 @@ See [`deploy/terraform/`](deploy/terraform/) for full AWS infra and [`deploy/ote
 pnpm install
 pnpm build       # dist/
 pnpm typecheck
-pnpm test        # 184 tests
+pnpm test        # 218 tests
 pnpm lint        # oxlint
 ```

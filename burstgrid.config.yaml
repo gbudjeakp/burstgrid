@@ -38,7 +38,7 @@ autoscaler:
     # medium — m6g.large (2 vCPU / 8 GiB)
     - name: medium
       sizeTag: "burstgrid:size=medium"
-      launchTemplateId: lt-0226a7adbaddc3f61
+      launchTemplateId: lt-0c84ed01e2a31ca2e
       subnetIds:
         - subnet-0b136ec9e36688842   # us-east-1a private
         - subnet-0b686a66cfa5a6d51   # us-east-1b private
@@ -52,7 +52,7 @@ autoscaler:
     # large — m6g.2xlarge (8 vCPU / 32 GiB)
     - name: large
       sizeTag: "burstgrid:size=large"
-      launchTemplateId: lt-041747510417976d3
+      launchTemplateId: lt-0b67047707171b426
       subnetIds:
         - subnet-0b136ec9e36688842
         - subnet-0b686a66cfa5a6d51
@@ -65,7 +65,7 @@ autoscaler:
     # xlarge — m6g.4xlarge (16 vCPU / 64 GiB)
     - name: xlarge
       sizeTag: "burstgrid:size=xlarge"
-      launchTemplateId: lt-095f1eca61cca94d7
+      launchTemplateId: lt-0bb3ea8675106bb4a
       subnetIds:
         - subnet-0b136ec9e36688842
         - subnet-0b686a66cfa5a6d51

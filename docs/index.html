@@ -735,11 +735,11 @@
 
 BurstGrid setup
 
-  <span class="t-ok">✓</span> Account                      284347454476 (us-east-1)
-  <span class="t-ok">✓</span> Default VPC                  vpc-0abc1234
-  <span class="t-ok">✓</span> Public subnet                subnet-0def5678
-  <span class="t-ok">✓</span> Ubuntu 24.04 ARM64 AMI       ami-0abc123def456789
-  <span class="t-ok">✓</span> S3 bucket                    burstgrid-284347454476
+  <span class="t-ok">✓</span> Account                      123456789012 (us-east-1)
+  <span class="t-ok">✓</span> Default VPC                  vpc-0e1f2a3b4c5d6789
+  <span class="t-ok">✓</span> Public subnet                subnet-0a2b3c4d5e6f7890
+  <span class="t-ok">✓</span> Ubuntu 24.04 ARM64 AMI       ami-0d3e4f5a6b7c8d9e0
+  <span class="t-ok">✓</span> S3 bucket                    burstgrid-123456789012
   <span class="t-ok">✓</span> Webhook secret               (generated)
   <span class="t-ok">✓</span> Worker token                 (generated)
 
@@ -752,10 +752,10 @@ Next steps:
         <div class="snippet" style="margin-top:10px;">
           <div class="snippet-tab">Step 2 — build, upload, and provision</div>
           <div class="snippet-body"><span class="t-p">$</span> <span class="t-cmd">npx burstgrid deploy</span>
-<span class="t-ok">[deploy]</span> bucket=burstgrid-284347454476 region=us-east-1
+<span class="t-ok">[deploy]</span> bucket=burstgrid-123456789012 region=us-east-1
 <span class="t-ok">[deploy]</span> Building…
-<span class="t-ok">[deploy]</span> upload dist/scheduler.mjs → s3://burstgrid-284347454476/scheduler.mjs
-<span class="t-ok">[deploy]</span> upload dist/worker-agent.mjs → s3://burstgrid-284347454476/worker-agent.mjs
+<span class="t-ok">[deploy]</span> upload dist/scheduler.mjs → s3://burstgrid-123456789012/scheduler.mjs
+<span class="t-ok">[deploy]</span> upload dist/worker-agent.mjs → s3://burstgrid-123456789012/worker-agent.mjs
 <span class="t-ok">[deploy]</span> Running terraform apply in deploy/terraform…
 <span class="t-ok">[deploy]</span> Done.
 
@@ -1024,7 +1024,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
           <div class="snippet-tab">burstgrid.config.yaml</div>
           <div class="snippet-body"><span class="s-key">gpuAmis</span>:
   - <span class="s-key">name</span>:            <span class="s-str">cuda12-pytorch2</span>
-    <span class="s-key">amiId</span>:           <span class="s-str">ami-0abc1234</span>
+    <span class="s-key">amiId</span>:           <span class="s-str">ami-0d3e4f5a6b7c8d9e0</span>
     <span class="s-key">region</span>:          <span class="s-str">us-east-1</span>
     <span class="s-key">cudaVersion</span>:     <span class="s-str">"12.4"</span>
     <span class="s-key">instanceFamilies</span>: [g4dn, g5, p3]
@@ -1055,7 +1055,7 @@ ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&
     - <span class="s-key">name</span>:             <span class="s-str">gpu-ai</span>
       <span class="s-key">sizeTag</span>:          <span class="s-str">burstgrid:gpu</span>
       <span class="s-key">launchTemplateId</span>: <span class="s-str">lt-gpu-base</span>
-      <span class="s-key">gpuAmiId</span>:         <span class="s-str">ami-0abc1234</span>
+      <span class="s-key">gpuAmiId</span>:         <span class="s-str">ami-0d3e4f5a6b7c8d9e0</span>
       <span class="s-key">instanceType</span>:     <span class="s-str">g4dn.xlarge</span>
       <span class="s-key">capacityType</span>:     <span class="s-str">spot</span>          <span class="s-cm"># spot | on-demand</span>
       <span class="s-key">maxWorkers</span>:       <span class="s-num">5</span>

@@ -109,7 +109,7 @@ export class Autoscaler {
     if (pendingJobs.length === 0) return;
 
     const pendingVcpus = pendingJobs.reduce((s, j) =>
-      s + (j.vcpus ?? vmSizeFromLabels(j.labels).vcpus), 0);
+      s + vmSizeFromLabels(j.labels).vcpus, 0);
 
     if (pendingVcpus <= this.pool.totalFreeVcpus) return;
 

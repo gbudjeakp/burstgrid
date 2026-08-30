@@ -136,4 +136,18 @@ describe('Router dispatch', () => {
     queue.enqueue(makeJob('job-critical', ['linux', 'burstgrid:critical'], ExecutionTier.Critical));
     expect(queue.depth).toBe(1);
   });
+
+  it('emits a stale-job warning when a job has been queued >10 min with no capable workers', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    new Router(queue, pool);
+    // No workers registered — canAnyWorkerEverHandle returns false
+
+    queue.enqueue(makeJob('job-stale', ['linux']));
+
+    // Advance past the 10-min stale threshold; the 500ms drain interval will fire and warn
+    vi.advanceTimersByTime(10 * 60_000 + 501);
+
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('job-stale'));
+    warnSpy.mockRestore();
+  });
 });

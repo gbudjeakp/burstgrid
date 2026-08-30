@@ -18,8 +18,23 @@ export interface VMConfig {
   runnerLabels: string;
   /** Pull-through registry mirror URL injected as REGISTRY_MIRROR boot arg; init reads /proc/cmdline. */
   registryMirror?: string;
+  /** S3 cache server URL injected as ACTIONS_CACHE_URL boot arg. */
+  cacheServerUrl?: string;
+  /** Worker token injected as ACTIONS_RUNTIME_TOKEN so the VM can authenticate to the cache server. */
+  workerToken?: string;
   /** When true, passes runner_ephemeral=1 as a boot arg so the init script runs the runner with --ephemeral. */
   runnerEphemeral?: boolean;
+  /**
+   * When true, configures the MMDS device and omits token/labels from boot args.
+   * The guest init script polls http://169.254.169.254/ for runner-token and runner-labels.
+   * Required for snapshot-based boot (token injected after restore via injectMmdsToken).
+   */
+  mmdsMode?: boolean;
+}
+
+export interface SnapshotPaths {
+  snapshotPath: string;
+  memFilePath: string;
 }
 
 export class FirecrackerVM {
@@ -58,6 +73,51 @@ export class FirecrackerVM {
     }
   }
 
+  /**
+   * Restore a previously created snapshot in a fresh Firecracker process.
+   * Returns a booted FirecrackerVM ready for injectMmdsToken() + resume().
+   */
+  static async restoreFromSnapshot(cfg: VMConfig, paths: SnapshotPaths): Promise<FirecrackerVM> {
+    const vm = new FirecrackerVM(cfg);
+    await fs.mkdir(vm.sockDir, { recursive: true });
+
+    vm.proc = spawn('firecracker', ['--api-sock', vm.sockPath], { stdio: 'inherit' });
+    vm.exitPromise = new Promise((resolve, reject) => {
+      vm.proc!.on('exit', code => (code === 0 ? resolve() : reject(new Error(`firecracker exited ${code}`))));
+      vm.proc!.on('error', reject);
+    });
+
+    await vm.waitForSocket(5_000);
+    await vm.apiPut('/snapshot/load', {
+      snapshot_path: paths.snapshotPath,
+      mem_file_path: paths.memFilePath,
+      enable_diff_snapshots: false,
+    });
+    return vm;
+  }
+
+  /** Save a full memory snapshot of this VM (pauses VM). */
+  async createSnapshot(paths: SnapshotPaths): Promise<void> {
+    await fs.mkdir(path.dirname(paths.snapshotPath), { recursive: true });
+    await this.apiPut('/snapshot/create', {
+      snapshot_type: 'Full',
+      snapshot_path: paths.snapshotPath,
+      mem_file_path: paths.memFilePath,
+    });
+  }
+
+  /** Inject runner token and labels via MMDS so a paused (snapshot-restored) VM can resume. */
+  async injectMmdsToken(runnerToken: string, runnerLabels: string): Promise<void> {
+    await this.apiPatch('/mmds', {
+      latest: { 'meta-data': { 'runner-token': runnerToken, 'runner-labels': runnerLabels } },
+    });
+  }
+
+  /** Resume a paused VM (after snapshot load or after createSnapshot). */
+  async resume(): Promise<void> {
+    await this.apiPut('/actions', { action_type: 'Resume' });
+  }
+
   async wait(): Promise<void> {
     if (!this.exitPromise) throw new Error('VM not booted');
     return this.exitPromise;
@@ -69,13 +129,31 @@ export class FirecrackerVM {
   }
 
   private async configure(): Promise<void> {
-    // Runner token + labels are passed as kernel boot args; the rootfs init reads /proc/cmdline
-    const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
-    const ephemeralArg = this.cfg.runnerEphemeral ? ' runner_ephemeral=1' : '';
-    await this.apiPut('/boot-source', {
-      kernel_image_path: this.cfg.kernelPath,
-      boot_args: `console=ttyS0 reboot=k panic=1 pci=off RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels}${mirrorArg}${ephemeralArg}`,
-    });
+    if (this.cfg.mmdsMode) {
+      // MMDS mode: token injected after boot/restore via injectMmdsToken(); boot args are minimal
+      const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
+      const cacheArg = this.cfg.cacheServerUrl
+        ? ` ACTIONS_CACHE_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_TOKEN=${this.cfg.workerToken ?? ''}`
+        : '';
+      await this.apiPut('/boot-source', {
+        kernel_image_path: this.cfg.kernelPath,
+        boot_args: `console=ttyS0 reboot=k panic=1 pci=off MMDS_MODE=1${mirrorArg}${cacheArg}`,
+      });
+      // Pre-populate MMDS with empty token so guest poll doesn't 404 on first request
+      await this.apiPut('/mmds/config', { ipv4_address: '169.254.169.254', network_interfaces: [] });
+      await this.apiPut('/mmds', { latest: { 'meta-data': { 'runner-token': '', 'runner-labels': '' } } });
+    } else {
+      // Boot-arg mode (default): token + labels baked into kernel cmdline
+      const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
+      const ephemeralArg = this.cfg.runnerEphemeral ? ' runner_ephemeral=1' : '';
+      const cacheArg = this.cfg.cacheServerUrl
+        ? ` ACTIONS_CACHE_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_TOKEN=${this.cfg.workerToken ?? ''}`
+        : '';
+      await this.apiPut('/boot-source', {
+        kernel_image_path: this.cfg.kernelPath,
+        boot_args: `console=ttyS0 reboot=k panic=1 pci=off RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels}${mirrorArg}${ephemeralArg}${cacheArg}`,
+      });
+    }
     await this.apiPut('/drives/rootfs', {
       drive_id: 'rootfs',
       path_on_host: this.cfg.rootfsPath,
@@ -96,13 +174,21 @@ export class FirecrackerVM {
 
   /** Firecracker's management API is served over a Unix domain socket. */
   private apiPut(apiPath: string, body: unknown): Promise<void> {
+    return this.apiRequest('PUT', apiPath, body);
+  }
+
+  private apiPatch(apiPath: string, body: unknown): Promise<void> {
+    return this.apiRequest('PATCH', apiPath, body);
+  }
+
+  private apiRequest(method: string, apiPath: string, body: unknown): Promise<void> {
     const data = JSON.stringify(body);
     return new Promise((resolve, reject) => {
       const req = http.request(
         {
           socketPath: this.sockPath,
           path: apiPath,
-          method: 'PUT',
+          method,
           headers: {
             'Content-Type': 'application/json',
             'Content-Length': Buffer.byteLength(data),

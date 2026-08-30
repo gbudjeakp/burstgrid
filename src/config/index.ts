@@ -49,6 +49,15 @@ const ConfigSchema = z.object({
     images: z.array(RootfsImageSchema).optional(),
     dispatchTimeoutMs: z.number().int().positive().optional(),
     jobTimeoutMs: z.number().int().positive().optional(),
+    s3Cache: z.object({
+      bucketName: z.string(),
+      region: z.string().optional(),
+      keyPrefix: z.string().optional(),
+    }).strict().optional(),
+    snapshotPool: z.object({
+      size: z.number().int().positive().optional(),
+      snapshotDir: z.string().optional(),
+    }).strict().optional(),
   }).strict().optional(),
   autoscaler: z.object({
     enabled: z.boolean().optional(),
@@ -80,6 +89,10 @@ export interface BurstGridConfig {
     dispatchTimeoutMs?: number;
     /** Ms after running before a job that never completes is marked failed. Default: 3_600_000 (1h). */
     jobTimeoutMs?: number;
+    /** S3-backed GitHub Actions cache — exposes ACTIONS_CACHE_URL to VMs. */
+    s3Cache?: { bucketName: string; region?: string; keyPrefix?: string };
+    /** Pre-warmed Firecracker snapshot pool for ~5ms VM restore instead of ~150ms cold boot. */
+    snapshotPool?: { size?: number; snapshotDir?: string };
   };
   autoscaler?: {
     enabled?: boolean;

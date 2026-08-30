@@ -107,3 +107,12 @@ describe('WorkerAgent — slot index pool', () => {
   });
 });
 
+describe('WorkerAgent — evict()', () => {
+  it('resolves without throwing when the scheduler is unreachable', async () => {
+    const agent = makeAgent(1);
+    vi.spyOn(agent as unknown as { post(path: string, body: unknown): Promise<unknown> }, 'post')
+      .mockRejectedValue(new Error('ECONNREFUSED'));
+    await expect(agent.evict()).resolves.toBeUndefined();
+  });
+});
+

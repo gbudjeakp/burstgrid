@@ -43,6 +43,10 @@ const ConfigSchema = z.object({
     rateLimitMax: z.number().int().positive().optional(),
     rateLimitWindow: z.string().optional(),
     drainTimeoutMs: z.number().int().positive().optional(),
+    /** Max concurrent jobs per repo. Key is 'owner/repo' or 'owner/*' for org-wide. */
+    concurrencyLimits: z.record(z.string(), z.number().int().positive()).optional(),
+    /** Default max concurrent jobs for any repo not matched by concurrencyLimits. Unlimited if absent. */
+    defaultRepoConcurrency: z.number().int().positive().optional(),
   }).strict().optional(),
   worker: z.object({
     registryMirror: z.string().optional(),
@@ -81,6 +85,10 @@ export interface BurstGridConfig {
     rateLimitWindow?: string;
     /** Max ms to wait for in-flight jobs to finish during graceful shutdown. Default: 300_000 (5 min). */
     drainTimeoutMs?: number;
+    /** Per-repo job concurrency caps. Key: 'owner/repo' or 'owner/*' (org-wide). */
+    concurrencyLimits?: Record<string, number>;
+    /** Global default max concurrent jobs per repo when no specific limit matches. */
+    defaultRepoConcurrency?: number;
   };
   worker?: {
     registryMirror?: string;
@@ -185,6 +193,12 @@ export function mergeEnvOverrides(cfg: BurstGridConfig): BurstGridConfig {
     const size = parseInt(e.BURSTGRID_SNAPSHOT_POOL_SIZE, 10);
     if (!isNaN(size) && size > 0) {
       cfg.worker = { ...cfg.worker, snapshotPool: { ...cfg.worker?.snapshotPool, size } };
+    }
+  }
+  if (e.BURSTGRID_REPO_CONCURRENCY) {
+    const limit = parseInt(e.BURSTGRID_REPO_CONCURRENCY, 10);
+    if (!isNaN(limit) && limit > 0) {
+      cfg.scheduler = { ...cfg.scheduler, defaultRepoConcurrency: limit };
     }
   }
 

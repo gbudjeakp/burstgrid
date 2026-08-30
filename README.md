@@ -1,6 +1,6 @@
 # BurstGrid
 
-> **Alpha — not production-ready.** APIs and config schema will change without notice.
+> **Beta — experimental.** Core APIs are stable; schema may change between minor versions.
 
 Self-hosted GitHub Actions runners on Firecracker microVMs. A TypeScript scheduler receives `workflow_job` webhooks, dispatches jobs to EC2 bare-metal hosts over SSE, and each job boots into a dedicated microVM in under 200 ms — isolated kernel, isolated disk, destroyed on exit.
 
@@ -81,7 +81,23 @@ jobs:
 
 ## Configuration
 
-Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup.
+Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup. Every YAML key can also be set via environment variable — see `mergeEnvOverrides` in `src/config/index.ts`.
+
+### Per-repo concurrency limits
+
+Prevent any one repo from consuming all runners:
+
+```yaml
+scheduler:
+  defaultRepoConcurrency: 10    # fallback for any repo not listed below
+  concurrencyLimits:
+    myorg/*: 20                 # org-wide cap (all repos in myorg)
+    myorg/monorepo: 5           # repo-specific cap (takes priority over org wildcard)
+```
+
+Or via env var: `BURSTGRID_REPO_CONCURRENCY=10` (sets `defaultRepoConcurrency`).
+
+Jobs over the limit stay queued and are dispatched as running jobs complete — the autoscaler still scales up workers for them normally.
 
 ## Production setup
 

@@ -63,6 +63,12 @@ if (backends.redisQueue)   queue.attachRedis(backends.redisQueue);
 if (backends.redisWorkers) pool.attachRedis(backends.redisWorkers);
 if (backends.jobHistory)   router.attachHistory(backends.jobHistory);
 router.attachJobMetaCache(metaCache);
+if (cfg.scheduler?.concurrencyLimits || cfg.scheduler?.defaultRepoConcurrency) {
+  router.setConcurrencyLimits(
+    cfg.scheduler.concurrencyLimits ?? {},
+    cfg.scheduler.defaultRepoConcurrency,
+  );
+}
 
 function handleJobTimeout(jobId: string, meta: import('../src/scheduler/job-meta-cache.js').CachedJobMeta, reason: string): void {
   console.warn(`[watchdog] job ${jobId} timed out — ${reason}`);

@@ -26,6 +26,8 @@ export class Router {
   private readonly timer: NodeJS.Timeout;
   private jobHistory?: IJobHistoryBackend;
   private metaCache?: JobMetaCache;
+  private concurrencyLimits: Record<string, number> = {};
+  private defaultRepoConcurrency?: number;
 
   attachHistory(backend: IJobHistoryBackend): void {
     this.jobHistory = backend;
@@ -33,6 +35,18 @@ export class Router {
 
   attachJobMetaCache(cache: JobMetaCache): void {
     this.metaCache = cache;
+  }
+
+  setConcurrencyLimits(limits: Record<string, number>, defaultLimit?: number): void {
+    this.concurrencyLimits = limits;
+    this.defaultRepoConcurrency = defaultLimit;
+  }
+
+  /** Returns the concurrency cap for owner/repo, checking specific then org-wildcard then default. */
+  private limitFor(owner: string, repo: string): number | undefined {
+    return this.concurrencyLimits[`${owner}/${repo}`]
+      ?? this.concurrencyLimits[`${owner}/*`]
+      ?? this.defaultRepoConcurrency;
   }
 
   constructor(
@@ -56,6 +70,14 @@ export class Router {
       // Parse per-job Docker mirror override from label: extras=docker-mirror=<url>
       const mirrorLabel = job.labels.find(l => l.toLowerCase().startsWith('extras=docker-mirror='));
       const registryMirror = mirrorLabel ? mirrorLabel.slice('extras=docker-mirror='.length) : undefined;
+
+      // Per-repo concurrency limit — hold the job in queue until a slot opens
+      const concurrencyLimit = this.limitFor(job.owner, job.repo);
+      if (concurrencyLimit !== undefined && this.pool.runningJobsFor(job.owner, job.repo) >= concurrencyLimit) {
+        skipped.push(job);
+        continue;
+      }
+
       const workerId = this.pool.bestWorker(job.labels, vcpus, memoryMiB);
       if (!workerId) {
         // Warn if no worker could ever handle this job (e.g. fleet misconfigured for this size)
@@ -104,5 +126,9 @@ export class Router {
     }
     // Re-add jobs that couldn't be dispatched this cycle (at back of queue to avoid starvation)
     for (const job of skipped) this.queue.enqueueSkipped(job);
+  }
+
+  stop(): void {
+    clearInterval(this.timer);
   }
 }

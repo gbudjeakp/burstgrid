@@ -721,52 +721,40 @@
     <div class="flow-step" id="step-scheduler">
       <div class="flow-left"><div class="flow-num on">2</div><div class="flow-line"></div></div>
       <div class="flow-right">
-        <div class="flow-title">Edit <code>terraform.tfvars</code>, then run <code>burstgrid deploy</code></div>
+        <div class="flow-title">Run <code>burstgrid setup</code>, then <code>burstgrid deploy</code></div>
         <div class="flow-body">
-          Fill in your VPC, subnet, AMI, and S3 bucket in <code>deploy/terraform/terraform.tfvars</code>, then run one command.
-          Most AWS accounts have a default VPC — the three commands below print every value you need.
-          The AMI IDs are stock Ubuntu 24.04; no custom image required.
-          <code>burstgrid deploy</code> builds the scheduler and worker-agent binaries, uploads them to S3,
-          and calls <code>terraform apply</code> to provision the EC2 instance, IAM roles, SQS queue, and worker fleet.
+          <code>burstgrid setup</code> detects your default VPC, public subnet, and the latest Ubuntu 24.04 AMI automatically,
+          generates webhook and worker secrets, and writes <code>deploy/terraform/terraform.tfvars</code> for you.
+          Then <code>burstgrid deploy</code> builds the binaries, uploads them to S3, and calls <code>terraform apply</code>.
+          No digging around the AWS console.
         </div>
         <div class="snippet">
-          <div class="snippet-tab">Find your VPC, subnet, and AMI IDs (AWS CLI)</div>
-          <div class="snippet-body"><span class="s-cm"># Default VPC</span>
-<span class="t-p">$</span> <span class="t-cmd">aws ec2 describe-vpcs --filters Name=isDefault,Values=true \
-    --query 'Vpcs[0].VpcId' --output text</span>
-<span class="t-ok">vpc-0abc1234</span>
+          <div class="snippet-tab">Step 1 — scaffold terraform.tfvars</div>
+          <div class="snippet-body"><span class="t-p">$</span> <span class="t-cmd">npx burstgrid setup</span>
 
-<span class="s-cm"># First public subnet in that VPC (use the same value for both subnet fields)</span>
-<span class="t-p">$</span> <span class="t-cmd">aws ec2 describe-subnets \
-    --filters Name=vpc-id,Values=vpc-0abc1234 Name=map-public-ip-on-launch,Values=true \
-    --query 'Subnets[0].SubnetId' --output text</span>
-<span class="t-ok">subnet-0def5678</span>
+BurstGrid setup
 
-<span class="s-cm"># Latest Ubuntu 24.04 ARM64 AMI (use for both scheduler_ami and worker_ami)</span>
-<span class="t-p">$</span> <span class="t-cmd">aws ec2 describe-images --owners 099720109477 \
-    --filters 'Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-arm64-server-*' \
-    --query 'sort_by(Images,&amp;CreationDate)[-1].ImageId' --output text</span>
-<span class="t-ok">ami-0abc123def456789</span></div>
+  <span class="t-ok">✓</span> Account                      284347454476 (us-east-1)
+  <span class="t-ok">✓</span> Default VPC                  vpc-0abc1234
+  <span class="t-ok">✓</span> Public subnet                subnet-0def5678
+  <span class="t-ok">✓</span> Ubuntu 24.04 ARM64 AMI       ami-0abc123def456789
+  <span class="t-ok">✓</span> S3 bucket                    burstgrid-284347454476
+  <span class="t-ok">✓</span> Webhook secret               (generated)
+  <span class="t-ok">✓</span> Worker token                 (generated)
+
+  Wrote deploy/terraform/terraform.tfvars
+
+Next steps:
+  1. Set GITHUB_APP_ID + GITHUB_PRIVATE_KEY_PATH on your scheduler instance
+  2. npx burstgrid deploy</div>
         </div>
         <div class="snippet" style="margin-top:10px;">
-          <div class="snippet-tab">deploy/terraform/terraform.tfvars</div>
-          <div class="snippet-body"><span class="s-key">aws_region</span>          = <span class="s-str">"us-east-1"</span>
-<span class="s-key">vpc_id</span>              = <span class="s-str">"vpc-0abc1234"</span>
-<span class="s-key">scheduler_subnet_id</span> = <span class="s-str">"subnet-0def5678"</span>
-<span class="s-key">nat_subnet_id</span>       = <span class="s-str">"subnet-0def5678"</span>   <span class="s-cm"># same subnet is fine</span>
-<span class="s-key">scheduler_ami</span>       = <span class="s-str">"ami-0abc123def456789"</span>
-<span class="s-key">worker_ami</span>          = <span class="s-str">"ami-0abc123def456789"</span>
-<span class="s-key">s3_artifacts_bucket</span> = <span class="s-str">"my-burstgrid-bucket"</span>
-<span class="s-key">webhook_secret</span>      = <span class="s-str">"your-webhook-secret"</span>
-<span class="s-key">worker_token</span>        = <span class="s-str">"your-worker-token"</span></div>
-        </div>
-        <div class="snippet" style="margin-top:10px;">
-          <div class="snippet-tab">One command to build + upload + provision</div>
+          <div class="snippet-tab">Step 2 — build, upload, and provision</div>
           <div class="snippet-body"><span class="t-p">$</span> <span class="t-cmd">npx burstgrid deploy</span>
-<span class="t-ok">[deploy]</span> bucket=my-burstgrid-bucket region=us-east-1
+<span class="t-ok">[deploy]</span> bucket=burstgrid-284347454476 region=us-east-1
 <span class="t-ok">[deploy]</span> Building…
-<span class="t-ok">[deploy]</span> upload dist/scheduler.mjs → s3://my-burstgrid-bucket/scheduler.mjs
-<span class="t-ok">[deploy]</span> upload dist/worker-agent.mjs → s3://my-burstgrid-bucket/worker-agent.mjs
+<span class="t-ok">[deploy]</span> upload dist/scheduler.mjs → s3://burstgrid-284347454476/scheduler.mjs
+<span class="t-ok">[deploy]</span> upload dist/worker-agent.mjs → s3://burstgrid-284347454476/worker-agent.mjs
 <span class="t-ok">[deploy]</span> Running terraform apply in deploy/terraform…
 <span class="t-ok">[deploy]</span> Done.
 

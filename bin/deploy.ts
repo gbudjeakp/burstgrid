@@ -87,6 +87,23 @@ if (needsBuild) {
   }
 }
 
+// ── Preflight: check required tools are available ───────────────────────────
+
+function toolAvailable(name: string): boolean {
+  const r = spawnSync(name, ['--version'], { encoding: 'utf-8' });
+  return !r.error;
+}
+
+if (!toolAvailable('aws')) {
+  console.error('[deploy] AWS CLI not found.\n  Install it: https://aws.amazon.com/cli/');
+  process.exit(1);
+}
+
+if (runTf && !toolAvailable('terraform')) {
+  console.error('[deploy] terraform not found.\n  Install it: https://developer.hashicorp.com/terraform/install\n  Or pass --no-terraform to skip the Terraform step.');
+  process.exit(1);
+}
+
 // ── Upload to S3 ──────────────────────────────────────────────────────────────
 
 for (const file of artifacts) {
@@ -98,7 +115,13 @@ for (const file of artifacts) {
       'aws', ['s3', 'cp', file, s3Uri, '--region', region],
       { stdio: 'inherit' },
     );
-    if (result.status !== 0) { console.error(`[deploy] Upload failed: ${file}`); process.exit(1); }
+    if (result.status !== 0) {
+      const hint = result.stderr?.toString().trim();
+      console.error(`[deploy] Upload failed: ${file}`);
+      if (hint) console.error(`  ${hint.split('\n')[0]}`);
+      console.error('  Check that the bucket exists and your IAM role has s3:PutObject permission.');
+      process.exit(1);
+    }
   }
 }
 
@@ -112,7 +135,13 @@ if (runTf) {
       stdio: 'inherit',
       env: { ...process.env, TF_CLI_ARGS: '-input=false' },
     });
-    if (result.status !== 0) { console.error('[deploy] terraform apply failed'); process.exit(1); }
+    if (result.status !== 0) {
+      console.error('[deploy] terraform apply failed.');
+      console.error('  Review the output above. Common causes: missing provider credentials,');
+      console.error('  resource already exists (import with `terraform import`), or missing tfvars.');
+      console.error('  Run `terraform plan` in deploy/terraform/ to see the diff before applying.');
+      process.exit(1);
+    }
   }
 } else if (!runTf && !noTf) {
   console.log('[deploy] Skipping Terraform (pass --terraform <dir> to enable or --no-terraform to suppress this message)');

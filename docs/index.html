@@ -435,10 +435,11 @@
 <div class="section" style="padding-top:96px;padding-bottom:96px;text-align:center;">
   <div style="max-width:700px;margin:0 auto;">
     <div class="wip-pill">Open source &middot; Beta</div>
-    <h1>Your runners.<br/>Your hardware.<br/><em>150ms cold start.</em></h1>
+    <h1>CI at any scale.<br/>Your EC2. Spot pricing.<br/><em>150ms cold start.</em></h1>
     <p class="hero-sub" style="margin-left:auto;margin-right:auto;">
-      BurstGrid routes GitHub Actions jobs to Firecracker microVMs on EC2 bare-metal you own. Every job gets a dedicated kernel, a fresh filesystem, and nothing from the job before it. Finished in seconds, gone completely. No per-minute GitHub pricing. No secret bleed. No shared state.
-      Set <code>BURSTGRID_MODE=simulate</code> to run the full scheduler/worker loop on any machine &mdash; no KVM, no AWS account required.
+      Run hundreds of concurrent GitHub Actions jobs on EC2 you control, billed at spot rates &mdash; not GitHub&rsquo;s per-minute price. Each job gets a fresh Firecracker microVM: dedicated kernel, clean filesystem, boots in 150&nbsp;ms, gone when it&rsquo;s done. No shared state. No secret bleed. The scheduler routes jobs across your fleet and respects per-repo concurrency limits you set. Add more hosts to scale out; no config changes required.
+      <br/><br/>
+      Try the full scheduler and worker loop on any machine with <code>BURSTGRID_MODE=simulate</code> &mdash; no EC2, no KVM needed.
     </p>
     <div class="hero-actions" style="justify-content:center;">
       <a href="#get-started" class="btn btn-accent">Set it up</a>
@@ -768,7 +769,6 @@
           setup on each host &mdash; scale up by increasing <code>max_workers</code> in your fleet config.
           For <strong>Firecracker mode</strong> (microVM isolation), you additionally need a Linux kernel binary and a rootfs
           ext4 image on each host. See the <a href="#custom-images">Custom images</a> section for how to build them.
-          For <strong>simulate mode</strong> (local dev, no KVM), set <code>BURSTGRID_MODE=simulate</code> and skip this entirely.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Worker agent — key environment variables</div>
@@ -778,6 +778,28 @@
 <span class="s-key">BURSTGRID_VM_IMAGE</span>=<span class="s-str">/opt/images/runner.img</span>   <span class="s-cm"># Firecracker mode only</span>
 <span class="s-key">BURSTGRID_KERNEL</span>=<span class="s-str">/opt/images/vmlinux</span>      <span class="s-cm"># Firecracker mode only</span>
 <span class="s-key">BURSTGRID_SLOTS</span>=<span class="s-num">8</span>                    <span class="s-cm"># concurrent VMs / processes per host</span></div>
+        </div>
+        <div style="margin-top:20px;padding:16px 20px;background:#0d1a0f;border:1px solid #1e3a12;border-radius:8px;">
+          <div style="font-size:13px;font-weight:600;color:#4ade80;margin-bottom:8px;">Simulate mode &mdash; try the full loop without EC2 or KVM</div>
+          <p style="font-size:13.5px;color:#a1a1aa;line-height:1.7;margin:0 0 12px;">
+            Set <code>BURSTGRID_MODE=simulate</code> on any machine to run the complete scheduler and worker agent loop in-process.
+            No Firecracker binary, no KVM, no AWS account required. Simulate mode exercises the full path: webhook &rarr; queue &rarr;
+            router &rarr; worker dispatch &rarr; job execution (in a child process). Per-repo concurrency limits, the S3 cache
+            protocol, and all routing logic work identically. No config file required &mdash; every setting can be provided as an
+            environment variable. When you&rsquo;re ready to go to production, run <code>burstgrid deploy</code> and nothing else changes.
+          </p>
+          <div class="snippet" style="margin:0;">
+            <div class="snippet-tab">Minimal env vars for simulate mode (no YAML config file needed)</div>
+            <div class="snippet-body"><span class="s-key">BURSTGRID_MODE</span>=<span class="s-str">simulate</span>
+<span class="s-key">BURSTGRID_WEBHOOK_SECRET</span>=<span class="s-str">dev-secret</span>
+<span class="s-key">BURSTGRID_WORKER_TOKEN</span>=<span class="s-str">dev-token</span>
+<span class="s-key">GITHUB_TOKEN</span>=<span class="s-str">ghp_xxx</span>             <span class="s-cm"># or GITHUB_APP_ID + GITHUB_PRIVATE_KEY_PATH</span>
+<span class="s-key">BURSTGRID_REDIS_URL</span>=<span class="s-str">redis://localhost:6379</span>  <span class="s-cm"># optional — omit for in-memory queue</span>
+<span class="s-key">BURSTGRID_REPO_CONCURRENCY</span>=<span class="s-num">10</span>      <span class="s-cm"># per-repo concurrency cap, applies in simulate too</span>
+
+<span class="t-p">$</span> <span class="t-cmd">npx burstgrid scheduler</span>    <span class="s-cm"># terminal 1</span>
+<span class="t-p">$</span> <span class="t-cmd">npx burstgrid worker</span>       <span class="s-cm"># terminal 2 (or more)</span></div>
+          </div>
         </div>
       </div>
     </div>

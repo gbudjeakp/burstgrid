@@ -952,21 +952,26 @@ RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
       <div class="flow-right">
         <div class="flow-title">Build the .img</div>
         <div class="flow-body">
-          <code>scripts/build-rootfs.sh</code> uses <code>docker export</code> + <code>mkfs.ext4</code> to turn any Dockerfile
-          into a bootable ext4 image. It also injects <code>scripts/vm-init.sh</code> as <code>/sbin/burstgrid-init</code>,
-          the PID&nbsp;1 script that reads <code>/proc/cmdline</code>, starts Docker if present,
-          and runs the Actions runner as ephemeral before halting the VM.
+          <code>burstgrid build</code> wraps <code>scripts/build-rootfs.sh</code> &mdash; it runs <code>docker export</code>
+          + <code>mkfs.ext4</code> to turn any Dockerfile into a bootable ext4 image, injects
+          <code>scripts/vm-init.sh</code> as the PID&nbsp;1 init script, and optionally uploads to S3.
+          Pass <code>--push</code> to upload in the same step; the S3 bucket auto-detects from
+          <code>terraform.tfvars</code> or <code>BURSTGRID_S3_BUCKET</code>.
+          Requires <code>docker</code> and <code>mkfs.ext4</code> on the build host.
         </div>
         <div class="snippet">
-          <div class="snippet-tab">Build (run on the build host, not the worker)</div>
-          <div class="snippet-body">./scripts/build-rootfs.sh \
-  rootfs/my-image/Dockerfile \
-  /opt/images/my-image.img \
-  <span class="s-num">4G</span>           <span class="s-cm"># image size &mdash; set generously, sparse file</span>
+          <div class="snippet-tab">Build + upload to S3 in one command</div>
+          <div class="snippet-body"><span class="t-p">$</span> <span class="t-cmd">npx burstgrid build rootfs/my-image/Dockerfile --size 4G --push</span>
+<span class="t-ok">[build]</span> image=my-image size=4G bucket=burstgrid-123456789012 prefix=rootfs/
+<span class="t-ok">[build]</span> Building Docker image from rootfs/my-image/Dockerfile…
+<span class="t-ok">[build]</span> Exporting filesystem…
+<span class="t-ok">[build]</span> Creating 4G ext4 image…
+<span class="t-ok">[build]</span> done → /tmp/burstgrid-images/my-image.img (1.2G on disk)
+<span class="t-ok">[build]</span> upload my-image.img → s3://burstgrid-123456789012/rootfs/my-image.img
+<span class="t-ok">[build]</span> Done.
 
-<span class="s-cm"># copy to workers via S3 or scp:</span>
-aws s3 cp /opt/images/my-image.img s3://your-bucket/rootfs/my-image.img
-ssh worker-01 &quot;aws s3 cp s3://your-bucket/rootfs/my-image.img /opt/images/&quot;</div>
+<span class="s-cm"># then pull to each worker:</span>
+<span class="t-p">$</span> <span class="t-cmd">ssh worker-01 "aws s3 cp s3://burstgrid-123456789012/rootfs/my-image.img /opt/images/"</span></div>
         </div>
       </div>
     </div>

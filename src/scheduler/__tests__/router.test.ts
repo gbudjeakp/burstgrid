@@ -151,3 +151,80 @@ describe('Router dispatch', () => {
     warnSpy.mockRestore();
   });
 });
+
+describe('Router — per-repo concurrency limits', () => {
+  let queue: JobQueue;
+  let pool: WorkerPool;
+  let router: Router;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    queue = new JobQueue();
+    pool  = new WorkerPool();
+    router = new Router(queue, pool);
+  });
+
+  afterEach(() => {
+    router.stop();
+    vi.useRealTimers();
+  });
+
+  it('limitFor returns repo-specific limit ahead of org wildcard and default', () => {
+    router.setConcurrencyLimits({ 'org/*': 10, 'org/repo': 2 }, 5);
+    // Cast to access private method for white-box testing
+    const lf = (router as unknown as { limitFor(o: string, r: string): number | undefined }).limitFor;
+    expect(lf.call(router, 'org', 'repo')).toBe(2);      // repo-specific wins
+    expect(lf.call(router, 'org', 'other')).toBe(10);    // org wildcard
+    expect(lf.call(router, 'acme', 'x')).toBe(5);        // global default
+  });
+
+  it('holds the 2nd job when defaultRepoConcurrency=1 and 1 job already running', async () => {
+    router.setConcurrencyLimits({}, 1);
+
+    pool.register(worker('w1'));
+    pool.setStream('w1', mockStream());
+
+    // Seed one running job so runningJobsFor('org','repo') = 1
+    pool.trackJob('w1', makeJob('job-existing'));
+
+    // Enqueue a second job — limit is 1, running = 1, should be held
+    queue.enqueue(makeJob('job-held'));
+    // Advance just past the 500ms drain interval (not past the 30s stale timeout)
+    await vi.advanceTimersByTimeAsync(600);
+
+    // job-held must still be in the queue (enqueueSkipped puts it back)
+    expect(pool.runningJobsFor('org', 'repo')).toBe(1); // still only 1 running
+  });
+
+  it('dispatches held job once running count drops below limit', async () => {
+    router.setConcurrencyLimits({}, 1);
+
+    pool.register(worker('w1'));
+    const stream = mockStream();
+    pool.setStream('w1', stream);
+
+    // Seed one running job
+    pool.trackJob('w1', makeJob('job-a'));
+
+    // Enqueue held job — should not dispatch yet
+    queue.enqueue(makeJob('job-b'));
+    await vi.advanceTimersByTimeAsync(600);
+    const countBefore = stream.written.length;
+
+    // Release job-a; the 500 ms drain timer will fire and dispatch job-b
+    pool.releaseJob('w1', 'job-a');
+    await vi.advanceTimersByTimeAsync(600);
+
+    expect(stream.written.length).toBeGreaterThan(countBefore);
+  });
+
+  it('org/* wildcard applies per-repo (each repo gets its own cap)', () => {
+    router.setConcurrencyLimits({ 'org/*': 2 });
+    const lf = (router as unknown as { limitFor(o: string, r: string): number | undefined }).limitFor;
+    // Every repo under org gets cap 2
+    expect(lf.call(router, 'org', 'repo-a')).toBe(2);
+    expect(lf.call(router, 'org', 'repo-b')).toBe(2);
+    // Different org is uncapped
+    expect(lf.call(router, 'other', 'repo-a')).toBeUndefined();
+  });
+});

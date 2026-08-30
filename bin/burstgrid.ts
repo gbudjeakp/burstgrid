@@ -10,6 +10,7 @@ Usage: burstgrid <command> [options]
 Commands:
   setup     Auto-detect VPC/subnet/AMI and write deploy/terraform/terraform.tfvars
   deploy    Build, upload artefacts to S3, and optionally run terraform apply
+  build     Build a Firecracker rootfs image from a Dockerfile; optionally push to S3
   init      Scaffold burstgrid.config.yaml from live AWS resources
   validate  Parse and validate an existing burstgrid.config.yaml
 
@@ -35,6 +36,9 @@ switch (cmd) {
     break;
   case 'deploy':
     await import(path.join(__dirname, `deploy${ext}`));
+    break;
+  case 'build':
+    await import(path.join(__dirname, `build${ext}`));
     break;
   case 'init':
     await import(path.join(__dirname, `init${ext}`));

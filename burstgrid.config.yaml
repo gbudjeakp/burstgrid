@@ -38,9 +38,11 @@ autoscaler:
     # medium — m6g.large (2 vCPU / 8 GiB)
     - name: medium
       sizeTag: "burstgrid:size=medium"
-      launchTemplateId: lt-CHANGE_ME   # aws ec2 describe-launch-templates --query 'LaunchTemplates[*].[LaunchTemplateId,LaunchTemplateName]' --output table
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME             # aws ec2 describe-subnets --query 'Subnets[*].[SubnetId,AvailabilityZone]' --output table
+        - subnet-REPLACE_ME   # us-east-1a private
+        - subnet-REPLACE_ME   # us-east-1b private
+        - subnet-REPLACE_ME   # us-east-1c private
       maxWorkers: 5
       slotsPerWorker: 2
       scaleUpThreshold: 1
@@ -50,9 +52,11 @@ autoscaler:
     # large — m6g.2xlarge (8 vCPU / 32 GiB)
     - name: large
       sizeTag: "burstgrid:size=large"
-      launchTemplateId: lt-CHANGE_ME
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
       maxWorkers: 10
       slotsPerWorker: 4
       scaleUpThreshold: 2
@@ -61,9 +65,11 @@ autoscaler:
     # xlarge — m6g.4xlarge (16 vCPU / 64 GiB)
     - name: xlarge
       sizeTag: "burstgrid:size=xlarge"
-      launchTemplateId: lt-CHANGE_ME
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
       maxWorkers: 5
       slotsPerWorker: 8
       scaleUpThreshold: 1
@@ -72,10 +78,12 @@ autoscaler:
     # 2xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — spot w/ on-demand fallback
     - name: 2xlarge
       sizeTag: "burstgrid:size=2xlarge"
-      launchTemplateId: lt-CHANGE_ME
+      launchTemplateId: lt-REPLACE_ME
       instanceType: m6g.4xlarge
       subnetIds:
-        - subnet-CHANGE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
       maxWorkers: 3
       slotsPerWorker: 2
       scaleUpThreshold: 1

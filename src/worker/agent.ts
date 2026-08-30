@@ -1,6 +1,8 @@
 import type { JobAssignment, JobStatus, WorkerHeartbeat, WorkerRegistration, JobUpdate, RootfsImage } from '../types/index.js';
 import { JobStatus as Status } from '../types/index.js';
 import { Slot, type SlotMode } from './slot.js';
+import { CacheServer } from './cache-server.js';
+import { SnapshotPool } from './snapshot-pool.js';
 import { recordJobDuration } from '../telemetry/index.js';
 
 export interface AgentConfig {
@@ -25,6 +27,10 @@ export interface AgentConfig {
   registryMirror?: string;
   /** Shared secret for authenticating to the scheduler. Set BURSTGRID_WORKER_TOKEN on both sides. */
   workerToken?: string;
+  /** S3-backed Actions cache. When set, a CacheServer starts and ACTIONS_CACHE_URL is injected into VMs. */
+  s3Cache?: { bucketName: string; region?: string; keyPrefix?: string };
+  /** Pre-warmed snapshot pool config. When set, the agent initialises a SnapshotPool on startup. */
+  snapshotPoolCfg?: { size?: number; snapshotDir?: string };
 }
 
 export class WorkerAgent {
@@ -33,6 +39,8 @@ export class WorkerAgent {
   private usedMemoryMiB = 0;
   private registered = false;
   private streamConnected = false;
+  private cacheServer: CacheServer | null = null;
+  private snapshotPool: SnapshotPool | null = null;
   // Each index maps to an isolated runner directory; pop on acquire, push on release.
   private freeSlotIndices: number[];
 
@@ -43,6 +51,33 @@ export class WorkerAgent {
   }
 
   async run(signal: AbortSignal): Promise<void> {
+    if (this.cfg.s3Cache) {
+      this.cacheServer = new CacheServer({
+        ...this.cfg.s3Cache,
+        workerToken: this.cfg.workerToken ?? '',
+      });
+      await this.cacheServer.start();
+      signal.addEventListener('abort', () => this.cacheServer?.stop(), { once: true });
+    }
+
+    if (this.cfg.snapshotPoolCfg && (this.cfg.mode ?? 'firecracker') === 'firecracker') {
+      this.snapshotPool = new SnapshotPool({
+        poolSize: this.cfg.snapshotPoolCfg.size,
+        snapshotDir: this.cfg.snapshotPoolCfg.snapshotDir,
+        vmBase: {
+          vmId: 'warmup',
+          kernelPath: this.cfg.kernelPath,
+          rootfsPath: this.cfg.vmImagePath,
+          memoryMiB: 2_048,
+          vcpus: 2,
+          registryMirror: this.cfg.registryMirror,
+          cacheServerUrl: this.cacheServer ? `http://127.0.0.1:${this.cacheServer.port}/` : undefined,
+          workerToken: this.cfg.workerToken,
+        },
+      });
+      await this.snapshotPool.warmUp();
+    }
+
     await this.register();
 
     const heartbeat = setInterval(() => void this.sendHeartbeat(), 10_000);
@@ -152,7 +187,10 @@ export class WorkerAgent {
       imageDir: this.cfg.imageDir,
       imageCatalog: this.cfg.imageCatalog,
       runnerPath: this.cfg.runnerPath,
-      registryMirror: this.cfg.registryMirror,
+      registryMirror: job.registryMirror ?? this.cfg.registryMirror,
+      cacheServerUrl: this.cacheServer ? `http://127.0.0.1:${this.cacheServer.port}/` : undefined,
+      workerToken: this.cfg.workerToken,
+      snapshotPool: this.snapshotPool ?? undefined,
       env: job.env,
       repoUrl: `https://github.com/${job.owner}/${job.repo}`,
       slotIndex,

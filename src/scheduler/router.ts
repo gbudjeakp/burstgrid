@@ -53,6 +53,9 @@ export class Router {
       if (!job) break;
 
       const { vcpus, memoryMiB } = vmSizeFromLabels(job.labels);
+      // Parse per-job Docker mirror override from label: extras=docker-mirror=<url>
+      const mirrorLabel = job.labels.find(l => l.toLowerCase().startsWith('extras=docker-mirror='));
+      const registryMirror = mirrorLabel ? mirrorLabel.slice('extras=docker-mirror='.length) : undefined;
       const workerId = this.pool.bestWorker(job.labels, vcpus, memoryMiB);
       if (!workerId) {
         // Warn if no worker could ever handle this job (e.g. fleet misconfigured for this size)
@@ -74,6 +77,7 @@ export class Router {
         tier: job.tier,
         vcpus,
         memoryMiB,
+        registryMirror,
       });
 
       if (!ok) {

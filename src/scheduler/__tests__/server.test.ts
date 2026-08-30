@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Fastify from 'fastify';
+import { ExecutionTier } from '../../types/index.js';
 import { JobQueue } from '../queue.js';
 import { WorkerPool } from '../worker-pool.js';
 import { registerSchedulerRoutes } from '../server.js';
@@ -102,7 +103,7 @@ describe('POST /v1/workers/:id/evict', () => {
     // Simulate a tracked inflight job
     const job = {
       id: 'j-1', owner: 'o', repo: 'r', runId: 1,
-      labels: ['linux'], tier: 'standard' as const, queuedAt: new Date(), runnerToken: 't',
+      labels: ['linux'], tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't',
     };
     pool.trackJob('w-1', job);
 

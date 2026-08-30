@@ -82,8 +82,7 @@ describe('Autoscaler bin-packing scale-up', () => {
     const q = new JobQueue();
     for (let i = 0; i < 10; i++) {
       q.enqueue({ id: `j-${i}`, owner: 'o', repo: 'r', runId: i, labels: ['burstgrid:size=large'],
-        tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't',
-        vcpus: 4, memoryMiB: 4_096 } as Job);
+        tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't' } as Job);
     }
 
     const smallFleet: TierFleet = { ...FLEET, name: 'small', maxWorkers: 10, slotsPerWorker: 2, instanceVcpus: 4 };
@@ -110,9 +109,8 @@ describe('Autoscaler bin-packing scale-up', () => {
     // 32 vCPU demand
     const q = new JobQueue();
     for (let i = 0; i < 8; i++) {
-      q.enqueue({ id: `j-${i}`, owner: 'o', repo: 'r', runId: i, labels: [],
-        tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't',
-        vcpus: 4, memoryMiB: 4_096 } as Job);
+      q.enqueue({ id: `j-${i}`, owner: 'o', repo: 'r', runId: i, labels: ['burstgrid:size=large'],
+        tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't' } as Job);
     }
 
     const largeFleet: TierFleet = { ...FLEET, name: 'large', maxWorkers: 1, slotsPerWorker: 4, instanceVcpus: 16 };
@@ -162,6 +160,33 @@ describe('Autoscaler scale-down', () => {
     // One worker kept alive as the warm standby, one terminated
     const terminated = (terminateCalls[0][0] as { input: { InstanceIds: string[] } }).input.InstanceIds;
     expect(terminated).toHaveLength(1);
+
+    autoscaler.stop();
+  });
+
+  it('keeps exactly 1 warm standby when 3 workers are all idle', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    const stream = { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse;
+    for (const id of ['w1', 'w2', 'w3']) {
+      pool.register({ workerId: id, instanceId: id, ec2InstanceId: `i-00${id}`,
+        region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+      pool.setStream(id, stream);
+    }
+
+    vi.advanceTimersByTime(2_000);
+
+    const queue = new JobQueue();
+    const fleet = { ...FLEET, maxWorkers: 5, scaleDownAfterIdleSec: 1 };
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminated = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    ).flatMap(([cmd]) => (cmd as { input: { InstanceIds: string[] } }).input.InstanceIds);
+    expect(terminated).toHaveLength(2); // 3 idle workers → terminate 2, keep 1 warm standby
 
     autoscaler.stop();
   });

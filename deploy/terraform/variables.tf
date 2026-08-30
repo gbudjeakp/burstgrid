@@ -16,9 +16,15 @@ variable "scheduler_subnet_id" {
   type        = string
 }
 
-variable "worker_subnet_ids" {
-  description = "Subnets for worker spot instances — use multiple AZs for capacity diversification"
-  type        = list(string)
+variable "nat_subnet_id" {
+  description = "Public subnet for the fck-nat instance — must have an internet gateway route"
+  type        = string
+}
+
+variable "nat_instance_type" {
+  description = "Instance type for the fck-nat NAT instance. t4g.nano handles up to 5Gbps burst."
+  type        = string
+  default     = "t4g.nano"
 }
 
 # ── AMIs ───────────────────────────────────────────────────────────────────────

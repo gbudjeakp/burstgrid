@@ -955,9 +955,11 @@ RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
           <code>burstgrid build</code> wraps <code>scripts/build-rootfs.sh</code> &mdash; it runs <code>docker export</code>
           + <code>mkfs.ext4</code> to turn any Dockerfile into a bootable ext4 image, injects
           <code>scripts/vm-init.sh</code> as the PID&nbsp;1 init script, and optionally uploads to S3.
-          Pass <code>--push</code> to upload in the same step; the S3 bucket auto-detects from
-          <code>terraform.tfvars</code> or <code>BURSTGRID_S3_BUCKET</code>.
-          Requires <code>docker</code> and <code>mkfs.ext4</code> on the build host.
+          The Dockerfile can live anywhere in your repo; <code>rootfs/my-image/</code> is just the convention
+          used in these examples. The image name is derived from the directory name.
+          Build output goes to <code>$TMPDIR/burstgrid-images/&lt;name&gt;.img</code> by default &mdash;
+          use <code>--out</code> to override. Pass <code>--push</code> to upload to S3 immediately;
+          the bucket auto-detects from <code>terraform.tfvars</code> or <code>BURSTGRID_S3_BUCKET</code>.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Build + upload to S3 in one command</div>
@@ -983,7 +985,9 @@ RUN mkdir -p /opt/actions-runner &amp;&amp; cd /opt/actions-runner \
         <div class="flow-body">
           Add the image to the <code>worker.images</code> catalog in <code>burstgrid.config.yaml</code>.
           The <code>name</code> field is what jobs put in their <code>runs-on</code> label.
-          All other fields are metadata; they document what&rsquo;s in the image so your team doesn&rsquo;t have to guess.
+          The <code>path</code> is the local path <strong>on each worker host</strong> where the
+          <code>.img</code> file lives after being pulled from S3 &mdash; it can be anything, <code>/opt/images/</code>
+          is just the convention used in these examples. All other fields are optional metadata.
         </div>
         <div class="snippet">
           <div class="snippet-tab">burstgrid.config.yaml</div>

@@ -19,6 +19,20 @@ mount -t sysfs sysfs /sys   2>/dev/null || true
 mount -t devtmpfs devtmpfs /dev 2>/dev/null || true
 mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts 2>/dev/null || true
+mount -t tmpfs  tmpfs /tmp  2>/dev/null || true
+
+# Cgroups — required for Docker. Try unified v2 first, fall back to v1.
+mkdir -p /sys/fs/cgroup
+if ! mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null; then
+  mount -t tmpfs none /sys/fs/cgroup 2>/dev/null || true
+  for subsys in cpu cpuset memory blkio devices pids freezer; do
+    mkdir -p /sys/fs/cgroup/$subsys
+    mount -t cgroup -o $subsys none /sys/fs/cgroup/$subsys 2>/dev/null || true
+  done
+fi
+
+# Prefer IPv4 — VMs have no IPv6 routing; avoids 10-min hangs on CDN fallback
+echo 'precedence ::ffff:0:0/96  100' >> /etc/gai.conf 2>/dev/null || true
 
 # ── Parse kernel cmdline ──────────────────────────────────────────────────────
 cmdline="$(cat /proc/cmdline)"
@@ -64,13 +78,17 @@ fi
 if command -v dockerd >/dev/null 2>&1; then
   dockerd --host=unix:///var/run/docker.sock \
           --storage-driver=overlay2 \
-          --log-level=warn &
+          --log-level=warn > /tmp/dockerd.log 2>&1 &
   DOCKER_PID=$!
   # Wait for Docker socket to be ready (up to 15s)
   i=0
   while [ ! -S /var/run/docker.sock ] && [ $i -lt 30 ]; do
     sleep 0.5; i=$((i+1))
   done
+  if [ ! -S /var/run/docker.sock ]; then
+    echo "[init] WARN: dockerd (overlay2) not ready; log:" >&2
+    cat /tmp/dockerd.log >&2
+  fi
 fi
 
 # ── Configure and run the GitHub Actions runner ───────────────────────────────

@@ -29,11 +29,27 @@ extract() {
 
 RUNNER_TOKEN="$(extract RUNNER_TOKEN)"
 RUNNER_LABELS="$(extract RUNNER_LABELS)"
+RUNNER_REPO_URL="$(extract RUNNER_REPO_URL)"
 REGISTRY_MIRROR="$(extract REGISTRY_MIRROR)"
+GUEST_IP="$(extract GUEST_IP)"
+GATEWAY="$(extract GATEWAY)"
 
 if [ -z "$RUNNER_TOKEN" ]; then
   echo "[init] ERROR: RUNNER_TOKEN not found in /proc/cmdline" >&2
   halt -f
+fi
+
+if [ -z "$RUNNER_REPO_URL" ]; then
+  echo "[init] ERROR: RUNNER_REPO_URL not found in /proc/cmdline" >&2
+  halt -f
+fi
+
+# ── Network ───────────────────────────────────────────────────────────────────
+if [ -n "$GUEST_IP" ] && [ -n "$GATEWAY" ]; then
+  ip addr add "${GUEST_IP}/30" dev eth0 2>/dev/null || true
+  ip link set eth0 up
+  ip route add default via "$GATEWAY"
+  printf 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n' > /etc/resolv.conf
 fi
 
 # ── Optional: configure Docker registry mirror ────────────────────────────────
@@ -67,15 +83,39 @@ fi
 
 cd "$RUNNER_DIR"
 
+# Ensure all standard bin dirs are in PATH so runner worker processes find sh, env, etc.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Allow the runner to execute as root (PID 1 in a microVM is always root).
+export RUNNER_ALLOW_RUNASROOT=1
+
+# The .NET runner binary needs HOME to locate user-profile directories.
+export HOME=/root
+mkdir -p /root
+
+# Derive a unique runner name from the guest IP (guaranteed unique per-slot).
+# Falls back to a random hex string if GUEST_IP is not set.
+_ip_tag="$(echo "${GUEST_IP:-}" | tr '.' '-')"
+RUNNER_NAME="burstgrid-${_ip_tag:-$(dd if=/dev/urandom bs=4 count=1 2>/dev/null | od -A n -t x4 | tr -d ' \n')}"
+
 # Register as an ephemeral runner — removed automatically after one job.
+# config.sh may exit non-zero even when configuration succeeds (Runner.Listener
+# throws a null-ref in post-config cleanup on some ARM64 environments).
+# We tolerate that by checking for the .runner sentinel file instead.
 ./config.sh \
   --unattended \
   --ephemeral \
-  --url "https://github.com" \
+  --replace \
+  --url "$RUNNER_REPO_URL" \
   --token "$RUNNER_TOKEN" \
   --labels "$RUNNER_LABELS" \
-  --name "burstgrid-$(hostname)" \
-  --work _work
+  --name "$RUNNER_NAME" \
+  --work _work || true
+
+if [ ! -f ".runner" ]; then
+  echo "[init] ERROR: runner configuration failed (no .runner file)" >&2
+  halt -f
+fi
 
 ./run.sh
 

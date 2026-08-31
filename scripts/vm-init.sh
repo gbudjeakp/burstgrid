@@ -83,8 +83,10 @@ if command -v dockerd >/dev/null 2>&1; then
   # Firecracker kernel (6.1.102) has no nftables; switch to legacy iptables
   update-alternatives --set iptables  /usr/sbin/iptables-legacy  2>/dev/null || true
   update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true
+  # --iptables=false: kernel lacks iptable_raw; add manual MASQUERADE for containers instead
   dockerd --host=unix:///var/run/docker.sock \
           --storage-driver=overlay2 \
+          --iptables=false \
           --log-level=warn > /tmp/dockerd.log 2>&1 &
   DOCKER_PID=$!
   # Wait for Docker socket to be ready (up to 15s)
@@ -95,6 +97,9 @@ if command -v dockerd >/dev/null 2>&1; then
   if [ ! -S /var/run/docker.sock ]; then
     echo "[init] WARN: dockerd (overlay2) not ready; log:" >&2
     cat /tmp/dockerd.log >&2
+  else
+    # Manual NAT for containers since Docker's iptables are disabled
+    iptables -t nat -A POSTROUTING -s 172.17.0.0/16 ! -o docker0 -j MASQUERADE 2>/dev/null || true
   fi
 fi
 

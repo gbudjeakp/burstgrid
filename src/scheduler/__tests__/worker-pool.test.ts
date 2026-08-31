@@ -249,8 +249,8 @@ describe('WorkerPool', () => {
     it('returns inflight jobs from reaped workers', () => {
       pool.register(reg('w1'));
       pool.trackJob('w1', job('job-lost'));
-      // Advance past the 30 s stale timeout so the worker is eligible for reaping
-      vi.advanceTimersByTime(31_000);
+      // Advance past the 120 s stale timeout so the worker is eligible for reaping
+      vi.advanceTimersByTime(121_000);
 
       const lost = pool.reapStale();
       expect(lost).toHaveLength(1);
@@ -271,7 +271,7 @@ describe('WorkerPool', () => {
       const p = new WorkerPool(onJobsLost);
       p.register(reg('w1'));
       p.trackJob('w1', job('job-cb'));
-      vi.advanceTimersByTime(31_000);
+      vi.advanceTimersByTime(121_000);
 
       // The internal reap timer fires every 15 s; advance it
       vi.advanceTimersByTime(15_000);

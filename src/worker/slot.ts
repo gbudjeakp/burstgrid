@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
 import { FirecrackerVM, VM_BOOT_TARGET_MS, type VMConfig } from './firecracker.js';
+import type { SnapshotPool } from './snapshot-pool.js';
 import { vmSizeFromLabels, type RootfsImage } from '../types/index.js';
 
 /** How the slot executes jobs on this host. */
@@ -42,6 +43,10 @@ export interface SlotConfig {
   runnerPath?: string;
   /** Docker registry mirror URL passed to VMs as a boot arg (e.g. http://10.0.0.1:5000). */
   registryMirror?: string;
+  /** S3 cache server URL injected as ACTIONS_CACHE_URL into VMs (e.g. http://127.0.0.1:4321/). */
+  cacheServerUrl?: string;
+  /** Worker token forwarded as ACTIONS_RUNTIME_TOKEN so the VM can authenticate to the cache server. */
+  workerToken?: string;
   /** When true, runner is started with --ephemeral so it auto-deregisters after one job. */
   runnerEphemeral?: boolean;
   /** Extra env vars from GpuAmiProfile forwarded to the runner process in 'process' mode. */
@@ -50,6 +55,8 @@ export interface SlotConfig {
   repoUrl?: string;
   /** Index of this slot (0-based); maps to /opt/actions-runner-<N> for credential isolation. */
   slotIndex?: number;
+  /** Pre-warmed snapshot pool; when provided, VMs restore from snapshot (~5ms) instead of cold-booting (~150ms). */
+  snapshotPool?: SnapshotPool;
 }
 
 export class Slot {
@@ -76,10 +83,23 @@ export class Slot {
         runnerToken,
         runnerLabels: labels.join(','),
         registryMirror: this.cfg.registryMirror,
+        cacheServerUrl: this.cfg.cacheServerUrl,
+        workerToken: this.cfg.workerToken,
         runnerEphemeral: this.cfg.runnerEphemeral ?? true,
+        repoUrl: this.cfg.repoUrl,
+        slotIndex: this.cfg.slotIndex ?? 0,
       };
-      this.vm = new FirecrackerVM(vmCfg);
-      await this.vm.boot();
+
+      if (this.cfg.snapshotPool) {
+        // Snapshot-based boot: restore from pre-warmed snapshot and inject token via MMDS
+        const snapPaths = await this.cfg.snapshotPool.acquire();
+        this.vm = await FirecrackerVM.restoreFromSnapshot({ ...vmCfg, mmdsMode: true }, snapPaths);
+        await this.vm.injectMmdsToken(runnerToken, labels.join(','));
+        await this.vm.resume();
+      } else {
+        this.vm = new FirecrackerVM(vmCfg);
+        await this.vm.boot();
+      }
       return;
     }
 
@@ -97,6 +117,11 @@ export class Slot {
         RUNNER_LABELS: labels.join(','),
         RUNNER_EPHEMERAL: this.cfg.runnerEphemeral ?? true ? '1' : '0',
         RUNNER_ALLOW_RUNASROOT: '1',
+        ...(this.cfg.cacheServerUrl ? {
+          ACTIONS_CACHE_URL: this.cfg.cacheServerUrl,
+          ACTIONS_RUNTIME_URL: this.cfg.cacheServerUrl,
+          ACTIONS_RUNTIME_TOKEN: this.cfg.workerToken ?? '',
+        } : {}),
       },
     });
     this.proc = child;

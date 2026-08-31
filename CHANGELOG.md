@@ -1,11 +1,47 @@
 # Changelog
 
-## [1.10.0](https://github.com/gbudjeakp/burstgrid/compare/v1.9.0...v1.10.0) (2026-08-29)
+## [1.10.0](https://github.com/gbudjeakp/burstgrid/compare/v1.9.0...v1.10.0) (2026-08-31)
+
+
+### Features
+
+* setup: full 6-step bootstrap output (vCPU quota, rootfs S3 keys, `burstgrid init`, webhook registration)
+* setup: add ubuntu-docker rootfs (16G) as first-class step alongside standard 4G rootfs
+* docs: update setup snippet and flow description to match new 6-step workflow
+
+
+### Bug Fixes
+
+* vm-init: write /etc/hosts + bring up loopback (fix `getaddrinfo ENOTFOUND localhost` — bug #13)
+* vm-init: increase default rootfs size 2G→4G (fix Node.js tool cache ENOSPC — bug #12)
+* vm-init: `--iptables=false` for dockerd + manual MASQUERADE rule (fix missing `iptable_raw` kernel module — bug #11)
+* vm-init: switch to iptables-legacy before dockerd (fix nftables not in Firecracker kernel — bug #11)
+* vm-init: move PATH export to top of script (fix Docker never found — bug #10)
+* worker: raise `STALE_TIMEOUT_MS` 30s→120s; add 10s AbortController timeout to `post()` (fix worker deregistration under event loop saturation)
+* worker: add 10s fetch timeout to scheduler `post()` calls so stale requests cannot pile up
+* s3: upload rootfs to `rootfs-arm64.img.gz` key (was `rootfs-aarch64.img.gz`); userdata downloads by LABEL_ARCH not uname -m
+* terraform: add `s3:PutObject` + `s3:ListBucket` to worker IAM role
 
 
 ### Features
 
 * dynamic bin-packing autoscaler — vCPU-demand-based scale-up ([d3133d3](https://github.com/gbudjeakp/burstgrid/commit/d3133d3e48022f1dab2e29e262a6923c1518e8ec))
+* setup: full 6-step bootstrap output (vCPU quota, rootfs S3 keys, `burstgrid init`, webhook registration)
+* setup: add ubuntu-docker rootfs (16G) as first-class step alongside standard 4G rootfs
+* docs: update setup snippet and flow description to match new 6-step workflow
+
+
+### Bug Fixes
+
+* vm-init: write /etc/hosts + bring up loopback (fix `getaddrinfo ENOTFOUND localhost` — bug #13)
+* vm-init: increase default rootfs size 2G→4G (fix Node.js tool cache ENOSPC — bug #12)
+* vm-init: `--iptables=false` for dockerd + manual MASQUERADE rule (fix missing `iptable_raw` kernel module — bug #11)
+* vm-init: switch to iptables-legacy before dockerd (fix nftables not in Firecracker kernel — bug #11)
+* vm-init: move PATH export to top of script (fix Docker never found — bug #10)
+* worker: raise `STALE_TIMEOUT_MS` 30s→120s; add 10s AbortController timeout to `post()` (fix worker deregistration under event loop saturation)
+* worker: add 10s fetch timeout to scheduler `post()` calls so stale requests cannot pile up
+* s3: upload rootfs to `rootfs-arm64.img.gz` key (was `rootfs-aarch64.img.gz`); userdata downloads by LABEL_ARCH not uname -m
+* terraform: add `s3:PutObject` + `s3:ListBucket` to worker IAM role
 
 ## [1.9.0](https://github.com/gbudjeakp/burstgrid/compare/v1.8.0...v1.9.0) (2026-08-29)
 

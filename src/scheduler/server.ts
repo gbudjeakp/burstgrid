@@ -136,6 +136,19 @@ export function registerSchedulerRoutes(
     },
   );
 
+  // Called by the worker on spot interruption — immediately requeues inflight jobs
+  // rather than waiting for the 30s heartbeat stale timeout.
+  app.post<{ Params: { id: string } }>('/v1/workers/:id/evict', { preHandler }, async (req, reply) => {
+    const workerId = req.params.id;
+    const jobs = pool.drainWorkerJobs(workerId);
+    for (const job of jobs) {
+      req.log.warn({ jobId: job.id, workerId }, 'evicting job to queue (spot termination)');
+      queue.requeue(job);
+    }
+    pool.unregister(workerId);
+    return reply.status(200).send({ requeued: jobs.length });
+  });
+
   app.get('/v1/status', async () => ({
     connectedWorkers: pool.connectedCount,
     totalFreeSlots: pool.totalFreeSlots,

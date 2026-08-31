@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http';
 import type { WorkerRegistration, WorkerHeartbeat, JobAssignment, Job } from '../types/index.js';
 import type { RedisWorkerRegistryBackend } from '../backends/redis.js';
 
-const STALE_TIMEOUT_MS = 30_000;
+const STALE_TIMEOUT_MS = 120_000; // 4× heartbeat jitter budget — event loop saturation under heavy load delays timers
 
 interface WorkerState extends WorkerRegistration {
   freeSlots: number;
@@ -17,6 +17,8 @@ interface WorkerState extends WorkerRegistration {
 export class WorkerPool {
   private readonly workers = new Map<string, WorkerState>();
   private readonly inflightJobs = new Map<string, Map<string, Job>>();
+  /** Active job count per 'owner/repo' — used for per-repo concurrency limits. */
+  private readonly repoInflight = new Map<string, number>();
   private readonly reapTimer: NodeJS.Timeout;
   private redisWorkers?: RedisWorkerRegistryBackend;
 
@@ -73,11 +75,20 @@ export class WorkerPool {
   trackJob(workerId: string, job: Job): void {
     if (!this.inflightJobs.has(workerId)) this.inflightJobs.set(workerId, new Map());
     this.inflightJobs.get(workerId)!.set(job.id, job);
+    const key = `${job.owner}/${job.repo}`;
+    this.repoInflight.set(key, (this.repoInflight.get(key) ?? 0) + 1);
   }
 
   /** Remove a job from inflight tracking once it reaches a terminal status. */
   releaseJob(workerId: string, jobId: string): void {
+    const job = this.inflightJobs.get(workerId)?.get(jobId);
     this.inflightJobs.get(workerId)?.delete(jobId);
+    if (job) {
+      const key = `${job.owner}/${job.repo}`;
+      const n = (this.repoInflight.get(key) ?? 1) - 1;
+      if (n <= 0) this.repoInflight.delete(key);
+      else this.repoInflight.set(key, n);
+    }
     const w = this.workers.get(workerId);
     // Start idle timer when the last job on this worker finishes
     if (w && this.inflightJobs.get(workerId)?.size === 0 && w.idleSince === null) {
@@ -88,8 +99,19 @@ export class WorkerPool {
   /** Return all inflight jobs for a worker and clear the tracking entry. */
   drainWorkerJobs(workerId: string): Job[] {
     const jobs = [...(this.inflightJobs.get(workerId)?.values() ?? [])];
+    for (const job of jobs) {
+      const key = `${job.owner}/${job.repo}`;
+      const n = (this.repoInflight.get(key) ?? 1) - 1;
+      if (n <= 0) this.repoInflight.delete(key);
+      else this.repoInflight.set(key, n);
+    }
     this.inflightJobs.delete(workerId);
     return jobs;
+  }
+
+  /** Active inflight job count for a specific repo. */
+  runningJobsFor(owner: string, repo: string): number {
+    return this.repoInflight.get(`${owner}/${repo}`) ?? 0;
   }
 
   heartbeat(hb: WorkerHeartbeat): void {

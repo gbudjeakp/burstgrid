@@ -16,9 +16,15 @@ variable "scheduler_subnet_id" {
   type        = string
 }
 
-variable "worker_subnet_ids" {
-  description = "Subnets for worker spot instances — use multiple AZs for capacity diversification"
-  type        = list(string)
+variable "nat_subnet_id" {
+  description = "Public subnet for the fck-nat instance — must have an internet gateway route"
+  type        = string
+}
+
+variable "nat_instance_type" {
+  description = "Instance type for the fck-nat NAT instance. t4g.nano handles up to 5Gbps burst."
+  type        = string
+  default     = "t4g.nano"
 }
 
 # ── AMIs ───────────────────────────────────────────────────────────────────────
@@ -55,8 +61,10 @@ variable "fleets" {
     instance_type      = string              # e.g. "m6g.large"
     slots_per_worker   = number              # concurrent jobs per host
     max_workers        = number              # autoscaler ceiling
-    scale_up_threshold = optional(number, 1) # queued jobs before launching a new host
-    capacity_type      = optional(string, "spot")
+    scale_up_threshold    = optional(number, 1) # queued jobs before launching a new host
+    capacity_type         = optional(string, "spot")
+    scale_down_after_idle = optional(number, 300) # seconds idle before termination
+    min_idle_workers      = optional(number, 0)   # warm standbys to keep alive
   }))
   default = [
     {
@@ -87,6 +95,12 @@ variable "github_app_id" {
 }
 
 # ── Secrets ────────────────────────────────────────────────────────────────────
+
+variable "scheduler_url_override" {
+  description = "Override the scheduler URL baked into worker launch templates (e.g. if using a stable EIP separate from the Terraform-managed one)"
+  type        = string
+  default     = ""
+}
 
 variable "github_webhook_secret" {
   description = "HMAC secret for GitHub webhook payload verification"

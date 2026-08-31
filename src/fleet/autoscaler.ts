@@ -24,6 +24,11 @@ export interface TierFleet {
   slotsPerWorker: number;
   scaleUpThreshold: number;
   /**
+   * Minimum idle workers to keep alive globally (warm standby).
+   * Defaults to 0 — fully terminates idle workers once jobs complete.
+   */
+  minIdleWorkers?: number;
+  /**
    * Pre-baked GPU AMI ID to use instead of the Launch Template's default AMI.
    * Set this for gpu-ai fleets so workers boot with CUDA + ML frameworks pre-cached.
    */
@@ -78,15 +83,16 @@ export class Autoscaler {
 
   /**
    * Terminate workers that have been fully idle longer than the shortest
-   * scaleDownAfterIdleSec across all fleets. Keeps one warm standby alive globally.
+   * scaleDownAfterIdleSec across all fleets.
    */
   private async scaleDownGlobal(): Promise<void> {
     const idleMs = Math.min(...this.fleets.map(f => (f.scaleDownAfterIdleSec ?? 300))) * 1_000;
+    const minIdle = Math.max(0, ...this.fleets.map(f => f.minIdleWorkers ?? 0));
     // '' tag = all workers regardless of capabilities
     const idle = this.pool.idleWorkers('', idleMs);
-    if (idle.length <= 1) return; // keep one warm standby
+    if (idle.length <= minIdle) return;
 
-    const toTerminate = idle.slice(0, idle.length - 1);
+    const toTerminate = idle.slice(0, idle.length - minIdle);
     const ids = toTerminate.map(w => w.ec2InstanceId);
     try {
       await this.ec2.send(new TerminateInstancesCommand({ InstanceIds: ids }));
@@ -109,7 +115,7 @@ export class Autoscaler {
     if (pendingJobs.length === 0) return;
 
     const pendingVcpus = pendingJobs.reduce((s, j) =>
-      s + (j.vcpus ?? vmSizeFromLabels(j.labels).vcpus), 0);
+      s + vmSizeFromLabels(j.labels).vcpus, 0);
 
     if (pendingVcpus <= this.pool.totalFreeVcpus) return;
 

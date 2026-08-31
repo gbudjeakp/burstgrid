@@ -4,7 +4,8 @@
 #
 #   cp -r rootfs/template rootfs/my-image
 #   # edit rootfs/my-image/Dockerfile to add your tools
-#   ./scripts/build-rootfs.sh rootfs/my-image/Dockerfile /opt/images/my-image.img 4G
+#   ./scripts/build-rootfs.sh rootfs/my-image/Dockerfile /opt/images/my-image.img 2G arm64 --compress
+#   # --compress: ext4 images are mostly empty space; gzip cuts a 2G image to ~400-600 MB
 #
 # Register it in burstgrid.config.yaml:
 #   worker:
@@ -35,7 +36,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget gnupg \
     git git-lfs \
     procps \
-    libicu70 libssl3 \
+    libicu-dev libssl-dev \
     # TODO: add your packages here, e.g.:
     # python3 python3-pip \
     # build-essential \
@@ -85,9 +86,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ── 6. GitHub Actions runner ──────────────────────────────────────────────────
 # Required. The runner binary handles communication with GitHub.
 # Pin RUNNER_VERSION to a known-good release.
-ARG RUNNER_VERSION=2.317.0
-RUN mkdir -p /opt/actions-runner && cd /opt/actions-runner \
- && curl -fsSL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-x64-${RUNNER_VERSION}.tar.gz" \
+ARG RUNNER_VERSION=2.319.1
+# TARGETARCH is injected by build-rootfs.sh (amd64 or arm64); map to runner arch naming.
+ARG TARGETARCH=amd64
+RUN RUNNER_ARCH=$([ "$TARGETARCH" = "arm64" ] && echo "arm64" || echo "x64") \
+ && mkdir -p /opt/actions-runner && cd /opt/actions-runner \
+ && curl -fsSL "https://github.com/actions/runner/releases/download/v${RUNNER_VERSION}/actions-runner-linux-${RUNNER_ARCH}-${RUNNER_VERSION}.tar.gz" \
     | tar -xz \
  && ./bin/installdependencies.sh
 

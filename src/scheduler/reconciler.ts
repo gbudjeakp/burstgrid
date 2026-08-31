@@ -2,9 +2,16 @@ import type { AppClientRegistry } from '../github/runner.js';
 import type { JobQueue } from './queue.js';
 import { probeRun } from '../github/probe.js';
 
+/** Repos with no active runs for this long are dropped from the watch set. */
+const INACTIVE_PRUNE_MS = 6 * 60 * 60_000; // 6 hours
+/** Max simultaneous GitHub API calls during a reconcile cycle. */
+const RECONCILE_CONCURRENCY = 5;
+
 export class Reconciler {
   /** Repos seen from webhook events, added to the watch set automatically. */
   private readonly repos = new Set<string>(); // "owner/repo"
+  /** Last time each repo had at least one active run (used to prune stale watch entries). */
+  private readonly lastActiveAt = new Map<string, number>();
   /** Repos with an in-flight immediate reconcile; prevents duplicate API calls from concurrent webhooks. */
   private readonly pendingImmediate = new Set<string>();
   private timer?: NodeJS.Timeout;
@@ -18,13 +25,20 @@ export class Reconciler {
     private readonly intervalMs = 15_000,
   ) {
     for (const r of watched) {
-      if (r.includes('/')) this.repos.add(r);
+      if (r.includes('/')) {
+        this.repos.add(r);
+        this.lastActiveAt.set(r, Date.now());
+      }
     }
   }
 
   /** Call from the webhook handler so newly-seen repos are included in future periodic reconciles. */
   trackRepo(owner: string, repo: string): void {
-    this.repos.add(`${owner}/${repo}`);
+    const key = `${owner}/${repo}`;
+    if (!this.repos.has(key)) {
+      this.repos.add(key);
+      this.lastActiveAt.set(key, Date.now()); // start the inactivity countdown from now
+    }
   }
 
   /**
@@ -56,11 +70,29 @@ export class Reconciler {
   }
 
   private async reconcileAll(): Promise<void> {
-    for (const fullName of this.repos) {
-      const [owner, repo] = fullName.split('/');
-      await this.reconcileRepo(owner, repo).catch(err =>
-        console.error(`[reconciler] ${fullName}:`, err),
+    const repos = [...this.repos];
+    // Process in parallel batches to avoid sequential API round-trips
+    for (let i = 0; i < repos.length; i += RECONCILE_CONCURRENCY) {
+      await Promise.all(
+        repos.slice(i, i + RECONCILE_CONCURRENCY).map(fullName => {
+          const [owner, repo] = fullName.split('/');
+          return this.reconcileRepo(owner, repo).catch(err =>
+            console.error(`[reconciler] ${fullName}:`, err),
+          );
+        }),
       );
+    }
+    this.pruneInactive();
+  }
+
+  private pruneInactive(): void {
+    const cutoff = Date.now() - INACTIVE_PRUNE_MS;
+    for (const fullName of this.repos) {
+      if ((this.lastActiveAt.get(fullName) ?? 0) < cutoff) {
+        this.repos.delete(fullName);
+        this.lastActiveAt.delete(fullName);
+        console.info(`[reconciler] pruned inactive repo ${fullName}`);
+      }
     }
   }
 
@@ -69,6 +101,7 @@ export class Reconciler {
     const runs = await client.listActiveRuns(owner, repo);
     if (runs.length > 0) {
       console.info(`[reconciler] ${owner}/${repo}: checking ${runs.length} active run(s)`);
+      this.lastActiveAt.set(`${owner}/${repo}`, Date.now());
     }
     for (const run of runs) {
       await probeRun({

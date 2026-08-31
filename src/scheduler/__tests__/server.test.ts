@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import Fastify from 'fastify';
+import { ExecutionTier } from '../../types/index.js';
 import { JobQueue } from '../queue.js';
 import { WorkerPool } from '../worker-pool.js';
 import { registerSchedulerRoutes } from '../server.js';
@@ -81,6 +82,48 @@ describe('worker auth — token enforced', () => {
   it('does not apply auth to /health', async () => {
     const res = await buildApp(TOKEN).inject({ method: 'GET', url: '/health' });
     expect(res.statusCode).toBe(200);
+  });
+});
+
+// ─── Spot evict ─────────────────────────────────────────────────────────────
+
+describe('POST /v1/workers/:id/evict', () => {
+  it('requeues inflight jobs and unregisters the worker', async () => {
+    const pool = new WorkerPool();
+    const queue = new JobQueue();
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, pool, queue);
+
+    // Register worker
+    await app.inject({
+      method: 'POST', url: '/v1/workers/register',
+      headers: JSON_HEADERS, body: REG_BODY,
+    });
+
+    // Simulate a tracked inflight job
+    const job = {
+      id: 'j-1', owner: 'o', repo: 'r', runId: 1,
+      labels: ['linux'], tier: ExecutionTier.Standard, queuedAt: new Date(), runnerToken: 't',
+    };
+    pool.trackJob('w-1', job);
+
+    const res = await app.inject({ method: 'POST', url: '/v1/workers/w-1/evict', headers: JSON_HEADERS, body: '{}' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ requeued: 1 });
+    expect(queue.depth).toBe(1);
+    expect(pool.hasWorker('w-1')).toBe(false);
+  });
+
+  it('returns requeued: 0 and unregisters when no inflight jobs', async () => {
+    const pool = new WorkerPool();
+    const app = Fastify({ logger: false });
+    registerSchedulerRoutes(app, pool, new JobQueue());
+    await app.inject({ method: 'POST', url: '/v1/workers/register', headers: JSON_HEADERS, body: REG_BODY });
+
+    const res = await app.inject({ method: 'POST', url: '/v1/workers/w-1/evict', headers: JSON_HEADERS, body: '{}' });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ requeued: 0 });
+    expect(pool.hasWorker('w-1')).toBe(false);
   });
 });
 

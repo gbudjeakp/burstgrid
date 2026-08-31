@@ -35,49 +35,59 @@ autoscaler:
 
     # Run `npx burstgrid init` to auto-populate launchTemplateId and subnetIds from your AWS account.
 
-    # medium — m6g.large (2 vCPU / 8 GiB)
+    # c6g.metal — 64 vCPU / 128 GiB bare metal; Firecracker requires direct EL2/HYP access
+    # Run `npx burstgrid init` after `terraform apply` to refresh launchTemplateId values.
+
+    # medium — 2 vCPU / 2 GiB per VM → 32 concurrent VMs per metal instance
     - name: medium
       sizeTag: "burstgrid:size=medium"
-      launchTemplateId: lt-CHANGE_ME   # aws ec2 describe-launch-templates --query 'LaunchTemplates[*].[LaunchTemplateId,LaunchTemplateName]' --output table
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME             # aws ec2 describe-subnets --query 'Subnets[*].[SubnetId,AvailabilityZone]' --output table
-      maxWorkers: 5
-      slotsPerWorker: 2
+        - subnet-REPLACE_ME   # us-east-1a private
+        - subnet-REPLACE_ME   # us-east-1b private
+        - subnet-REPLACE_ME   # us-east-1c private
+      maxWorkers: 2
+      slotsPerWorker: 32
       scaleUpThreshold: 1
       scaleDownAfterIdleSec: 300
       capacityType: spot
 
-    # large — m6g.2xlarge (8 vCPU / 32 GiB)
+    # large — 4 vCPU / 4 GiB per VM → 16 concurrent VMs per metal instance
     - name: large
       sizeTag: "burstgrid:size=large"
-      launchTemplateId: lt-CHANGE_ME
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME
-      maxWorkers: 10
-      slotsPerWorker: 4
-      scaleUpThreshold: 2
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+      maxWorkers: 2
+      slotsPerWorker: 16
+      scaleUpThreshold: 4
       capacityType: spot
 
-    # xlarge — m6g.4xlarge (16 vCPU / 64 GiB)
+    # xlarge — 8 vCPU / 8 GiB per VM → 8 concurrent VMs per metal instance
     - name: xlarge
       sizeTag: "burstgrid:size=xlarge"
-      launchTemplateId: lt-CHANGE_ME
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME
-      maxWorkers: 5
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+      maxWorkers: 2
       slotsPerWorker: 8
       scaleUpThreshold: 1
       capacityType: spot
 
-    # 2xlarge — m6g.4xlarge (16 vCPU / 64 GiB) — spot w/ on-demand fallback
+    # 2xlarge — 16 vCPU / 32 GiB per VM → 4 concurrent VMs per metal instance
     - name: 2xlarge
       sizeTag: "burstgrid:size=2xlarge"
-      launchTemplateId: lt-CHANGE_ME
-      instanceType: m6g.4xlarge
+      launchTemplateId: lt-REPLACE_ME
       subnetIds:
-        - subnet-CHANGE_ME
-      maxWorkers: 3
-      slotsPerWorker: 2
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+        - subnet-REPLACE_ME
+      maxWorkers: 2
+      slotsPerWorker: 4
       scaleUpThreshold: 1
       capacityType: spot
 

@@ -24,3 +24,13 @@ output "spot_queue_url" {
   description = "SQS URL for EC2 spot interruption warnings"
   value       = module.worker_fleet.spot_queue_url
 }
+
+output "nat_instance_type" {
+  description = "fck-nat instance type (replaces Managed NAT Gateway)"
+  value       = module.nat.instance_type
+}
+
+output "nat_eni_id" {
+  description = "Static ENI used by fck-nat — visible in VPC console"
+  value       = module.nat.eni_id
+}

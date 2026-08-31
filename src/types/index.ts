@@ -63,6 +63,8 @@ export interface JobAssignment {
   memoryMiB: number;
   /** Extra env vars from the GpuAmiProfile, forwarded to the runner process. */
   env?: Record<string, string>;
+  /** Per-job Docker pull-through registry mirror; overrides worker-level registryMirror. */
+  registryMirror?: string;
 }
 
 export const VM_SIZES: Record<string, { vcpus: number; memoryMiB: number }> = {

@@ -1,6 +1,7 @@
 variable "vpc_id" { type = string }
 variable "subnet_ids" { type = list(string) }
 variable "ami" { type = string }
+variable "scheduler_url" { type = string }
 variable "worker_token" {
   type      = string
   sensitive = true
@@ -30,7 +31,7 @@ variable "fleets" {
 resource "aws_security_group" "worker" {
   name_prefix = "burstgrid-worker-"
   vpc_id      = var.vpc_id
-  description = "BurstGrid worker — egress only"
+  description = "BurstGrid worker - egress only"
 
   egress {
     from_port   = 0
@@ -63,8 +64,8 @@ resource "aws_iam_role_policy" "worker" {
         # Download the worker-agent binary at boot
         Sid      = "S3Artifacts"
         Effect   = "Allow"
-        Action   = ["s3:GetObject"]
-        Resource = "arn:aws:s3:::${var.s3_artifacts_bucket}/*"
+        Action   = ["s3:GetObject", "s3:PutObject", "s3:ListBucket"]
+        Resource = ["arn:aws:s3:::${var.s3_artifacts_bucket}", "arn:aws:s3:::${var.s3_artifacts_bucket}/*"]
       },
       {
         # Poll the spot interruption queue so the worker-agent can drain gracefully
@@ -161,20 +162,29 @@ resource "aws_launch_template" "fleet" {
   # scheduler_endpoint is baked in by the caller (root module) after the scheduler EIP is known.
   # worker_token is baked in here so each worker can auth with the scheduler on connect.
   user_data = base64encode(templatefile("${path.module}/userdata.sh.tpl", {
-    # SCHEDULER_URL is injected at instance launch time via RunInstances override or
-    # set here if known. Leave as placeholder if scheduler is deployed separately.
-    scheduler_url       = "SCHEDULER_URL_PLACEHOLDER"
-    slots_per_worker    = each.value.slots_per_worker
-    worker_token        = var.worker_token
-    s3_artifacts_bucket = var.s3_artifacts_bucket
-    spot_queue_url      = aws_sqs_queue.spot_interruptions.url
-    aws_region          = var.aws_region
+    scheduler_url        = var.scheduler_url
+    slots_per_worker     = each.value.slots_per_worker
+    worker_token         = var.worker_token
+    s3_artifacts_bucket  = var.s3_artifacts_bucket
+    spot_queue_url       = aws_sqs_queue.spot_interruptions.url
+    aws_region           = var.aws_region
+    firecracker_version  = "v1.16.1"
   }))
 
   metadata_options {
     http_endpoint               = "enabled"
     http_tokens                 = "required"
     http_put_response_hop_limit = 1
+  }
+
+  # 30 GiB root: 3 GiB rootfs.img + Node + packages + headroom for 32 concurrent VM sockets
+  block_device_mappings {
+    device_name = "/dev/sda1"
+    ebs {
+      volume_size           = 30
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
   }
 
   tag_specifications {

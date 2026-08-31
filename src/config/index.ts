@@ -25,6 +25,7 @@ const TierFleetSchema = z.object({
   slotsPerWorker: z.number().int().positive(),
   scaleUpThreshold: z.number().int().nonnegative(),
   scaleDownAfterIdleSec: z.number().int().positive().optional(),
+  minIdleWorkers: z.number().int().nonnegative().optional(),
   instanceVcpus: z.number().int().positive().optional(),
   gpuAmiId: z.string().optional(),
   instanceType: z.string().optional(),
@@ -43,12 +44,25 @@ const ConfigSchema = z.object({
     rateLimitMax: z.number().int().positive().optional(),
     rateLimitWindow: z.string().optional(),
     drainTimeoutMs: z.number().int().positive().optional(),
+    /** Max concurrent jobs per repo. Key is 'owner/repo' or 'owner/*' for org-wide. */
+    concurrencyLimits: z.record(z.string(), z.number().int().positive()).optional(),
+    /** Default max concurrent jobs for any repo not matched by concurrencyLimits. Unlimited if absent. */
+    defaultRepoConcurrency: z.number().int().positive().optional(),
   }).strict().optional(),
   worker: z.object({
     registryMirror: z.string().optional(),
     images: z.array(RootfsImageSchema).optional(),
     dispatchTimeoutMs: z.number().int().positive().optional(),
     jobTimeoutMs: z.number().int().positive().optional(),
+    s3Cache: z.object({
+      bucketName: z.string(),
+      region: z.string().optional(),
+      keyPrefix: z.string().optional(),
+    }).strict().optional(),
+    snapshotPool: z.object({
+      size: z.number().int().positive().optional(),
+      snapshotDir: z.string().optional(),
+    }).strict().optional(),
   }).strict().optional(),
   autoscaler: z.object({
     enabled: z.boolean().optional(),
@@ -72,6 +86,10 @@ export interface BurstGridConfig {
     rateLimitWindow?: string;
     /** Max ms to wait for in-flight jobs to finish during graceful shutdown. Default: 300_000 (5 min). */
     drainTimeoutMs?: number;
+    /** Per-repo job concurrency caps. Key: 'owner/repo' or 'owner/*' (org-wide). */
+    concurrencyLimits?: Record<string, number>;
+    /** Global default max concurrent jobs per repo when no specific limit matches. */
+    defaultRepoConcurrency?: number;
   };
   worker?: {
     registryMirror?: string;
@@ -80,6 +98,10 @@ export interface BurstGridConfig {
     dispatchTimeoutMs?: number;
     /** Ms after running before a job that never completes is marked failed. Default: 3_600_000 (1h). */
     jobTimeoutMs?: number;
+    /** S3-backed GitHub Actions cache — exposes ACTIONS_CACHE_URL to VMs. */
+    s3Cache?: { bucketName: string; region?: string; keyPrefix?: string };
+    /** Pre-warmed Firecracker snapshot pool for ~5ms VM restore instead of ~150ms cold boot. */
+    snapshotPool?: { size?: number; snapshotDir?: string };
   };
   autoscaler?: {
     enabled?: boolean;
@@ -109,7 +131,7 @@ export function loadConfig(configPath?: string): BurstGridConfig {
     ?? process.env.BURSTGRID_CONFIG_PATH   // alias accepted for compatibility
     ?? path.join(process.cwd(), 'burstgrid.config.yaml');
 
-  if (!fs.existsSync(filePath)) return {};
+  if (!fs.existsSync(filePath)) return mergeEnvOverrides({});
 
   let raw: unknown;
   try {
@@ -125,5 +147,61 @@ export function loadConfig(configPath?: string): BurstGridConfig {
     process.exit(1);
   }
 
-  return result.data as BurstGridConfig;
+  return mergeEnvOverrides(result.data as BurstGridConfig);
+}
+
+/**
+ * Apply env-var overrides on top of a parsed config (or an empty config when no YAML exists).
+ * This lets operators configure BurstGrid entirely through environment variables.
+ *
+ * Supported vars:
+ *   BURSTGRID_REDIS_URL          → backends.redis.url
+ *   BURSTGRID_SQS_QUEUE_URL      → backends.sqs.queueUrl
+ *   BURSTGRID_SQS_REGION         → backends.sqs.region
+ *   BURSTGRID_DYNAMODB_TABLE     → backends.dynamodb.tableName
+ *   BURSTGRID_DYNAMODB_REGION    → backends.dynamodb.region
+ *   BURSTGRID_AUTOSCALER         → autoscaler.enabled  (true|false|1|0)
+ *   BURSTGRID_REGISTRY_MIRROR    → worker.registryMirror
+ *   BURSTGRID_S3_CACHE_BUCKET    → worker.s3Cache.bucketName
+ *   BURSTGRID_S3_CACHE_REGION    → worker.s3Cache.region
+ *   BURSTGRID_SNAPSHOT_POOL_SIZE → worker.snapshotPool.size
+ */
+export function mergeEnvOverrides(cfg: BurstGridConfig): BurstGridConfig {
+  const e = process.env;
+
+  if (e.BURSTGRID_REDIS_URL) {
+    cfg.backends = { ...cfg.backends, redis: { url: e.BURSTGRID_REDIS_URL } };
+  }
+  if (e.BURSTGRID_SQS_QUEUE_URL) {
+    cfg.backends = { ...cfg.backends, sqs: { queueUrl: e.BURSTGRID_SQS_QUEUE_URL, region: e.BURSTGRID_SQS_REGION } };
+  }
+  if (e.BURSTGRID_DYNAMODB_TABLE) {
+    cfg.backends = { ...cfg.backends, dynamodb: { tableName: e.BURSTGRID_DYNAMODB_TABLE, region: e.BURSTGRID_DYNAMODB_REGION } };
+  }
+  if (e.BURSTGRID_AUTOSCALER !== undefined) {
+    cfg.autoscaler = { ...cfg.autoscaler, enabled: e.BURSTGRID_AUTOSCALER === 'true' || e.BURSTGRID_AUTOSCALER === '1' };
+  }
+  if (e.BURSTGRID_REGISTRY_MIRROR) {
+    cfg.worker = { ...cfg.worker, registryMirror: e.BURSTGRID_REGISTRY_MIRROR };
+  }
+  if (e.BURSTGRID_S3_CACHE_BUCKET) {
+    cfg.worker = {
+      ...cfg.worker,
+      s3Cache: { bucketName: e.BURSTGRID_S3_CACHE_BUCKET, region: e.BURSTGRID_S3_CACHE_REGION },
+    };
+  }
+  if (e.BURSTGRID_SNAPSHOT_POOL_SIZE) {
+    const size = parseInt(e.BURSTGRID_SNAPSHOT_POOL_SIZE, 10);
+    if (!isNaN(size) && size > 0) {
+      cfg.worker = { ...cfg.worker, snapshotPool: { ...cfg.worker?.snapshotPool, size } };
+    }
+  }
+  if (e.BURSTGRID_REPO_CONCURRENCY) {
+    const limit = parseInt(e.BURSTGRID_REPO_CONCURRENCY, 10);
+    if (!isNaN(limit) && limit > 0) {
+      cfg.scheduler = { ...cfg.scheduler, defaultRepoConcurrency: limit };
+    }
+  }
+
+  return cfg;
 }

@@ -18,12 +18,14 @@ function makeRegistry(runs: Array<{ id: number }> = []) {
 }
 
 async function flush() {
-  // Flush the microtask queue so fire-and-forget async calls complete
-  await new Promise(resolve => setTimeout(resolve, 0));
+  // Two microtask ticks to let fire-and-forget async chains complete
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe('Reconciler', () => {
@@ -123,12 +125,10 @@ describe('Reconciler', () => {
     r.triggerNow('acme', 'api');
     expect(client.listActiveRuns).not.toHaveBeenCalled(); // not yet
 
-    vi.runAllTimers();
-    await Promise.resolve(); await Promise.resolve();
+    await vi.runAllTimersAsync();
 
     expect(client.listActiveRuns).toHaveBeenCalledWith('acme', 'api');
     expect(mockedProbeRun).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 
   it('triggerNow debounces concurrent calls for the same repo into one reconcile', async () => {
@@ -141,11 +141,9 @@ describe('Reconciler', () => {
     r.triggerNow('org', 'repo');
     r.triggerNow('org', 'repo');
 
-    vi.runAllTimers();
-    await Promise.resolve(); await Promise.resolve();
+    await vi.runAllTimersAsync();
 
     expect(client.listActiveRuns).toHaveBeenCalledTimes(1);
-    vi.useRealTimers();
   });
 
   it('triggerNow skips reconcile when draining', async () => {
@@ -178,6 +176,43 @@ describe('Reconciler', () => {
     vi.advanceTimersByTime(10_000); // would trigger 10 interval callbacks if not stopped
 
     expect(client.listActiveRuns).toHaveBeenCalledTimes(callsAfterStart); // no new calls
-    vi.useRealTimers();
+  });
+
+  it('prunes repos with no active runs after the inactivity window', async () => {
+    vi.useFakeTimers();
+    const { registry, client } = makeRegistry([]); // always 0 active runs
+    const queue = new JobQueue();
+    // Set intervalMs just over 6h so only 2-3 reconcile cycles happen during the test
+    const PRUNE_MS = 6 * 60 * 60_000;
+    const r = new Reconciler(registry, queue, () => false, 500, ['org/stale'], PRUNE_MS + 1);
+
+    r.start();
+    await vi.advanceTimersByTimeAsync(0); // startup reconcile — no active runs, countdown starts
+    expect(client.listActiveRuns).toHaveBeenCalledTimes(1);
+
+    // Second cycle fires just after the 6h prune window — pruneInactive() removes the repo
+    await vi.advanceTimersByTimeAsync(PRUNE_MS + 2);
+    expect(client.listActiveRuns).toHaveBeenCalledTimes(2);
+
+    // Third cycle fires but the repo is gone — no more listActiveRuns calls
+    await vi.advanceTimersByTimeAsync(PRUNE_MS + 2);
+    expect(client.listActiveRuns).toHaveBeenCalledTimes(2);
+    r.stop();
+  });
+
+  it('keeps repos with recent active runs beyond the inactivity window', async () => {
+    vi.useFakeTimers();
+    const { registry, client } = makeRegistry([{ id: 1 }]); // always has active runs
+    const queue = new JobQueue();
+    const PRUNE_MS = 6 * 60 * 60_000;
+    const r = new Reconciler(registry, queue, () => false, 500, ['org/active'], PRUNE_MS + 1);
+
+    r.start();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(PRUNE_MS + 2);
+    await vi.advanceTimersByTimeAsync(PRUNE_MS + 2); // third cycle still fires (not pruned)
+
+    expect(client.listActiveRuns).toHaveBeenCalledTimes(3);
+    r.stop();
   });
 });

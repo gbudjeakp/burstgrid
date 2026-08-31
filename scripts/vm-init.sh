@@ -13,6 +13,10 @@
 
 set -e
 
+# Full PATH immediately — Linux kernel gives PID 1 an empty environment.
+# Every subsequent command (ip, mount, dockerd, config.sh, run.sh) needs this.
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 # ── Mount essential pseudo-filesystems ───────────────────────────────────────
 mount -t proc  proc  /proc  2>/dev/null || true
 mount -t sysfs sysfs /sys   2>/dev/null || true
@@ -100,9 +104,6 @@ if [ ! -f "$RUNNER_DIR/config.sh" ]; then
 fi
 
 cd "$RUNNER_DIR"
-
-# Ensure all standard bin dirs are in PATH so runner worker processes find sh, env, etc.
-export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 # Allow the runner to execute as root (PID 1 in a microVM is always root).
 export RUNNER_ALLOW_RUNASROOT=1

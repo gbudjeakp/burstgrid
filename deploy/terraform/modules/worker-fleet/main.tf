@@ -162,13 +162,13 @@ resource "aws_launch_template" "fleet" {
   # scheduler_endpoint is baked in by the caller (root module) after the scheduler EIP is known.
   # worker_token is baked in here so each worker can auth with the scheduler on connect.
   user_data = base64encode(templatefile("${path.module}/userdata.sh.tpl", {
-    scheduler_url        = var.scheduler_url
-    slots_per_worker     = each.value.slots_per_worker
-    worker_token         = var.worker_token
-    s3_artifacts_bucket  = var.s3_artifacts_bucket
-    spot_queue_url       = aws_sqs_queue.spot_interruptions.url
-    aws_region           = var.aws_region
-    firecracker_version  = "v1.16.1"
+    scheduler_url       = var.scheduler_url
+    slots_per_worker    = each.value.slots_per_worker
+    worker_token        = var.worker_token
+    s3_artifacts_bucket = var.s3_artifacts_bucket
+    spot_queue_url      = aws_sqs_queue.spot_interruptions.url
+    aws_region          = var.aws_region
+    firecracker_version = "v1.16.1"
   }))
 
   metadata_options {

@@ -2,7 +2,7 @@ import type { ServerResponse } from 'node:http';
 import type { WorkerRegistration, WorkerHeartbeat, JobAssignment, Job } from '../types/index.js';
 import type { RedisWorkerRegistryBackend } from '../backends/redis.js';
 
-const STALE_TIMEOUT_MS = 30_000;
+const STALE_TIMEOUT_MS = 120_000; // 4× heartbeat jitter budget — event loop saturation under heavy load delays timers
 
 interface WorkerState extends WorkerRegistration {
   freeSlots: number;

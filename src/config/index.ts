@@ -25,6 +25,7 @@ const TierFleetSchema = z.object({
   slotsPerWorker: z.number().int().positive(),
   scaleUpThreshold: z.number().int().nonnegative(),
   scaleDownAfterIdleSec: z.number().int().positive().optional(),
+  minIdleWorkers: z.number().int().nonnegative().optional(),
   instanceVcpus: z.number().int().positive().optional(),
   gpuAmiId: z.string().optional(),
   instanceType: z.string().optional(),

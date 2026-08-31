@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
 import { JobQueue } from '../src/scheduler/queue.js';
 import { WorkerPool } from '../src/scheduler/worker-pool.js';
@@ -115,15 +115,19 @@ for (const [org, orgCfg] of Object.entries(cfg.orgs ?? {})) {
 
 const app = Fastify({ logger: { level: 'info' } });
 
-// Buffer the body before JSON parsing so the webhook handler can verify HMAC
-app.addContentTypeParser('application/json', { parseAs: 'buffer' }, (req, body, done) => {
-  req.rawBody = body as Buffer;
+// Buffer the body before JSON parsing so the webhook handler can verify HMAC.
+// '*' catch-all accepts any content-type; also handles form-encoded (payload=<url-json>).
+function parseBodyAsJson(req: FastifyRequest, body: Buffer, done: (err: Error | null, body?: unknown) => void): void {
+  req.rawBody = body;
+  const str = body.toString();
   try {
-    done(null, JSON.parse((body as Buffer).toString()));
-  } catch (err) {
-    done(err as Error, undefined);
-  }
-});
+    done(null, str.startsWith('payload=')
+      ? JSON.parse(decodeURIComponent(str.slice('payload='.length)))
+      : JSON.parse(str));
+  } catch (err) { done(err as Error); }
+}
+app.addContentTypeParser('application/json', { parseAs: 'buffer' }, parseBodyAsJson);
+app.addContentTypeParser('*', { parseAs: 'buffer' }, parseBodyAsJson);
 
 const rl = cfg.scheduler ?? {};
 await app.register(rateLimit, {
@@ -137,6 +141,9 @@ registerSchedulerRoutes(app, pool, queue, BURSTGRID_WORKER_TOKEN,
 const reconciler = new Reconciler(
   registry, queue, () => draining, maxQueueDepth,
   BURSTGRID_WATCHED_REPOS.split(',').map(r => r.trim()).filter(Boolean),
+  process.env.BURSTGRID_RECONCILE_INTERVAL_MS
+    ? parseInt(process.env.BURSTGRID_RECONCILE_INTERVAL_MS, 10)
+    : 120_000,
 );
 registerWebhookRoute(app, BURSTGRID_WEBHOOK_SECRET, queue, registry, maxQueueDepth, () => draining, reconciler);
 

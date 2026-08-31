@@ -228,15 +228,22 @@ export class WorkerAgent {
   }
 
   private async post(path: string, body: unknown): Promise<void> {
-    const res = await fetch(`${this.cfg.schedulerUrl}${path}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.authHeader(),
-      },
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status} from ${path}`);
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), 10_000);
+    try {
+      const res = await fetch(`${this.cfg.schedulerUrl}${path}`, {
+        method: 'POST',
+        signal: ac.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...this.authHeader(),
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status} from ${path}`);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private authHeader(): Record<string, string> {

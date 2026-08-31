@@ -20,6 +20,7 @@
 
 import { execSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -122,6 +123,40 @@ for (const file of artifacts) {
       console.error('  Check that the bucket exists and your IAM role has s3:PutObject permission.');
       process.exit(1);
     }
+  }
+}
+
+// ── Upload Firecracker binaries ───────────────────────────────────────────────
+// Workers prefer s3://bucket/bin/firecracker-<arch> over a GitHub download.
+// Run `burstgrid deploy --firecracker-version v1.16.1` to refresh.
+
+const fcVersion = opt('firecracker-version') ?? 'v1.16.1';
+const fcArches = ['aarch64', 'x86_64'] as const;
+
+for (const fcArch of fcArches) {
+  const tgzName = `firecracker-${fcVersion}-${fcArch}.tgz`;
+  const tmpTgz  = path.join(os.tmpdir(), tgzName);
+  const s3Key   = `${prefix}bin/firecracker-${fcArch}`;
+  const s3Uri   = `s3://${bucket}/${s3Key}`;
+
+  const existing = spawnSync('aws', ['s3', 'ls', s3Uri, '--region', region], { encoding: 'utf-8' });
+  if (existing.status === 0) {
+    console.log(`[deploy] firecracker-${fcArch} already in S3, skipping (use --force-firecracker to re-upload)`);
+    continue;
+  }
+
+  console.log(`[deploy] downloading firecracker ${fcVersion} ${fcArch} from GitHub...`);
+  if (!dryRun) {
+    execSync(
+      `curl -fsSL "https://github.com/firecracker-microvm/firecracker/releases/download/${fcVersion}/${tgzName}" -o "${tmpTgz}"`,
+      { stdio: 'inherit' },
+    );
+    execSync(`tar -xz -C "${path.dirname(tmpTgz)}" -f "${tmpTgz}"`, { stdio: 'inherit' });
+    const extracted = path.join(path.dirname(tmpTgz), `release-${fcVersion}-${fcArch}`, `firecracker-${fcVersion}-${fcArch}`);
+    spawnSync('aws', ['s3', 'cp', extracted, s3Uri, '--region', region], { stdio: 'inherit' });
+    fs.rmSync(path.join(path.dirname(tmpTgz), `release-${fcVersion}-${fcArch}`), { recursive: true, force: true });
+    fs.rmSync(tmpTgz, { force: true });
+    console.log(`[deploy] uploaded firecracker-${fcArch} → ${s3Uri}`);
   }
 }
 

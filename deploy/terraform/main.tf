@@ -85,6 +85,7 @@ module "worker_fleet" {
   vpc_id              = var.vpc_id
   subnet_ids          = [for s in aws_subnet.worker_private : s.id]
   ami                 = var.worker_ami
+  scheduler_url       = coalesce(var.scheduler_url_override, "http://${module.scheduler.public_ip}:8080")
   fleets              = var.fleets
   worker_token        = var.worker_token
   s3_artifacts_bucket = var.s3_artifacts_bucket
@@ -100,10 +101,12 @@ locals {
       sizeTag          = "burstgrid:size=${f.name}"
       launchTemplateId = module.worker_fleet.launch_template_ids[f.name]
       subnetIds        = [for s in aws_subnet.worker_private : s.id]
-      maxWorkers       = f.max_workers
-      slotsPerWorker   = f.slots_per_worker
-      scaleUpThreshold = coalesce(f.scale_up_threshold, 1)
-      capacityType     = coalesce(f.capacity_type, "spot")
+      maxWorkers          = f.max_workers
+      slotsPerWorker      = f.slots_per_worker
+      scaleUpThreshold    = coalesce(f.scale_up_threshold, 1)
+      capacityType        = coalesce(f.capacity_type, "spot")
+      scaleDownAfterIdleSec = coalesce(f.scale_down_after_idle, 300)
+      minIdleWorkers      = coalesce(f.min_idle_workers, 0)
     }
   ]
 }

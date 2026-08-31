@@ -86,6 +86,8 @@ export class Slot {
         cacheServerUrl: this.cfg.cacheServerUrl,
         workerToken: this.cfg.workerToken,
         runnerEphemeral: this.cfg.runnerEphemeral ?? true,
+        repoUrl: this.cfg.repoUrl,
+        slotIndex: this.cfg.slotIndex ?? 0,
       };
 
       if (this.cfg.snapshotPool) {

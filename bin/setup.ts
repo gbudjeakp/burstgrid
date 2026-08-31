@@ -166,7 +166,22 @@ if (amiOverride) {
 const bucket = opt('bucket') ?? process.env.BURSTGRID_S3_BUCKET ?? `burstgrid-${accountId}`;
 ok('S3 bucket', bucket);
 
-// 6. Generate secrets
+// 6. Optional x86 AMI for mixed-arch fleets
+let x86AmiId: string | undefined;
+if (!amiOverride) {
+  const rawX86Ami = awsCli(
+    ['ec2', 'describe-images',
+      '--owners', '099720109477',
+      '--filters', 'Name=name,Values=ubuntu/images/hvm-ssd-gp3/ubuntu-noble-24.04-amd64-server-*',
+      '--query', 'sort_by(Images,&CreationDate)[-1].ImageId', '--output', 'text'],
+    'Could not find Ubuntu 24.04 x86_64 AMI.',
+  );
+  if (rawX86Ami && rawX86Ami !== 'None') {
+    x86AmiId = rawX86Ami;
+    ok('Ubuntu 24.04 x86_64 AMI', x86AmiId);
+  }
+}
+// 7. Generate secrets
 const webhookSecret = crypto.randomBytes(24).toString('hex');
 const workerToken   = crypto.randomBytes(24).toString('hex');
 ok('Webhook secret', '(generated)');
@@ -193,6 +208,7 @@ fs.writeFileSync(out, [
   `nat_subnet_id       = "${subnetId}"`,
   `scheduler_ami       = "${amiId}"`,
   `worker_ami          = "${amiId}"`,
+  ...(x86AmiId ? [`worker_ami_x86     = "${x86AmiId}"  # x86_64 fleet AMI`] : []),
   `s3_artifacts_bucket = "${bucket}"`,
   `webhook_secret      = "${webhookSecret}"`,
   `worker_token        = "${workerToken}"`,
@@ -201,7 +217,12 @@ fs.writeFileSync(out, [
 
 console.log(`\n  Wrote ${path.relative(root, out)}\n`);
 console.log('Next steps:');
-console.log('  1. Set GITHUB_APP_ID + GITHUB_PRIVATE_KEY_PATH on your scheduler instance');
-console.log('     (or GITHUB_TOKEN for single-repo testing)');
-console.log('  2. npx burstgrid deploy');
+console.log('  1. Build rootfs artifacts and upload to S3:');
+console.log('       ./scripts/build-rootfs.sh rootfs/node24/Dockerfile /tmp/rootfs-arm64.img 4G arm64 --compress');
+console.log(`       aws s3 cp /tmp/rootfs-arm64.img.gz s3://${bucket}/rootfs-arm64.img.gz`);
+console.log('       # Download ARM64 vmlinux:');
+console.log(`       curl -fsSL https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.9/aarch64/vmlinux-6.1.102 -o /tmp/vmlinux-aarch64`);
+console.log(`       aws s3 cp /tmp/vmlinux-aarch64 s3://${bucket}/vmlinux-aarch64`);
+console.log('  2. Set GITHUB_APP_ID + GITHUB_PRIVATE_KEY_PATH (or GITHUB_TOKEN for testing)');
+console.log('  3. npx burstgrid deploy');
 console.log('');

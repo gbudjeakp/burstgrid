@@ -1,32 +1,26 @@
 #!/usr/bin/env bash
-# Build a Firecracker rootfs (.img) from a Dockerfile.
+# Build a Firecracker rootfs (.img or .img.gz) from a Dockerfile.
 #
 # Usage:
-#   ./scripts/build-rootfs.sh <Dockerfile> <output.img> [size]
+#   ./scripts/build-rootfs.sh <Dockerfile> <output.img> [size] [arch] [--compress]
 #
 # Examples:
-#   ./scripts/build-rootfs.sh rootfs/ubuntu-docker/Dockerfile /opt/images/ubuntu-docker.img 4G
-#   ./scripts/build-rootfs.sh rootfs/node20/Dockerfile /opt/images/node20.img 2G
+#   ./scripts/build-rootfs.sh rootfs/template/Dockerfile /opt/images/my-image-arm64.img 4G arm64 --compress
+#   ./scripts/build-rootfs.sh rootfs/template/Dockerfile /opt/images/my-image-x86_64.img 4G amd64 --compress
 #
-# The resulting .img is an ext4 filesystem you can reference in burstgrid.config.yaml:
-#
-#   worker:
-#     images:
-#       - name: ubuntu-docker
-#         path: /opt/images/ubuntu-docker.img
-#         description: "Ubuntu 22.04 + Docker 24"
-#         os: ubuntu-22.04
-#         tools: [docker, git, curl]
-#         docker_version: "24.0"
+# Always use --compress: ext4 images are mostly empty space; gzip reduces a 4G image to ~400-600 MB.
 #
 # Requirements: docker, mkfs.ext4 (e2fsprogs), dd, sudo
 
 set -euo pipefail
 
-DOCKERFILE="${1:?Usage: $0 <Dockerfile> <output.img> [size]}"
-OUTPUT="${2:?Usage: $0 <Dockerfile> <output.img> [size]}"
-IMG_SIZE="${3:-2G}"
+DOCKERFILE="${1:?Usage: $0 <Dockerfile> <output.img> [size] [arch] [--compress]}"
+OUTPUT="${2:?Usage: $0 <Dockerfile> <output.img> [size] [arch] [--compress]}"
+IMG_SIZE="${3:-4G}"   # ext4 partition size; 4G needed for Node.js tool cache
+ARCH="${4:-arm64}"
+COMPRESS="${5:-}"
 
+DOCKER_PLATFORM="linux/${ARCH}"
 TAG="burstgrid-rootfs-builder-$$"
 CONTEXT_DIR="$(dirname "$DOCKERFILE")"
 WORK_DIR="$(mktemp -d)"
@@ -37,15 +31,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[build-rootfs] building Docker image from $DOCKERFILE..."
-docker build -t "$TAG" -f "$DOCKERFILE" "$CONTEXT_DIR"
+echo "[build-rootfs] arch=${ARCH} size=${IMG_SIZE} dockerfile=$DOCKERFILE"
+echo "[build-rootfs] building Docker image for ${DOCKER_PLATFORM}..."
+docker buildx build --platform "$DOCKER_PLATFORM" \
+  --build-arg "TARGETARCH=${ARCH}" \
+  -t "$TAG" -f "$DOCKERFILE" "$CONTEXT_DIR" --load
 
 echo "[build-rootfs] exporting filesystem to $WORK_DIR/rootfs..."
 mkdir -p "$WORK_DIR/rootfs"
-docker create --name "$TAG" "$TAG"
+docker create --name "$TAG" --platform "$DOCKER_PLATFORM" "$TAG"
 docker export "$TAG" | tar -C "$WORK_DIR/rootfs" -xf -
 
-# The init script must be at /sbin/init in the rootfs.
 # Copy the BurstGrid VM init script if not already present in the image.
 if [[ ! -f "$WORK_DIR/rootfs/sbin/burstgrid-init" ]]; then
   echo "[build-rootfs] installing burstgrid-init into rootfs..."
@@ -57,5 +53,10 @@ mkdir -p "$(dirname "$OUTPUT")"
 dd if=/dev/zero of="$OUTPUT" bs=1 count=0 seek="$IMG_SIZE" 2>/dev/null
 mkfs.ext4 -F -d "$WORK_DIR/rootfs" "$OUTPUT"
 
-echo "[build-rootfs] done → $OUTPUT"
-echo "[build-rootfs] size: $(du -sh "$OUTPUT" | cut -f1)"
+if [[ "$COMPRESS" == "--compress" ]]; then
+  echo "[build-rootfs] compressing → ${OUTPUT}.gz ..."
+  gzip -9 -k "$OUTPUT"
+  echo "[build-rootfs] compressed: $(du -sh "${OUTPUT}.gz" | cut -f1)"
+fi
+
+echo "[build-rootfs] done → $OUTPUT ($(du -sh "$OUTPUT" | cut -f1))"

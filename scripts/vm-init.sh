@@ -25,6 +25,12 @@ mkdir -p /dev/pts
 mount -t devpts devpts /dev/pts 2>/dev/null || true
 mount -t tmpfs  tmpfs /tmp  2>/dev/null || true
 
+# /etc/hosts is empty in Docker-exported rootfs; restore before any network code
+printf '127.0.0.1\tlocalhost\n::1\t\tlocalhost ip6-localhost ip6-loopback\n' > /etc/hosts
+
+# Loopback must be up for anything binding to 127.0.0.1
+ip link set lo up 2>/dev/null || true
+
 # Cgroups — required for Docker. Try unified v2 first, fall back to v1.
 mkdir -p /sys/fs/cgroup
 if ! mount -t cgroup2 none /sys/fs/cgroup 2>/dev/null; then

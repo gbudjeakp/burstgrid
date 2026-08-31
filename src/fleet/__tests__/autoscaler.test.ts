@@ -149,7 +149,7 @@ describe('Autoscaler scale-down', () => {
     vi.advanceTimersByTime(2_000); // 2 s > 1 s threshold, well within 30 s stale window
 
     const queue = new JobQueue(); // empty — no jobs
-    const fleet = { ...FLEET, maxWorkers: 3, scaleDownAfterIdleSec: 1 }; // 1 s threshold
+    const fleet = { ...FLEET, maxWorkers: 3, scaleDownAfterIdleSec: 1, minIdleWorkers: 1 };
     const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
     await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
 
@@ -179,7 +179,7 @@ describe('Autoscaler scale-down', () => {
     vi.advanceTimersByTime(2_000);
 
     const queue = new JobQueue();
-    const fleet = { ...FLEET, maxWorkers: 5, scaleDownAfterIdleSec: 1 };
+    const fleet = { ...FLEET, maxWorkers: 5, scaleDownAfterIdleSec: 1, minIdleWorkers: 1 };
     const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
     await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
 

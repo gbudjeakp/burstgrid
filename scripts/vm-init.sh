@@ -80,6 +80,9 @@ fi
 
 # ── Start Docker daemon if present ───────────────────────────────────────────
 if command -v dockerd >/dev/null 2>&1; then
+  # Firecracker kernel (6.1.102) has no nftables; switch to legacy iptables
+  update-alternatives --set iptables  /usr/sbin/iptables-legacy  2>/dev/null || true
+  update-alternatives --set ip6tables /usr/sbin/ip6tables-legacy 2>/dev/null || true
   dockerd --host=unix:///var/run/docker.sock \
           --storage-driver=overlay2 \
           --log-level=warn > /tmp/dockerd.log 2>&1 &

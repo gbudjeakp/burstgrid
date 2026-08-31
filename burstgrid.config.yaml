@@ -41,11 +41,11 @@ autoscaler:
     # medium — 2 vCPU / 2 GiB per VM → 32 concurrent VMs per metal instance
     - name: medium
       sizeTag: "burstgrid:size=medium"
-      launchTemplateId: lt-REPLACE_ME
+      launchTemplateId: lt-REPLACE_ME    # run `npx burstgrid init` to auto-fill
       subnetIds:
-        - subnet-REPLACE_ME   # us-east-1a private
-        - subnet-REPLACE_ME   # us-east-1b private
-        - subnet-REPLACE_ME   # us-east-1c private
+        - subnet-REPLACE_ME              # us-east-1a private (run `npx burstgrid init`)
+        - subnet-REPLACE_ME              # us-east-1b private
+        - subnet-REPLACE_ME              # us-east-1c private
       maxWorkers: 2
       slotsPerWorker: 32
       scaleUpThreshold: 1

@@ -12,6 +12,7 @@ import { logs, SeverityNumber, type Logger } from '@opentelemetry/api-logs';
 let meter: Meter;
 let tracer: Tracer | undefined;
 let vmLogger: Logger | undefined;
+let appLogger: Logger | undefined;
 
 // spans keyed by jobId; entries are removed when the span ends
 const activeSpans = new Map<string, Span>();
@@ -118,6 +119,24 @@ export function logVmLine(attrs: VmLogAttrs, line: string): void {
   });
 }
 
+// ─── Process-level logs (scheduler, queue, router, worker-pool, reconciler, autoscaler, etc.) ─
+// Ships the same lines already printed to stdout as structured OTel logs, tagged by component,
+// so setup/config issues (redis errors, stuck jobs, launch failures) are queryable in Grafana
+// instead of only visible by tailing a specific host's console.
+
+const SEVERITY_BY_LEVEL = { info: SeverityNumber.INFO, warn: SeverityNumber.WARN, error: SeverityNumber.ERROR };
+
+export function logEvent(component: string, level: 'info' | 'warn' | 'error', message: string, err?: unknown): void {
+  const line = err !== undefined ? `${message} ${err instanceof Error ? err.message : String(err)}` : message;
+  console[level](`[${component}] ${line}`);
+  if (!appLogger) return;
+  appLogger.emit({
+    severityNumber: SEVERITY_BY_LEVEL[level],
+    body: line,
+    attributes: { component },
+  });
+}
+
 // ─── Per-VM resource usage (worker) ───────────────────────────────────────────
 // Point-in-time CPU/memory of a single Firecracker process, sampled from /proc by the
 // caller — lets an operator see "how much of the host is *this* microVM using" in Grafana,
@@ -165,6 +184,7 @@ export async function initTelemetry(serviceName: string): Promise<void> {
   });
   logs.setGlobalLoggerProvider(loggerProvider);
   vmLogger = logs.getLogger('burstgrid-vm', '0.1.0');
+  appLogger = logs.getLogger('burstgrid-app', '0.1.0');
 
   console.info(`[telemetry] OTLP metrics+traces+logs → ${endpoint} (service: ${serviceName})`);
 }

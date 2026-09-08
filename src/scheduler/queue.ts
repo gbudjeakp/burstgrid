@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events';
 import type { Job } from '../types/index.js';
 import { ExecutionTier } from '../types/index.js';
 import type { RedisQueueBackend } from '../backends/redis.js';
+import { logEvent } from '../telemetry/index.js';
 
 const TIER_PRIORITY: ExecutionTier[] = [
   ExecutionTier.Critical,
@@ -32,7 +33,7 @@ export class JobQueue extends EventEmitter {
       this.queues.get(job.tier)!.push(job);
       count++;
     }
-    if (count > 0) console.info(`[queue] restored ${count} jobs from Redis`);
+    if (count > 0) logEvent('queue', 'info', `restored ${count} jobs from Redis`);
   }
 
   enqueue(job: Job): void {
@@ -40,7 +41,7 @@ export class JobQueue extends EventEmitter {
     this.queues.get(job.tier)!.push(job);
     this.emit('job');
     void this.redisBackend?.enqueue(job).catch(err =>
-      console.error('[queue] Redis enqueue error:', err),
+      logEvent('queue', 'error', 'Redis enqueue error:', err),
     );
   }
 
@@ -50,7 +51,7 @@ export class JobQueue extends EventEmitter {
       if (q.length > 0) {
         const job = q.shift()!;
         void this.redisBackend?.removeById(job.id).catch(err =>
-          console.error('[queue] Redis remove error:', err),
+          logEvent('queue', 'error', 'Redis remove error:', err),
         );
         if (this.depth === 0) this.emit('drain');
         return job;
@@ -62,7 +63,7 @@ export class JobQueue extends EventEmitter {
   requeue(job: Job): void {
     this.queues.get(job.tier)!.unshift(job);
     void this.redisBackend?.requeue(job).catch(err =>
-      console.error('[queue] Redis requeue error:', err),
+      logEvent('queue', 'error', 'Redis requeue error:', err),
     );
   }
 

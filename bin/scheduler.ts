@@ -8,7 +8,7 @@ import { AppClient, AppClientRegistry } from '../src/github/runner.js';
 import { registerWebhookRoute } from '../src/github/webhook.js';
 import { Autoscaler, type TierFleet } from '../src/fleet/autoscaler.js';
 import { loadConfig } from '../src/config/index.js';
-import { initTelemetry, registerSchedulerObservers } from '../src/telemetry/index.js';
+import { initTelemetry, registerSchedulerObservers, logEvent } from '../src/telemetry/index.js';
 import { createBackends } from '../src/backends/index.js';
 import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
 import { JobWatchdog } from '../src/scheduler/watchdog.js';
@@ -49,7 +49,7 @@ const maxQueueDepth = Number(BURSTGRID_MAX_QUEUE_DEPTH ?? cfg.scheduler?.maxQueu
 const queue = new JobQueue();
 const pool  = new WorkerPool((lostJobs) => {
   for (const job of lostJobs) {
-    console.warn(`[scheduler] re-queuing job ${job.id} from reaped worker`);
+    logEvent('scheduler', 'warn', `re-queuing job ${job.id} from reaped worker`);
     queue.requeue(job);
   }
 });
@@ -71,14 +71,14 @@ if (cfg.scheduler?.concurrencyLimits || cfg.scheduler?.defaultRepoConcurrency) {
 }
 
 function handleJobTimeout(jobId: string, meta: import('../src/scheduler/job-meta-cache.js').CachedJobMeta, reason: string): void {
-  console.warn(`[watchdog] job ${jobId} timed out — ${reason}`);
+  logEvent('watchdog', 'warn', `job ${jobId} timed out — ${reason}`);
   recordJobOutcome('timeout', meta.tier, meta.repo);
   addJobSpanEvent(jobId, 'timeout', { reason });
   endJobSpan(jobId, 'error', reason);
   void (backends.jobHistory as IJobHistoryBackend | undefined)?.record({
     jobId, status: 'failed', owner: meta.owner, repo: meta.repo,
     runId: meta.runId, tier: meta.tier, labels: meta.labels, timestamp: new Date(),
-  }).catch(err => console.error('[watchdog] history error:', err));
+  }).catch(err => logEvent('watchdog', 'error', 'history error:', err));
   metaCache.delete(jobId);
 }
 
@@ -161,19 +161,19 @@ const autoscaler = new Autoscaler(
   cfg.autoscaler?.evaluationIntervalSec ? cfg.autoscaler.evaluationIntervalSec * 1_000 : undefined,
 );
 if (autoscalerEnabled) autoscaler.start();
-else console.info('[scheduler] autoscaler disabled via config');
+else logEvent('scheduler', 'info', 'autoscaler disabled via config');
 
 const drainTimeoutMs = cfg.scheduler?.drainTimeoutMs ?? 5 * 60 * 1_000;
 
 const shutdown = async () => {
   draining = true;
-  console.info(`[scheduler] draining — ${queue.depth} queued, ${metaCache.size} in-flight`);
+  logEvent('scheduler', 'info', `draining — ${queue.depth} queued, ${metaCache.size} in-flight`);
   const drained = await Promise.race([
     awaitDrain(queue, metaCache).then(() => true),
     new Promise<boolean>(r => setTimeout(() => r(false), drainTimeoutMs)),
   ]);
   if (!drained) {
-    console.warn(`[scheduler] drain timeout — ${queue.depth} queued, ${metaCache.size} in-flight jobs abandoned`);
+    logEvent('scheduler', 'warn', `drain timeout — ${queue.depth} queued, ${metaCache.size} in-flight jobs abandoned`);
   }
   watchdog.stop();
   autoscaler.stop();

@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.11.0](https://github.com/gbudjeakp/burstgrid/compare/v1.10.0...v1.11.0) (2026-09-08)
+
+
+### Features
+
+* Karpenter-style autoscaler disruption budgets + baked worker AMI option ([8335acf](https://github.com/gbudjeakp/burstgrid/commit/8335acff3205f0d1e3ba4b6dc3af354f3c32ddb6))
+* Karpenter-style autoscaler disruption budgets + baked worker AMI option ([d7c5883](https://github.com/gbudjeakp/burstgrid/commit/d7c5883f530f60fe0127f41898af00a8da6129b8))
+* run Firecracker through jailer (chroot + uid/gid drop) ([917e9a9](https://github.com/gbudjeakp/burstgrid/commit/917e9a90ce6245f8766e6f950628479e42b9ef66))
+* run Firecracker through jailer (chroot + uid/gid drop) ([0ddb7a6](https://github.com/gbudjeakp/burstgrid/commit/0ddb7a695010408e190d1872723f6b6323cee4df))
+
 ## [1.10.0](https://github.com/gbudjeakp/burstgrid/compare/v1.9.0...v1.10.0) (2026-08-31)
 
 

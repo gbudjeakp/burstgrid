@@ -184,3 +184,44 @@ describe('FirecrackerVM — snapshot API', () => {
     expect((snapReq!.body as { snapshot_path: string }).snapshot_path).toContain('vm.snap');
   });
 });
+
+describe('FirecrackerVM — jailer mode', () => {
+  const VM_ID = 'jail';
+  let chrootBase: string;
+  let chrootRoot: string;
+  let api: { requests: RecordedRequest[]; stop: () => void };
+
+  beforeEach(async () => {
+    // Short path — AF_UNIX sockets have a ~104 char sun_path limit on macOS, which the
+    // default long TMPDIR + nested chroot layout can exceed.
+    chrootBase = await fs.mkdtemp('/tmp/bg-jail-');
+    chrootRoot = path.join(chrootBase, 'firecracker', VM_ID, 'root');
+    await fs.mkdir(chrootRoot, { recursive: true });
+    api = await startMockApiServer(path.join(chrootRoot, 'firecracker.sock'));
+  });
+
+  afterEach(async () => {
+    api.stop();
+    await fs.rm(chrootBase, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('configure() uses in-chroot paths for kernel, rootfs, and vsock when jailed', async () => {
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, useJailer: true, jailerChrootBaseDir: chrootBase });
+    await (vm as unknown as { configure(): Promise<void> }).configure();
+
+    const bootSource = api.requests.find(r => r.path === '/boot-source');
+    expect((bootSource!.body as { kernel_image_path: string }).kernel_image_path).toBe('/vmlinux');
+
+    const drive = api.requests.find(r => r.path === '/drives/rootfs');
+    expect((drive!.body as { path_on_host: string }).path_on_host).toBe('/rootfs.img');
+
+    const vsock = api.requests.find(r => r.path === '/vsock');
+    expect((vsock!.body as { uds_path: string }).uds_path).toBe('/vsock.sock');
+  });
+
+  it('defaults to unjailed when useJailer is not set', () => {
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, jailerChrootBaseDir: chrootBase });
+    expect((vm as unknown as { jailed: boolean }).jailed).toBe(false);
+  });
+});

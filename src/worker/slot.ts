@@ -57,6 +57,8 @@ export interface SlotConfig {
   slotIndex?: number;
   /** Pre-warmed snapshot pool; when provided, VMs restore from snapshot (~5ms) instead of cold-booting (~150ms). */
   snapshotPool?: SnapshotPool;
+  /** Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Default: false, opt in once jailer is set up on the host. */
+  useJailer?: boolean;
 }
 
 export class Slot {
@@ -88,6 +90,7 @@ export class Slot {
         runnerEphemeral: this.cfg.runnerEphemeral ?? true,
         repoUrl: this.cfg.repoUrl,
         slotIndex: this.cfg.slotIndex ?? 0,
+        useJailer: this.cfg.useJailer,
       };
 
       if (this.cfg.snapshotPool) {

@@ -51,6 +51,14 @@ export interface VMConfig {
   jailerGid?: number;
   /** Base directory jailer creates each VM's chroot jail under (`<dir>/firecracker/<vmId>/root`). Default: /srv/jailer. */
   jailerChrootBaseDir?: string;
+  /**
+   * SSH public key injected as an authorized key for debug access. Only takes effect if the
+   * rootfs image has sshd installed — vm-init.sh no-ops otherwise. No host port is opened for
+   * this; the guest is only reachable from the worker host itself over its private /30.
+   * Passed as a full "ssh-ed25519 AAAA... comment" string — base64-encoded before it reaches
+   * the boot args since the kernel cmdline parser splits on spaces.
+   */
+  sshPublicKey?: string;
 }
 
 export interface SnapshotPaths {
@@ -87,6 +95,11 @@ export class FirecrackerVM {
     // Each slot gets a unique /30: 172.20.0.(slot*4)/30
     this.hostIp  = `172.20.0.${slot * 4 + 1}`;
     this.guestIp = `172.20.0.${slot * 4 + 2}`;
+  }
+
+  /** The guest's private IP on the host's TAP subnet (e.g. for an operator to SSH in from the worker host). */
+  get guestAddress(): string {
+    return this.guestIp;
   }
 
   async boot(): Promise<void> {
@@ -235,6 +248,11 @@ export class FirecrackerVM {
     const kernelPath = this.jailed ? '/vmlinux' : this.cfg.kernelPath;
     const rootfsPath = this.jailed ? '/rootfs.img' : (this.rootfsCopy ?? this.cfg.rootfsPath);
     const vsockPath = this.jailed ? '/vsock.sock' : path.join(this.sockDir, 'vsock.sock');
+    // Base64 avoids spaces breaking the kernel cmdline's space-delimited tokenizing
+    // (an SSH public key looks like "ssh-ed25519 AAAA... comment").
+    const sshArg = this.cfg.sshPublicKey
+      ? ` SSH_PUBKEY_B64=${Buffer.from(this.cfg.sshPublicKey).toString('base64')}`
+      : '';
 
     if (this.cfg.mmdsMode) {
       // MMDS mode: token injected after boot/restore via injectMmdsToken(); boot args are minimal
@@ -244,7 +262,7 @@ export class FirecrackerVM {
         : '';
       await this.apiPut('/boot-source', {
         kernel_image_path: kernelPath,
-        boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init MMDS_MODE=1 GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${mirrorArg}${cacheArg}`,
+        boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init MMDS_MODE=1 GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${mirrorArg}${cacheArg}${sshArg}`,
       });
       // Pre-populate MMDS with empty token so guest poll doesn't 404 on first request
       await this.apiPut('/mmds/config', { ipv4_address: '169.254.169.254', network_interfaces: [] });
@@ -259,7 +277,7 @@ export class FirecrackerVM {
       const repoArg = this.cfg.repoUrl ? ` RUNNER_REPO_URL=${this.cfg.repoUrl}` : '';
       await this.apiPut('/boot-source', {
         kernel_image_path: kernelPath,
-        boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels} GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${repoArg}${mirrorArg}${ephemeralArg}${cacheArg}`,
+        boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels} GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${repoArg}${mirrorArg}${ephemeralArg}${cacheArg}${sshArg}`,
       });
     }
     await this.apiPut('/drives/rootfs', {

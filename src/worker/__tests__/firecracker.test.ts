@@ -100,6 +100,18 @@ describe('FirecrackerVM — boot-arg mode (default)', () => {
     expect((bootSource!.body as { boot_args: string }).boot_args).toContain('REGISTRY_MIRROR=http://mirror.internal');
   });
 
+  it("configure() base64-encodes the SSH public key in boot_args so spaces in the key survive the cmdline's space-delimited tokenizing", async () => {
+    const pubkey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI test@example.com';
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, sshPublicKey: pubkey });
+    await (vm as unknown as { configure(): Promise<void> }).configure();
+
+    const bootSource = api.requests.find(r => r.path === '/boot-source');
+    const bootArgs = (bootSource!.body as { boot_args: string }).boot_args;
+    const match = bootArgs.match(/SSH_PUBKEY_B64=(\S+)/);
+    expect(match).not.toBeNull();
+    expect(Buffer.from(match![1], 'base64').toString()).toBe(pubkey);
+  });
+
   it('configure() injects ACTIONS_CACHE_URL when cacheServerUrl is set', async () => {
     const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, cacheServerUrl: 'http://127.0.0.1:4321/', workerToken: 'wt' });
     await (vm as unknown as { configure(): Promise<void> }).configure();

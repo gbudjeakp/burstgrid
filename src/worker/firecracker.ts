@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { recordVmBootDuration, logVmLine } from '../telemetry/index.js';
+import { recordVmBootDuration, recordVmResourceUsage, logVmLine } from '../telemetry/index.js';
 
 /** Performance contract: Firecracker microVMs should boot within this window. */
 export const VM_BOOT_TARGET_MS = 150;
@@ -82,6 +82,7 @@ export class FirecrackerVM {
   private rootfsCopy: string | null = null;
   private readonly jailed: boolean;
   private readonly chrootDir: string | null;
+  private resourceSampleTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly cfg: VMConfig) {
     this.jailed = cfg.useJailer ?? false;
@@ -150,6 +151,7 @@ export class FirecrackerVM {
       });
     }
     this.attachConsoleCapture(this.proc);
+    this.startResourceSampling();
 
     this.exitPromise = new Promise((resolve, reject) => {
       this.proc!.on('exit', code => (code === 0 ? resolve() : reject(new Error(`firecracker exited ${code}`))));
@@ -186,6 +188,7 @@ export class FirecrackerVM {
 
     vm.proc = spawn('firecracker', ['--api-sock', vm.sockPath], { stdio: ['ignore', 'pipe', 'pipe'] });
     vm.attachConsoleCapture(vm.proc);
+    vm.startResourceSampling();
     vm.exitPromise = new Promise((resolve, reject) => {
       vm.proc!.on('exit', code => (code === 0 ? resolve() : reject(new Error(`firecracker exited ${code}`))));
       vm.proc!.on('error', reject);
@@ -229,6 +232,7 @@ export class FirecrackerVM {
   }
 
   async shutdown(): Promise<void> {
+    if (this.resourceSampleTimer) clearInterval(this.resourceSampleTimer);
     this.proc?.kill('SIGKILL');
     // Jailed chroots may contain files owned by jailerUid/jailerGid rather than our own process,
     // hence sudo — matches how the rest of vm-init.sh / userdata already assumes root on workers.
@@ -270,6 +274,48 @@ export class FirecrackerVM {
     };
     proc.stdout?.on('data', (chunk: Buffer) => forward(chunk, 'stdout'));
     proc.stderr?.on('data', (chunk: Buffer) => forward(chunk, 'stderr'));
+  }
+
+  /**
+   * Samples this VM's own Firecracker process from /proc every 15s so an operator can see
+   * per-VM CPU/memory in Grafana, not just the whole-host aggregate from hostmetrics.
+   */
+  private startResourceSampling(): void {
+    const pid = this.proc?.pid;
+    if (!pid) return;
+    const attrs = { jobId: this.cfg.jobId ?? this.cfg.vmId, vmId: this.cfg.vmId, workerId: this.cfg.workerId ?? 'unknown' };
+    const CLOCK_TICKS_PER_SEC = 100; // USER_HZ — fixed at 100 on every Linux distro we target
+    const PAGE_SIZE_BYTES = 4_096;
+    let lastCpuTicks = 0;
+    let lastSampleAt = Date.now();
+
+    this.resourceSampleTimer = setInterval(() => {
+      void (async () => {
+        try {
+          const stat = await fs.readFile(`/proc/${pid}/stat`, 'utf-8');
+          // Fields after the (comm) parenthesized field are space-delimited and fixed-position;
+          // comm itself can contain spaces/parens, so split after its closing paren instead of by index.
+          const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+          const cpuTicks = Number(fields[11]) + Number(fields[12]); // utime + stime
+          const now = Date.now();
+          const elapsedSec = (now - lastSampleAt) / 1000;
+          const cpuPercent = lastCpuTicks > 0 && elapsedSec > 0
+            ? ((cpuTicks - lastCpuTicks) / CLOCK_TICKS_PER_SEC / elapsedSec) * 100
+            : 0;
+          lastCpuTicks = cpuTicks;
+          lastSampleAt = now;
+
+          const statm = await fs.readFile(`/proc/${pid}/statm`, 'utf-8');
+          const rssPages = Number(statm.trim().split(' ')[1]);
+
+          recordVmResourceUsage(attrs, cpuPercent, rssPages * PAGE_SIZE_BYTES);
+        } catch {
+          // Process exited between tick and read (or /proc isn't available, e.g. non-Linux dev
+          // machine) — shutdown() clears the timer on the next tick either way.
+        }
+      })();
+    }, 15_000);
+    this.resourceSampleTimer.unref(); // don't keep the worker process alive just for sampling
   }
 
   private async configure(): Promise<void> {

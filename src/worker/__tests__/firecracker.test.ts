@@ -14,10 +14,12 @@ vi.mock('node:child_process', () => ({
     kill: vi.fn(),
     pid: 99999,
   })),
+  spawnSync: vi.fn(() => ({ status: 0, stderr: Buffer.from('') })),
 }));
 
 vi.mock('../../telemetry/index.js', () => ({
   recordVmBootDuration: vi.fn(),
+  recordVmResourceUsage: vi.fn(),
   logVmLine: vi.fn(),
 }));
 
@@ -281,5 +283,52 @@ describe('FirecrackerVM — console log capture', () => {
     proc.stdout.emit('data', Buffer.from('line one\n'));
 
     expect(logVmLine).toHaveBeenCalledWith({ jobId: 'vm-no-ids', vmId: 'vm-no-ids', workerId: 'unknown' }, 'line one');
+  });
+});
+
+describe('FirecrackerVM — per-VM resource sampling', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('does nothing when the process has no pid', () => {
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-no-pid' });
+    (vm as unknown as { proc: { pid?: number } }).proc = {};
+    (vm as unknown as { startResourceSampling(): void }).startResourceSampling();
+    expect((vm as unknown as { resourceSampleTimer: unknown }).resourceSampleTimer).toBeNull();
+  });
+
+  it('samples CPU/memory from /proc on an interval and reports via recordVmResourceUsage', async () => {
+    const { recordVmResourceUsage } = await import('../../telemetry/index.js');
+    vi.useFakeTimers();
+
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-sample', jobId: 'job-9', workerId: 'worker-9' });
+    (vm as unknown as { proc: { pid: number } }).proc = { pid: 424242 };
+
+    const readFileSpy = vi.spyOn(fs, 'readFile').mockImplementation(async (p) => {
+      if (String(p).endsWith('/stat')) return '424242 (firecracker) S 1 424242 424242 0 -1 0 0 0 0 0 500 200 0 0 0 0 0 0';
+      if (String(p).endsWith('/statm')) return '1000 512 0 0 0 0 0';
+      throw new Error(`unexpected path ${p}`);
+    });
+
+    (vm as unknown as { startResourceSampling(): void }).startResourceSampling();
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(recordVmResourceUsage).toHaveBeenCalledWith(
+      { jobId: 'job-9', vmId: 'vm-sample', workerId: 'worker-9' },
+      0, // no prior sample yet, so cpuPercent is 0 on the first tick
+      512 * 4_096,
+    );
+
+    readFileSpy.mockRestore();
+  });
+
+  it('shutdown() clears the sampling timer', async () => {
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-shutdown-sample' });
+    (vm as unknown as { proc: { pid: number; kill: () => void } }).proc = { pid: 1, kill: vi.fn() };
+    (vm as unknown as { startResourceSampling(): void }).startResourceSampling();
+
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+    await vm.shutdown();
+    expect(clearIntervalSpy).toHaveBeenCalledWith((vm as unknown as { resourceSampleTimer: unknown }).resourceSampleTimer);
+    clearIntervalSpy.mockRestore();
   });
 });

@@ -118,6 +118,19 @@ export function logVmLine(attrs: VmLogAttrs, line: string): void {
   });
 }
 
+// ─── Per-VM resource usage (worker) ───────────────────────────────────────────
+// Point-in-time CPU/memory of a single Firecracker process, sampled from /proc by the
+// caller — lets an operator see "how much of the host is *this* microVM using" in Grafana,
+// as opposed to the whole-host hostmetrics numbers which only show the aggregate.
+
+export function recordVmResourceUsage(attrs: VmLogAttrs, cpuPercent: number, rssBytes: number): void {
+  const vmAttrs = { 'job.id': attrs.jobId, 'vm.id': attrs.vmId, 'worker.id': attrs.workerId };
+  getMeter().createGauge('burstgrid.vm.cpu_percent', { description: 'CPU utilization of a microVM\'s Firecracker process', unit: '%' })
+    .record(cpuPercent, vmAttrs);
+  getMeter().createGauge('burstgrid.vm.memory_rss_bytes', { description: 'Resident memory of a microVM\'s Firecracker process', unit: 'By' })
+    .record(rssBytes, vmAttrs);
+}
+
 // ─── SDK initializer (called at process start if OTLP endpoint is configured) ─
 
 export async function initTelemetry(serviceName: string): Promise<void> {

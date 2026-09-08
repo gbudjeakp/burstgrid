@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.12.0](https://github.com/gbudjeakp/burstgrid/compare/v1.11.0...v1.12.0) (2026-09-08)
+
+
+### Features
+
+* extend OTel log shipping to backends, worker agent, and github probe/circuit-breaker ([8ff5989](https://github.com/gbudjeakp/burstgrid/commit/8ff598914ecc53d8bb8bd1bbd1df338b759956c5))
+* optional SSH debug access into microVMs ([dc44758](https://github.com/gbudjeakp/burstgrid/commit/dc447587b0ea8f411fba65d9e41e11208f944417))
+* per-VM CPU/memory gauges + host system log shipping ([03bf5c9](https://github.com/gbudjeakp/burstgrid/commit/03bf5c9ee4ff1c9b34fd7c26ac43c1fbd2d3744d))
+* ship microVM console output as OTel logs, fix worker telemetry init ([dd054d6](https://github.com/gbudjeakp/burstgrid/commit/dd054d6e4f2253b0447a057f32f742120c8ba33f))
+* ship microVM console output as OTel logs, fix worker telemetry init ([e7b77a0](https://github.com/gbudjeakp/burstgrid/commit/e7b77a0e1002bcd19ac3698733df9a3f017a5980))
+* ship scheduler/queue/router/pool/reconciler/autoscaler logs to OTel ([6293d1c](https://github.com/gbudjeakp/burstgrid/commit/6293d1cb2d9141fe2a32c22318b001084745b629))
+
+
+### Bug Fixes
+
+* recover SSH debug access commit that GitHub silently dropped ([2c05da7](https://github.com/gbudjeakp/burstgrid/commit/2c05da78479208a43e1ae93f5f25db629914c132))
+
 ## [1.11.0](https://github.com/gbudjeakp/burstgrid/compare/v1.10.0...v1.11.0) (2026-09-08)
 
 

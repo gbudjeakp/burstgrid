@@ -32,6 +32,9 @@ const {
   // Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Requires the
   // jailer binary + a writable chroot base dir on the host. Default: false.
   BURSTGRID_USE_JAILER,
+  // SSH public key injected into every VM for debug access; requires sshd in the rootfs image.
+  // No host port is opened — the guest is only reachable from this worker host itself.
+  BURSTGRID_SSH_PUBLIC_KEY,
 } = process.env;
 
 const cpuCount = os.cpus().length;
@@ -85,6 +88,7 @@ const agent = new WorkerAgent({
   registryMirror: BURSTGRID_REGISTRY_MIRROR,
   workerToken: BURSTGRID_WORKER_TOKEN,
   useJailer: BURSTGRID_USE_JAILER === 'true',
+  sshPublicKey: BURSTGRID_SSH_PUBLIC_KEY,
 });
 
 const healthServer = startWorkerHealthServer(

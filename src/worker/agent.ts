@@ -196,6 +196,7 @@ export class WorkerAgent {
       workerToken: this.cfg.workerToken,
       snapshotPool: this.snapshotPool ?? undefined,
       env: job.env,
+      workerId: this.cfg.workerId,
       repoUrl: `https://github.com/${job.owner}/${job.repo}`,
       slotIndex,
       useJailer: this.cfg.useJailer,

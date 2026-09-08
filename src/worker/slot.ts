@@ -61,6 +61,8 @@ export interface SlotConfig {
   useJailer?: boolean;
   /** SSH public key injected for debug access; only takes effect if the rootfs image has sshd installed. */
   sshPublicKey?: string;
+  /** Worker host ID — tags shipped microVM console log lines so they're findable per-worker in Grafana. */
+  workerId?: string;
 }
 
 export class Slot {
@@ -80,6 +82,8 @@ export class Slot {
       const rootfsPath = resolveRootfs(labels, this.cfg.imageCatalog, this.cfg.imageDir, this.cfg.vmImagePath);
       const vmCfg: VMConfig = {
         vmId: `bg-${this.cfg.jobId.slice(0, 8)}`,
+        jobId: this.cfg.jobId,
+        workerId: this.cfg.workerId,
         kernelPath: this.cfg.kernelPath,
         rootfsPath,
         memoryMiB,

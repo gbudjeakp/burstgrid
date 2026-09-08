@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { recordVmBootDuration } from '../telemetry/index.js';
+import { recordVmBootDuration, logVmLine } from '../telemetry/index.js';
 
 /** Performance contract: Firecracker microVMs should boot within this window. */
 export const VM_BOOT_TARGET_MS = 150;
@@ -16,6 +16,10 @@ export interface VMConfig {
   vcpus: number;
   runnerToken: string;
   runnerLabels: string;
+  /** Full job ID (not just the truncated vmId) — tags shipped console log lines so they're findable per-job. */
+  jobId?: string;
+  /** Worker host ID — tags shipped console log lines so they're findable per-worker. */
+  workerId?: string;
   /** Pull-through registry mirror URL injected as REGISTRY_MIRROR boot arg; init reads /proc/cmdline. */
   registryMirror?: string;
   /** S3 cache server URL injected as ACTIONS_CACHE_URL boot arg. */
@@ -139,12 +143,13 @@ export class FirecrackerVM {
         '--gid', String(this.cfg.jailerGid ?? 100),
         '--chroot-base-dir', this.cfg.jailerChrootBaseDir ?? '/srv/jailer',
         '--', '--api-sock', '/firecracker.sock',
-      ], { stdio: 'inherit' });
+      ], { stdio: ['ignore', 'pipe', 'pipe'] });
     } else {
       this.proc = spawn('firecracker', ['--api-sock', this.sockPath], {
-        stdio: 'inherit',
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
     }
+    this.attachConsoleCapture(this.proc);
 
     this.exitPromise = new Promise((resolve, reject) => {
       this.proc!.on('exit', code => (code === 0 ? resolve() : reject(new Error(`firecracker exited ${code}`))));
@@ -179,7 +184,8 @@ export class FirecrackerVM {
     await fs.mkdir(vm.sockDir, { recursive: true });
     await fs.unlink(vm.sockPath).catch(() => undefined);
 
-    vm.proc = spawn('firecracker', ['--api-sock', vm.sockPath], { stdio: 'inherit' });
+    vm.proc = spawn('firecracker', ['--api-sock', vm.sockPath], { stdio: ['ignore', 'pipe', 'pipe'] });
+    vm.attachConsoleCapture(vm.proc);
     vm.exitPromise = new Promise((resolve, reject) => {
       vm.proc!.on('exit', code => (code === 0 ? resolve() : reject(new Error(`firecracker exited ${code}`))));
       vm.proc!.on('error', reject);
@@ -239,6 +245,31 @@ export class FirecrackerVM {
 
   private teardownTap(): void {
     spawnSync('ip', ['link', 'del', this.tapName]);
+  }
+
+  /**
+   * Streams the guest's serial console (kernel boot, vm-init.sh, job output) line-by-line to
+   * both local stdout (for anyone tailing the worker's own logs) and the OTel logs pipeline,
+   * tagged with job/vm/worker IDs so a specific microVM's output is findable in Grafana instead
+   * of only visible mixed into the worker process's own stdout.
+   */
+  private attachConsoleCapture(proc: ChildProcess): void {
+    const attrs = { jobId: this.cfg.jobId ?? this.cfg.vmId, vmId: this.cfg.vmId, workerId: this.cfg.workerId ?? 'unknown' };
+    // Buffer partial lines — a chunk boundary rarely lines up with a newline.
+    let stdoutBuf = '';
+    let stderrBuf = '';
+    const forward = (chunk: Buffer, stream: 'stdout' | 'stderr') => {
+      const buf = (stream === 'stdout' ? stdoutBuf : stderrBuf) + chunk.toString('utf-8');
+      const lines = buf.split('\n');
+      const remainder = lines.pop() ?? '';
+      if (stream === 'stdout') stdoutBuf = remainder; else stderrBuf = remainder;
+      for (const line of lines) {
+        process.stdout.write(`[vm ${this.cfg.vmId}/${stream}] ${line}\n`);
+        logVmLine(attrs, line);
+      }
+    };
+    proc.stdout?.on('data', (chunk: Buffer) => forward(chunk, 'stdout'));
+    proc.stderr?.on('data', (chunk: Buffer) => forward(chunk, 'stderr'));
   }
 
   private async configure(): Promise<void> {

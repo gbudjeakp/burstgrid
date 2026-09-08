@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { FirecrackerVM, type VMConfig } from '../firecracker.js';
 
 // ─── Mock child_process so no real firecracker binary is needed ───────────────
@@ -13,6 +14,11 @@ vi.mock('node:child_process', () => ({
     kill: vi.fn(),
     pid: 99999,
   })),
+}));
+
+vi.mock('../../telemetry/index.js', () => ({
+  recordVmBootDuration: vi.fn(),
+  logVmLine: vi.fn(),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -235,5 +241,45 @@ describe('FirecrackerVM — jailer mode', () => {
   it('defaults to unjailed when useJailer is not set', () => {
     const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, jailerChrootBaseDir: chrootBase });
     expect((vm as unknown as { jailed: boolean }).jailed).toBe(false);
+  });
+});
+
+describe('FirecrackerVM — console log capture', () => {
+  it('forwards complete lines to logVmLine tagged with job/vm/worker IDs, buffering partial lines across chunks', async () => {
+    const { logVmLine } = await import('../../telemetry/index.js');
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-log-test', jobId: 'job-123', workerId: 'worker-abc' });
+
+    const proc = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+
+    (vm as unknown as { attachConsoleCapture(p: typeof proc): void }).attachConsoleCapture(proc);
+
+    // Split a single line across two chunks to verify buffering.
+    proc.stdout.emit('data', Buffer.from('Booting Linux ker'));
+    proc.stdout.emit('data', Buffer.from('nel...\nStarting sshd\n'));
+    proc.stderr.emit('data', Buffer.from('warning: something\n'));
+
+    const attrs = { jobId: 'job-123', vmId: 'vm-log-test', workerId: 'worker-abc' };
+    expect(logVmLine).toHaveBeenCalledWith(attrs, 'Booting Linux kernel...');
+    expect(logVmLine).toHaveBeenCalledWith(attrs, 'Starting sshd');
+    expect(logVmLine).toHaveBeenCalledWith(attrs, 'warning: something');
+    expect(logVmLine).toHaveBeenCalledTimes(3);
+  });
+
+  it('falls back to vmId and "unknown" when jobId/workerId are not provided', async () => {
+    const { logVmLine } = await import('../../telemetry/index.js');
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-no-ids' });
+
+    const proc = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+
+    (vm as unknown as { attachConsoleCapture(p: typeof proc): void }).attachConsoleCapture(proc);
+    proc.stdout.emit('data', Buffer.from('line one\n'));
+
+    expect(logVmLine).toHaveBeenCalledWith({ jobId: 'vm-no-ids', vmId: 'vm-no-ids', workerId: 'unknown' }, 'line one');
   });
 });

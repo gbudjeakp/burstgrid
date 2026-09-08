@@ -4,6 +4,7 @@ import { detectCapabilities, detectWorkerId } from '../src/worker/detect.js';
 import { loadConfig } from '../src/config/index.js';
 import { startWorkerHealthServer } from '../src/worker/health.js';
 import { SpotMonitor } from '../src/worker/spot.js';
+import { initTelemetry } from '../src/telemetry/index.js';
 
 const cfg = loadConfig();
 
@@ -48,6 +49,8 @@ const capabilities = (BURSTGRID_CAPABILITIES ?? detectCapabilities().join(','))
   .split(',').map(s => s.trim()).filter(Boolean);
 
 const workerId = BURSTGRID_WORKER_ID ?? await detectWorkerId();
+
+await initTelemetry('burstgrid-worker');
 
 console.info(
   `[worker-agent] id=${workerId} slots=${maxSlots} vcpus=${totalVcpus} ` +

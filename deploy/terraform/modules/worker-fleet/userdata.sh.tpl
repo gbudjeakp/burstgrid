@@ -44,9 +44,11 @@ unzip -q /tmp/awscliv2.zip -d /tmp/awscliv2
 rm -rf /tmp/awscliv2 /tmp/awscliv2.zip
 AWS=/usr/local/bin/aws
 
-# ── Firecracker (S3 first — same-region, no rate limits; GitHub as fallback) ──
+# ── Firecracker (skip if baked into the AMI; else S3 same-region; else GitHub) ─
 FC_S3="s3://$BUCKET/bin/firecracker-$FC_ARCH"
-if $AWS s3 ls "$FC_S3" &>/dev/null; then
+if [ -x /usr/local/bin/firecracker ]; then
+  echo "[bootstrap] firecracker already present (baked AMI), skipping download"
+elif $AWS s3 ls "$FC_S3" &>/dev/null; then
   $AWS s3 cp "$FC_S3" /usr/local/bin/firecracker --region "$REGION"
   chmod +x /usr/local/bin/firecracker
   echo "[bootstrap] firecracker installed from S3"
@@ -111,21 +113,53 @@ done
 mkdir -p /opt/burstgrid
 $AWS s3 cp "s3://$BUCKET/worker-agent.mjs" /opt/burstgrid/worker-agent.mjs
 
-# ── VM kernel + rootfs ────────────────────────────────────────────────────────
+# ── VM kernel + rootfs (skip download only if the baked AMI copy still matches S3) ─
 mkdir -p /var/lib/burstgrid
-$AWS s3 cp "s3://$BUCKET/vmlinux-$${FC_ARCH}" /var/lib/burstgrid/vmlinux 2>/dev/null || \
-  $AWS s3 cp "s3://$BUCKET/vmlinux" /var/lib/burstgrid/vmlinux
-if $AWS s3 ls "s3://$BUCKET/rootfs-$${LABEL_ARCH}.img.gz" &>/dev/null; then
-  $AWS s3 cp "s3://$BUCKET/rootfs-$${LABEL_ARCH}.img.gz" /tmp/rootfs.img.gz
-  gunzip -c /tmp/rootfs.img.gz > /var/lib/burstgrid/rootfs.img
-  rm /tmp/rootfs.img.gz
-elif $AWS s3 ls "s3://$BUCKET/rootfs.img.gz" &>/dev/null; then
-  $AWS s3 cp "s3://$BUCKET/rootfs.img.gz" /tmp/rootfs.img.gz
-  gunzip -c /tmp/rootfs.img.gz > /var/lib/burstgrid/rootfs.img
-  rm /tmp/rootfs.img.gz
+BAKED_VERSIONS=/var/lib/burstgrid/.baked-versions
+
+# Cheap metadata-only call — no object body downloaded — so drift checks don't
+# cost anywhere near what re-downloading rootfs.img would.
+s3_etag() {
+  $AWS s3api head-object --bucket "$BUCKET" --key "$1" --query ETag --output text 2>/dev/null | tr -d '"'
+}
+baked_etag() {
+  [ -f "$BAKED_VERSIONS" ] && grep "^$1=" "$BAKED_VERSIONS" | cut -d= -f2
+}
+
+VMLINUX_KEY="vmlinux-$${FC_ARCH}"
+$AWS s3 ls "s3://$BUCKET/$VMLINUX_KEY" &>/dev/null || VMLINUX_KEY="vmlinux"
+ROOTFS_KEY="rootfs-$${LABEL_ARCH}.img.gz"
+$AWS s3 ls "s3://$BUCKET/$ROOTFS_KEY" &>/dev/null || ROOTFS_KEY="rootfs.img.gz"
+
+BAKED_FRESH=false
+if [ -f /var/lib/burstgrid/vmlinux ] && [ -f /var/lib/burstgrid/rootfs.img ]; then
+  cur_vmlinux=$(s3_etag "$VMLINUX_KEY")
+  cur_rootfs=$(s3_etag "$ROOTFS_KEY")
+  if [ -n "$cur_vmlinux" ] && [ -n "$cur_rootfs" ] \
+    && [ "$cur_vmlinux" = "$(baked_etag vmlinux)" ] \
+    && [ "$cur_rootfs" = "$(baked_etag rootfs)" ]; then
+    BAKED_FRESH=true
+  fi
+fi
+
+if $BAKED_FRESH; then
+  echo "[bootstrap] baked vmlinux + rootfs.img match current S3 objects, skipping download"
 else
-  $AWS s3 cp "s3://$BUCKET/rootfs-$${LABEL_ARCH}.img" /var/lib/burstgrid/rootfs.img 2>/dev/null || \
-    $AWS s3 cp "s3://$BUCKET/rootfs.img" /var/lib/burstgrid/rootfs.img
+  echo "[bootstrap] baked artifacts missing or stale vs S3 — downloading current versions"
+  $AWS s3 cp "s3://$BUCKET/vmlinux-$${FC_ARCH}" /var/lib/burstgrid/vmlinux 2>/dev/null || \
+    $AWS s3 cp "s3://$BUCKET/vmlinux" /var/lib/burstgrid/vmlinux
+  if $AWS s3 ls "s3://$BUCKET/rootfs-$${LABEL_ARCH}.img.gz" &>/dev/null; then
+    $AWS s3 cp "s3://$BUCKET/rootfs-$${LABEL_ARCH}.img.gz" /tmp/rootfs.img.gz
+    gunzip -c /tmp/rootfs.img.gz > /var/lib/burstgrid/rootfs.img
+    rm /tmp/rootfs.img.gz
+  elif $AWS s3 ls "s3://$BUCKET/rootfs.img.gz" &>/dev/null; then
+    $AWS s3 cp "s3://$BUCKET/rootfs.img.gz" /tmp/rootfs.img.gz
+    gunzip -c /tmp/rootfs.img.gz > /var/lib/burstgrid/rootfs.img
+    rm /tmp/rootfs.img.gz
+  else
+    $AWS s3 cp "s3://$BUCKET/rootfs-$${LABEL_ARCH}.img" /var/lib/burstgrid/rootfs.img 2>/dev/null || \
+      $AWS s3 cp "s3://$BUCKET/rootfs.img" /var/lib/burstgrid/rootfs.img
+  fi
 fi
 
 # ── Per-image rootfs catalog (optional; skipped if image not yet in S3) ───────

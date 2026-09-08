@@ -122,13 +122,24 @@ vpc_id              = "vpc-xxxxxxxx"
 scheduler_subnet_id = "subnet-xxxxxxxx"   # public subnet (receives GitHub webhooks)
 nat_subnet_id       = "subnet-xxxxxxxx"
 scheduler_ami       = "ami-xxxxxxxx"       # stock Ubuntu 24.04 ARM64
-worker_ami          = "ami-xxxxxxxx"       # same — no custom image needed
+worker_ami          = "ami-xxxxxxxx"       # recommended: output of `npx burstgrid bake-ami` (stock Ubuntu also works, slower boot)
 s3_artifacts_bucket = "my-burstgrid-bucket"
 webhook_secret      = "your-webhook-secret"
 worker_token        = "your-worker-token"
 ```
 
-### 2. Deploy — one command
+### 2. Bake the worker AMI (recommended)
+
+```bash
+# Upload rootfs + vmlinux to S3 first (see scripts/build-rootfs.sh), then:
+npx burstgrid bake-ami --source-ami ami-xxxxxxxx
+# Pre-installs Firecracker, the GitHub Actions runner, vmlinux, and rootfs.img
+# into a new AMI and writes it into terraform.tfvars' worker_ami automatically.
+# Skipping this step is fine too — workers fall back to downloading those
+# artifacts from S3 on every boot, just slower to reach "ready".
+```
+
+### 3. Deploy — one command
 
 ```bash
 npx burstgrid deploy
@@ -139,12 +150,12 @@ npx burstgrid deploy --bucket my-bucket          # explicit bucket (skips tfvars
 npx burstgrid deploy --no-terraform --dry-run    # preview without changing anything
 ```
 
-### 3. Register the GitHub App (or PAT)
+### 4. Register the GitHub App (or PAT)
 
 Create a GitHub App with **Administration: read & write** + **Actions: read** permissions, subscribe to `workflow_job` events, and set the webhook URL to `https://your-scheduler:8080/webhook/github`.
 For single-repo testing a PAT (`GITHUB_TOKEN=ghp_xxx`) is fine.
 
-### 4. Point workflows
+### 5. Point workflows
 
 ```yaml
 jobs:

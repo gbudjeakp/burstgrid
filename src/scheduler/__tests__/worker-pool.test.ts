@@ -92,12 +92,38 @@ describe('WorkerPool', () => {
   });
 
   describe('bestWorker', () => {
-    it('selects the worker with the most free slots', () => {
-      pool.register(reg('w1', 2));
-      pool.register(reg('w2', 8));
+    it('packs onto the tightest-fitting worker under the density cap', () => {
+      // w1: 8 vCPU total, all free — assigning 2 leaves 75% free (25% utilized)
+      // w2: 8 vCPU total, 4 already used — assigning 2 more leaves 25% free (75% utilized)
+      // Both stay under the 80% cap, so best-fit picks the tighter fit: w2.
+      pool.register(reg('w1'));
+      pool.register(reg('w2'));
       pool.setStream('w1', mockStream());
       pool.setStream('w2', mockStream());
+      pool.assign('w2', { ...assignment('existing'), vcpus: 4, memoryMiB: 2_048 });
+
       expect(pool.bestWorker(['linux'], 2, 2_048)).toBe('w2');
+    });
+
+    it('avoids pushing a worker past the density cap when another worker has room', () => {
+      // w1: 8 vCPU total, 6 used (75%) — taking 2 more would hit 100%, over the 80% cap.
+      // w2: 8 vCPU total, all free — taking 2 more is only 25%, under the cap.
+      pool.register(reg('w1'));
+      pool.register(reg('w2'));
+      pool.setStream('w1', mockStream());
+      pool.setStream('w2', mockStream());
+      pool.assign('w1', { ...assignment('existing'), vcpus: 6, memoryMiB: 2_048 });
+
+      expect(pool.bestWorker(['linux'], 2, 2_048)).toBe('w2');
+    });
+
+    it('falls back to the only fitting worker even if it would exceed the density cap', () => {
+      // w1 is the only worker with enough free vCPUs, even though taking the job pushes it past 80%.
+      pool.register(reg('w1'));
+      pool.setStream('w1', mockStream());
+      pool.assign('w1', { ...assignment('existing'), vcpus: 6, memoryMiB: 2_048 });
+
+      expect(pool.bestWorker(['linux'], 2, 2_048)).toBe('w1');
     });
 
     it('excludes workers without a connected stream', () => {

@@ -40,6 +40,23 @@ export interface TierFleet {
   /** Seconds a fully-idle worker must stay quiet before being terminated. Default: 300 (5 min). */
   scaleDownAfterIdleSec?: number;
   /**
+   * Force-terminate a worker once it is fully idle if it has been running longer than this,
+   * even if it hasn't hit the idle timeout yet. Recycles stale rootfs/vmlinux/AMI builds
+   * the way Karpenter's NodePool `expireAfter` forces periodic node replacement. Unset = never.
+   */
+  maxWorkerAgeSec?: number;
+  /**
+   * Max fraction (0-1) of the current fleet that may be torn down in a single evaluation cycle.
+   * Default: 0.5. Mirrors Karpenter's NodePool disruption budgets — caps how much capacity can
+   * disappear at once if many workers go idle simultaneously (e.g. after a load-test burst ends).
+   */
+  maxScaleDownFraction?: number;
+  /**
+   * Absolute floor on workers terminated per cycle regardless of maxScaleDownFraction, so small
+   * fleets can still shrink normally. Default: 5.
+   */
+  minScaleDownPerCycle?: number;
+  /**
    * Total vCPUs on the EC2 instance launched from this fleet (e.g. 8 for m6g.2xlarge).
    * Used by the autoscaler to calculate how many workers to launch to cover vCPU demand.
    * Defaults to slotsPerWorker × vCPUs for the fleet's sizeTag job size.
@@ -83,20 +100,54 @@ export class Autoscaler {
 
   /**
    * Terminate workers that have been fully idle longer than the shortest
-   * scaleDownAfterIdleSec across all fleets.
+   * scaleDownAfterIdleSec across all fleets, plus any idle worker past its maxWorkerAgeSec
+   * (Karpenter-style expiration). Ordered by most-idle-capacity-first (consolidation), and
+   * capped per cycle by a disruption budget so a mass-idle event can't wipe out the fleet at once.
    */
   private async scaleDownGlobal(): Promise<void> {
     const idleMs = Math.min(...this.fleets.map(f => (f.scaleDownAfterIdleSec ?? 300))) * 1_000;
     const minIdle = Math.max(0, ...this.fleets.map(f => f.minIdleWorkers ?? 0));
-    // '' tag = all workers regardless of capabilities
-    const idle = this.pool.idleWorkers('', idleMs);
-    if (idle.length <= minIdle) return;
+    const maxAgeSec = Math.min(...this.fleets.map(f => f.maxWorkerAgeSec ?? Infinity));
 
-    const toTerminate = idle.slice(0, idle.length - minIdle);
+    const timedOut = this.pool.idleWorkers('', idleMs);
+    // Any currently-idle worker (idleMs=0) past its max age — expired but not yet naturally idle-timed-out.
+    const everIdle = Number.isFinite(maxAgeSec) ? this.pool.idleWorkers('', 0) : [];
+    const expired = everIdle.filter(w => {
+      const meta = this.pool.workerMeta(w.workerId);
+      return meta !== null && (Date.now() - meta.registeredAt) >= maxAgeSec * 1_000;
+    });
+
+    const candidates = new Map(timedOut.map(w => [w.workerId, w]));
+    for (const w of expired) candidates.set(w.workerId, w);
+    if (candidates.size === 0) return;
+
+    // Consolidation ordering — free the emptiest workers first, matching Karpenter's preference
+    // for terminating nodes running fewer pods before ones running more.
+    const ranked = [...candidates.values()].sort((a, b) => {
+      const ma = this.pool.workerMeta(a.workerId);
+      const mb = this.pool.workerMeta(b.workerId);
+      const ra = ma ? ma.freeSlots / Math.max(ma.totalSlots, 1) : 0;
+      const rb = mb ? mb.freeSlots / Math.max(mb.totalSlots, 1) : 0;
+      return rb - ra;
+    });
+
+    if (ranked.length <= minIdle) return;
+    let toTerminate = ranked.slice(0, ranked.length - minIdle);
+
+    // Disruption budget — cap how much of the fleet can be torn down in one cycle.
+    const fleetSize = Math.max(this.pool.connectedCount, 1);
+    const fraction = Math.min(...this.fleets.map(f => f.maxScaleDownFraction ?? 0.5));
+    const floor = Math.max(...this.fleets.map(f => f.minScaleDownPerCycle ?? 5));
+    const budget = Math.max(floor, Math.ceil(fleetSize * fraction));
+    if (toTerminate.length > budget) {
+      console.info(`[autoscaler] disruption budget: capping scale-down to ${budget}/${toTerminate.length} candidates`);
+      toTerminate = toTerminate.slice(0, budget);
+    }
+
     const ids = toTerminate.map(w => w.ec2InstanceId);
     try {
       await this.ec2.send(new TerminateInstancesCommand({ InstanceIds: ids }));
-      console.info(`[autoscaler] terminated ${ids.join(', ')} (idle >${idleMs / 1_000}s)`);
+      console.info(`[autoscaler] terminated ${ids.join(', ')} (idle timeout or max age reached)`);
     } catch (err) {
       console.error('[autoscaler] terminate failed', err);
     }

@@ -38,7 +38,7 @@ variable "scheduler_ami" {
 }
 
 variable "worker_ami" {
-  description = "Ubuntu 24.04 ARM64 AMI for worker instances (must match fleet instance families)"
+  description = "Worker instance AMI. Recommended: output of `npx burstgrid bake-ami` (Firecracker + runner + vmlinux + rootfs pre-installed — workers boot ready, no S3 download). A stock Ubuntu 24.04 ARM64 AMI also works; userdata.sh.tpl falls back to downloading those artifacts from S3 at boot."
   type        = string
 }
 

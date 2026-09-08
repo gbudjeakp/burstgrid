@@ -215,3 +215,119 @@ describe('Autoscaler scale-down', () => {
     autoscaler.stop();
   });
 });
+
+describe('Autoscaler disruption budget + expiration', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('caps scale-down to the disruption budget instead of terminating every idle worker', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    const stream = { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse;
+    for (let i = 0; i < 20; i++) {
+      const id = `w${i}`;
+      pool.register({ workerId: id, instanceId: id, ec2InstanceId: `i-${id}`,
+        region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+      pool.setStream(id, stream);
+    }
+
+    vi.advanceTimersByTime(2_000);
+
+    const queue = new JobQueue();
+    // 20 idle workers, budget = max(floor=5, ceil(20*0.5)=10) = 10 — should not terminate all 20
+    const fleet = { ...FLEET, maxWorkers: 20, scaleDownAfterIdleSec: 1 };
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminated = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    ).flatMap(([cmd]) => (cmd as { input: { InstanceIds: string[] } }).input.InstanceIds);
+    expect(terminated).toHaveLength(10);
+
+    autoscaler.stop();
+  });
+
+  it('respects a tighter explicit disruption budget', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    const stream = { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse;
+    for (const id of ['w1', 'w2', 'w3', 'w4']) {
+      pool.register({ workerId: id, instanceId: id, ec2InstanceId: `i-${id}`,
+        region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+      pool.setStream(id, stream);
+    }
+
+    vi.advanceTimersByTime(2_000);
+
+    const queue = new JobQueue();
+    const fleet = { ...FLEET, maxWorkers: 4, scaleDownAfterIdleSec: 1, minScaleDownPerCycle: 1, maxScaleDownFraction: 0 };
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminated = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    ).flatMap(([cmd]) => (cmd as { input: { InstanceIds: string[] } }).input.InstanceIds);
+    expect(terminated).toHaveLength(1); // floor of 1, fraction 0 → budget = max(1, 0) = 1
+
+    autoscaler.stop();
+  });
+
+  it('force-expires an idle worker past maxWorkerAgeSec even before its idle timeout', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    pool.register({ workerId: 'w1', instanceId: 'w1', ec2InstanceId: 'i-old',
+      region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+    pool.setStream('w1', { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse);
+
+    // Worker has been up (and idle) for 1 hour — past a 30-minute maxWorkerAgeSec,
+    // but well under the 5-minute scaleDownAfterIdleSec default idle-timeout wouldn't matter here either way.
+    // Move the wall clock directly (not advanceTimersByTime) so we don't also fire the
+    // pool's internal 120s stale-reap interval, which would deregister the worker first.
+    vi.setSystemTime(Date.now() + 60 * 60 * 1_000);
+
+    const queue = new JobQueue();
+    const fleet = { ...FLEET, scaleDownAfterIdleSec: 300, maxWorkerAgeSec: 1_800 };
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminateCalls = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    );
+    expect(terminateCalls).toHaveLength(1);
+    const terminated = (terminateCalls[0][0] as { input: { InstanceIds: string[] } }).input.InstanceIds;
+    expect(terminated).toEqual(['i-old']);
+
+    autoscaler.stop();
+  });
+
+  it('does not expire a worker that is still busy, even past maxWorkerAgeSec', async () => {
+    const { EC2Client } = await import('@aws-sdk/client-ec2');
+    const sendMock = vi.mocked((new EC2Client() as unknown as { send: ReturnType<typeof vi.fn> }).send);
+
+    const pool = new WorkerPool();
+    pool.register({ workerId: 'w1', instanceId: 'w1', ec2InstanceId: 'i-busy',
+      region: 'us-east-1', availabilityZone: 'a', totalSlots: 4, totalVcpus: 8, totalMemoryMiB: 16_384, capabilities: [''] });
+    pool.setStream('w1', { writable: true, writableEnded: false, write: vi.fn() } as unknown as import('node:http').ServerResponse);
+    pool.assign('w1', { jobId: 'j1', vcpus: 2, memoryMiB: 2_048 } as never);
+
+    vi.setSystemTime(Date.now() + 60 * 60 * 1_000);
+
+    const queue = new JobQueue();
+    const fleet = { ...FLEET, scaleDownAfterIdleSec: 300, maxWorkerAgeSec: 1_800 };
+    const autoscaler = new Autoscaler(pool, queue, [fleet], 30_000);
+    await (autoscaler as unknown as { evaluate(): Promise<void> }).evaluate();
+
+    const terminateCalls = sendMock.mock.calls.filter(
+      ([cmd]) => (cmd as { constructor: { name: string } }).constructor.name === 'TerminateInstancesCommand',
+    );
+    expect(terminateCalls).toHaveLength(0);
+
+    autoscaler.stop();
+  });
+});

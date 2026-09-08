@@ -9,6 +9,7 @@ export default defineConfig({
     validate: 'bin/validate.ts',
     setup: 'bin/setup.ts',
     build: 'bin/build.ts',
+    'bake-ami': 'bin/bake-ami.ts',
     deploy: 'bin/deploy.ts',
   },
   format: ['esm'],

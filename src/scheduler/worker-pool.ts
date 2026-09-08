@@ -8,6 +8,8 @@ interface WorkerState extends WorkerRegistration {
   freeSlots: number;
   freeVcpus: number;
   freeMemoryMiB: number;
+  /** First registration timestamp; survives re-registration. Used to force-expire long-lived hosts. */
+  registeredAt: number;
   lastSeen: number;
   stream: ServerResponse | null;
   /** Timestamp when the worker last became fully idle (freeSlots === totalSlots); null while busy. */
@@ -45,6 +47,7 @@ export class WorkerPool {
       lastSeen:      Date.now(),
       stream:        existing?.stream ?? null,
       idleSince:     existing?.idleSince ?? Date.now(),
+      registeredAt:  existing?.registeredAt ?? Date.now(),
     };
     this.workers.set(reg.workerId, state);
     void this.redisWorkers?.upsert({
@@ -164,21 +167,40 @@ export class WorkerPool {
     return true;
   }
 
+  /**
+   * Density cap for job placement — beyond this per-host vCPU utilization, prefer a
+   * different worker instead of packing further, so one bare-metal host doesn't absorb
+   * unbounded disk/network contention from too many co-located VMs.
+   */
+  private static readonly MAX_PACK_UTILIZATION = 0.8;
+
+  /**
+   * Best-fit placement: among workers under the density cap, picks the tightest fit
+   * (least free vCPUs) so load consolidates onto fewer hosts and idle ones can actually
+   * reach zero and be reaped by the autoscaler. Falls back to the least-bad worker over
+   * the cap only if nothing fits under it, rather than rejecting the job outright.
+   */
   bestWorker(requiredLabels: string[], vcpus: number, memoryMiB: number): string | null {
     // Strip size and self-hosted labels — size is checked via resource availability
     const capLabels = requiredLabels.filter(l => !isSchedulerLabel(l));
-    let bestId: string | null = null;
-    let bestFree = 0;
+    let packedId: string | null = null;
+    let packedFreeVcpus = Infinity;
+    let overflowId: string | null = null;
+    let overflowFreeVcpus = Infinity;
+
     for (const [id, w] of this.workers) {
       if (w.freeSlots <= 0 || !w.stream?.writable) continue;
       if (w.freeVcpus < vcpus || w.freeMemoryMiB < memoryMiB) continue;
       if (!hasAll(w.capabilities, capLabels)) continue;
-      if (w.freeSlots > bestFree) {
-        bestFree = w.freeSlots;
-        bestId = id;
+
+      const utilizationAfter = 1 - (w.freeVcpus - vcpus) / Math.max(w.totalVcpus, 1);
+      if (utilizationAfter <= WorkerPool.MAX_PACK_UTILIZATION) {
+        if (w.freeVcpus < packedFreeVcpus) { packedFreeVcpus = w.freeVcpus; packedId = id; }
+      } else if (w.freeVcpus < overflowFreeVcpus) {
+        overflowFreeVcpus = w.freeVcpus; overflowId = id;
       }
     }
-    return bestId;
+    return packedId ?? overflowId;
   }
 
   get connectedCount(): number {
@@ -224,6 +246,13 @@ export class WorkerPool {
       )
       .sort((a, b) => a.idleSince! - b.idleSince!)
       .map(w => ({ workerId: w.workerId, ec2InstanceId: w.ec2InstanceId! }));
+  }
+
+  /** Registration age + slot occupancy for a worker; used by the autoscaler for consolidation ordering and expiration checks. */
+  workerMeta(workerId: string): { registeredAt: number; freeSlots: number; totalSlots: number } | null {
+    const w = this.workers.get(workerId);
+    if (!w) return null;
+    return { registeredAt: w.registeredAt, freeSlots: w.freeSlots, totalSlots: w.totalSlots };
   }
 
   /**

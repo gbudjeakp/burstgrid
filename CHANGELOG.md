@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.12.0](https://github.com/gbudjeakp/burstgrid/compare/v1.11.0...v1.12.0) (2026-09-08)
+
+
+### Features
+
+* optional SSH debug access into microVMs ([dc44758](https://github.com/gbudjeakp/burstgrid/commit/dc447587b0ea8f411fba65d9e41e11208f944417))
+
+
+### Bug Fixes
+
+* recover SSH debug access commit that GitHub silently dropped ([2c05da7](https://github.com/gbudjeakp/burstgrid/commit/2c05da78479208a43e1ae93f5f25db629914c132))
+
 ## [1.11.0](https://github.com/gbudjeakp/burstgrid/compare/v1.10.0...v1.11.0) (2026-09-08)
 
 

@@ -33,6 +33,8 @@ export interface AgentConfig {
   snapshotPoolCfg?: { size?: number; snapshotDir?: string };
   /** Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Default: false, opt in once jailer is set up on the host. */
   useJailer?: boolean;
+  /** SSH public key injected for debug access into every VM this worker boots; requires sshd in the rootfs image. */
+  sshPublicKey?: string;
 }
 
 export class WorkerAgent {
@@ -197,6 +199,7 @@ export class WorkerAgent {
       repoUrl: `https://github.com/${job.owner}/${job.repo}`,
       slotIndex,
       useJailer: this.cfg.useJailer,
+      sshPublicKey: this.cfg.sshPublicKey,
     });
 
     try {

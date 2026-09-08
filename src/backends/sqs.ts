@@ -6,6 +6,7 @@ import {
 import { type Job } from '../types/index.js';
 import { selectTier } from '../scheduler/router.js';
 import type { JobQueue } from '../scheduler/queue.js';
+import { logEvent } from '../telemetry/index.js';
 
 export interface SQSPollerOptions {
   queueUrl: string;
@@ -27,7 +28,7 @@ export class SQSJobPoller {
   start(): void {
     this.running = true;
     void this.poll();
-    console.info(`[sqs] polling ${this.opts.queueUrl}`);
+    logEvent('sqs', 'info', `polling ${this.opts.queueUrl}`);
   }
 
   stop(): void {
@@ -47,7 +48,7 @@ export class SQSJobPoller {
           try {
             const partial = JSON.parse(msg.Body!) as Partial<Job>;
             if (!partial.id || !partial.owner || !partial.repo || partial.runId === undefined) {
-              console.warn('[sqs] dropping malformed message', msg.MessageId);
+              logEvent('sqs', 'warn', `dropping malformed message ${msg.MessageId}`);
             } else {
               const job: Job = {
                 id:          partial.id,
@@ -67,11 +68,11 @@ export class SQSJobPoller {
               ReceiptHandle: msg.ReceiptHandle!,
             }));
           } catch (err) {
-            console.error('[sqs] message processing error', err);
+            logEvent('sqs', 'error', 'message processing error', err);
           }
         }
       } catch (err) {
-        console.error('[sqs] receive error, retrying in 5 s', err);
+        logEvent('sqs', 'error', 'receive error, retrying in 5 s', err);
         await sleep(5_000);
       }
     }

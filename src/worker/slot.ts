@@ -3,6 +3,7 @@ import path from 'node:path';
 import { FirecrackerVM, VM_BOOT_TARGET_MS, type VMConfig } from './firecracker.js';
 import type { SnapshotPool } from './snapshot-pool.js';
 import { vmSizeFromLabels, type RootfsImage } from '../types/index.js';
+import { logEvent } from '../telemetry/index.js';
 
 /** How the slot executes jobs on this host. */
 export type SlotMode = 'firecracker' | 'process' | 'simulate';
@@ -22,7 +23,7 @@ function sanitizeEnv(env: Record<string, string>): Record<string, string> {
   const safe: Record<string, string> = {};
   for (const [k, v] of Object.entries(env)) {
     if (BLOCKED_ENV_KEYS.has(k)) {
-      console.warn(`[slot] blocked env key from job assignment: ${k}`);
+      logEvent('slot', 'warn', `blocked env key from job assignment: ${k}`);
       continue;
     }
     safe[k] = v;
@@ -61,6 +62,8 @@ export interface SlotConfig {
   useJailer?: boolean;
   /** SSH public key injected for debug access; only takes effect if the rootfs image has sshd installed. */
   sshPublicKey?: string;
+  /** Worker host ID — tags shipped microVM console log lines so they're findable per-worker in Grafana. */
+  workerId?: string;
 }
 
 export class Slot {
@@ -80,6 +83,8 @@ export class Slot {
       const rootfsPath = resolveRootfs(labels, this.cfg.imageCatalog, this.cfg.imageDir, this.cfg.vmImagePath);
       const vmCfg: VMConfig = {
         vmId: `bg-${this.cfg.jobId.slice(0, 8)}`,
+        jobId: this.cfg.jobId,
+        workerId: this.cfg.workerId,
         kernelPath: this.cfg.kernelPath,
         rootfsPath,
         memoryMiB,
@@ -107,7 +112,7 @@ export class Slot {
         await this.vm.boot();
       }
       if (this.cfg.sshPublicKey) {
-        console.info(`[slot] job ${this.cfg.jobId} debug SSH: ssh root@${this.vm.guestAddress} (from the worker host)`);
+        logEvent('slot', 'info', `job ${this.cfg.jobId} debug SSH: ssh root@${this.vm.guestAddress} (from the worker host)`);
       }
       return;
     }

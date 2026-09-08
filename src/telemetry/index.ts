@@ -2,14 +2,17 @@
  * OpenTelemetry instrumentation for BurstGrid.
  *
  * Instruments are no-ops by default. When OTEL_EXPORTER_OTLP_ENDPOINT is set,
- * the SDK (initialized in bin/scheduler.ts) activates the exporter.
+ * the SDK (initialized in bin/scheduler.ts and bin/worker-agent.ts) activates the exporter.
  *
  * Compatible receivers: Grafana Alloy, Datadog Agent, Honeycomb, any OTLP endpoint.
  */
 import { metrics, trace, SpanStatusCode, type Meter, type Tracer, type Span } from '@opentelemetry/api';
+import { logs, SeverityNumber, type Logger } from '@opentelemetry/api-logs';
 
 let meter: Meter;
 let tracer: Tracer | undefined;
+let vmLogger: Logger | undefined;
+let appLogger: Logger | undefined;
 
 // spans keyed by jobId; entries are removed when the span ends
 const activeSpans = new Map<string, Span>();
@@ -96,6 +99,57 @@ export function recordJobDuration(ms: number, tier: string): void {
   }).record(ms, { tier });
 }
 
+// ─── Guest console log lines (worker) ─────────────────────────────────────────
+// Ships each line of a microVM's serial console (kernel boot, vm-init.sh, job output)
+// as a structured log record tagged with job/vm/worker IDs, so an operator can find
+// "logs for this microVM" in Grafana instead of only seeing them in the worker's own stdout.
+
+export interface VmLogAttrs {
+  jobId: string;
+  vmId: string;
+  workerId: string;
+}
+
+export function logVmLine(attrs: VmLogAttrs, line: string): void {
+  if (!vmLogger) return; // no-op until initTelemetry() has run
+  vmLogger.emit({
+    severityNumber: SeverityNumber.INFO,
+    body: line,
+    attributes: { 'job.id': attrs.jobId, 'vm.id': attrs.vmId, 'worker.id': attrs.workerId },
+  });
+}
+
+// ─── Process-level logs (scheduler, queue, router, worker-pool, reconciler, autoscaler, etc.) ─
+// Ships the same lines already printed to stdout as structured OTel logs, tagged by component,
+// so setup/config issues (redis errors, stuck jobs, launch failures) are queryable in Grafana
+// instead of only visible by tailing a specific host's console.
+
+const SEVERITY_BY_LEVEL = { info: SeverityNumber.INFO, warn: SeverityNumber.WARN, error: SeverityNumber.ERROR };
+
+export function logEvent(component: string, level: 'info' | 'warn' | 'error', message: string, err?: unknown): void {
+  const line = err !== undefined ? `${message} ${err instanceof Error ? err.message : String(err)}` : message;
+  console[level](`[${component}] ${line}`);
+  if (!appLogger) return;
+  appLogger.emit({
+    severityNumber: SEVERITY_BY_LEVEL[level],
+    body: line,
+    attributes: { component },
+  });
+}
+
+// ─── Per-VM resource usage (worker) ───────────────────────────────────────────
+// Point-in-time CPU/memory of a single Firecracker process, sampled from /proc by the
+// caller — lets an operator see "how much of the host is *this* microVM using" in Grafana,
+// as opposed to the whole-host hostmetrics numbers which only show the aggregate.
+
+export function recordVmResourceUsage(attrs: VmLogAttrs, cpuPercent: number, rssBytes: number): void {
+  const vmAttrs = { 'job.id': attrs.jobId, 'vm.id': attrs.vmId, 'worker.id': attrs.workerId };
+  getMeter().createGauge('burstgrid.vm.cpu_percent', { description: 'CPU utilization of a microVM\'s Firecracker process', unit: '%' })
+    .record(cpuPercent, vmAttrs);
+  getMeter().createGauge('burstgrid.vm.memory_rss_bytes', { description: 'Resident memory of a microVM\'s Firecracker process', unit: 'By' })
+    .record(rssBytes, vmAttrs);
+}
+
 // ─── SDK initializer (called at process start if OTLP endpoint is configured) ─
 
 export async function initTelemetry(serviceName: string): Promise<void> {
@@ -106,6 +160,8 @@ export async function initTelemetry(serviceName: string): Promise<void> {
   const { OTLPMetricExporter } = await import('@opentelemetry/exporter-metrics-otlp-http');
   const { TracerProvider, SimpleSpanProcessor } = await import('@opentelemetry/sdk-trace');
   const { OTLPTraceExporter } = await import('@opentelemetry/exporter-trace-otlp-http');
+  const { LoggerProvider, SimpleLogRecordProcessor } = await import('@opentelemetry/sdk-logs');
+  const { OTLPLogExporter } = await import('@opentelemetry/exporter-logs-otlp-http');
 
   const traceProvider = new TracerProvider({
     spanProcessors: [new SimpleSpanProcessor({ exporter: new OTLPTraceExporter({ url: `${endpoint}/v1/traces` }) })],
@@ -122,5 +178,13 @@ export async function initTelemetry(serviceName: string): Promise<void> {
     ],
   });
   metrics.setGlobalMeterProvider(provider);
-  console.info(`[telemetry] OTLP metrics+traces → ${endpoint} (service: ${serviceName})`);
+
+  const loggerProvider = new LoggerProvider({
+    processors: [new SimpleLogRecordProcessor({ exporter: new OTLPLogExporter({ url: `${endpoint}/v1/logs` }) })],
+  });
+  logs.setGlobalLoggerProvider(loggerProvider);
+  vmLogger = logs.getLogger('burstgrid-vm', '0.1.0');
+  appLogger = logs.getLogger('burstgrid-app', '0.1.0');
+
+  console.info(`[telemetry] OTLP metrics+traces+logs → ${endpoint} (service: ${serviceName})`);
 }

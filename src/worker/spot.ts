@@ -4,6 +4,7 @@ import {
   ReceiveMessageCommand,
   DeleteMessageCommand,
 } from '@aws-sdk/client-sqs';
+import { logEvent } from '../telemetry/index.js';
 
 export interface SpotTerminationDetail {
   instanceId: string;
@@ -89,11 +90,11 @@ export class SpotMonitor extends EventEmitter {
     // Only react if this is our instance
     const myId = process.env.BURSTGRID_WORKER_ID;
     if (myId && instanceId && instanceId !== myId) {
-      console.info(`[spot] ignoring interruption for ${instanceId} (we are ${myId})`);
+      logEvent('spot', 'info', `ignoring interruption for ${instanceId} (we are ${myId})`);
       return;
     }
 
-    console.warn(`[spot] interruption warning — instance ${instanceId} terminates at ${terminationTime}`);
+    logEvent('spot', 'warn', `interruption warning — instance ${instanceId} terminates at ${terminationTime}`);
     this.emit('terminating', { instanceId, terminationTime });
   }
 }

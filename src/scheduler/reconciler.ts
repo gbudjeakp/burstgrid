@@ -1,6 +1,7 @@
 import type { AppClientRegistry } from '../github/runner.js';
 import type { JobQueue } from './queue.js';
 import { probeRun } from '../github/probe.js';
+import { logEvent } from '../telemetry/index.js';
 
 /** Repos with no active runs for this long are dropped from the watch set. */
 const INACTIVE_PRUNE_MS = 6 * 60 * 60_000; // 6 hours
@@ -53,7 +54,7 @@ export class Reconciler {
     setTimeout(() => {
       this.pendingImmediate.delete(key);
       void this.reconcileRepo(owner, repo).catch(err =>
-        console.error(`[reconciler] immediate ${key}:`, err),
+        logEvent('reconciler', 'error', `immediate ${key}:`, err),
       );
     }, 250);
   }
@@ -77,7 +78,7 @@ export class Reconciler {
         repos.slice(i, i + RECONCILE_CONCURRENCY).map(fullName => {
           const [owner, repo] = fullName.split('/');
           return this.reconcileRepo(owner, repo).catch(err =>
-            console.error(`[reconciler] ${fullName}:`, err),
+            logEvent('reconciler', 'error', `${fullName}:`, err),
           );
         }),
       );
@@ -91,7 +92,7 @@ export class Reconciler {
       if ((this.lastActiveAt.get(fullName) ?? 0) < cutoff) {
         this.repos.delete(fullName);
         this.lastActiveAt.delete(fullName);
-        console.info(`[reconciler] pruned inactive repo ${fullName}`);
+        logEvent('reconciler', 'info', `pruned inactive repo ${fullName}`);
       }
     }
   }
@@ -100,7 +101,7 @@ export class Reconciler {
     const client = this.ghClient.clientFor(owner);
     const runs = await client.listActiveRuns(owner, repo);
     if (runs.length > 0) {
-      console.info(`[reconciler] ${owner}/${repo}: checking ${runs.length} active run(s)`);
+      logEvent('reconciler', 'info', `${owner}/${repo}: checking ${runs.length} active run(s)`);
       this.lastActiveAt.set(`${owner}/${repo}`, Date.now());
     }
     for (const run of runs) {

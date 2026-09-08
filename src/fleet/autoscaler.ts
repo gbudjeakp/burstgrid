@@ -8,6 +8,7 @@ import {
 import type { WorkerPool } from '../scheduler/worker-pool.js';
 import type { JobQueue } from '../scheduler/queue.js';
 import { VM_SIZES, vmSizeFromLabels } from '../types/index.js';
+import { logEvent } from '../telemetry/index.js';
 
 export interface TierFleet {
   /** Human-readable name for logging (e.g. 'standard', 'large', 'xlarge'). */
@@ -140,16 +141,16 @@ export class Autoscaler {
     const floor = Math.max(...this.fleets.map(f => f.minScaleDownPerCycle ?? 5));
     const budget = Math.max(floor, Math.ceil(fleetSize * fraction));
     if (toTerminate.length > budget) {
-      console.info(`[autoscaler] disruption budget: capping scale-down to ${budget}/${toTerminate.length} candidates`);
+      logEvent('autoscaler', 'info', `disruption budget: capping scale-down to ${budget}/${toTerminate.length} candidates`);
       toTerminate = toTerminate.slice(0, budget);
     }
 
     const ids = toTerminate.map(w => w.ec2InstanceId);
     try {
       await this.ec2.send(new TerminateInstancesCommand({ InstanceIds: ids }));
-      console.info(`[autoscaler] terminated ${ids.join(', ')} (idle timeout or max age reached)`);
+      logEvent('autoscaler', 'info', `terminated ${ids.join(', ')} (idle timeout or max age reached)`);
     } catch (err) {
-      console.error('[autoscaler] terminate failed', err);
+      logEvent('autoscaler', 'error', 'terminate failed', err);
     }
   }
 
@@ -210,7 +211,7 @@ export class Autoscaler {
 
   private async launchWorkers(count: number, fleet: TierFleet): Promise<void> {
     if (!fleet.launchTemplateId || fleet.subnetIds.length === 0) {
-      console.warn(`[autoscaler] fleet "${fleet.name}" missing template/subnets; scale-up skipped`);
+      logEvent('autoscaler', 'warn', `fleet "${fleet.name}" missing template/subnets; scale-up skipped`);
       return;
     }
 
@@ -219,7 +220,7 @@ export class Autoscaler {
       const subnetId = fleet.subnetIds[(cursor + i) % fleet.subnetIds.length];
       const launched = await this.tryLaunch(fleet, subnetId, fleet.capacityType ?? 'on-demand');
       if (!launched && fleet.capacityType === 'spot') {
-        console.warn(`[autoscaler] fleet "${fleet.name}": spot unavailable, retrying on-demand`);
+        logEvent('autoscaler', 'warn', `fleet "${fleet.name}": spot unavailable, retrying on-demand`);
         await this.tryLaunch(fleet, subnetId, 'on-demand');
       }
     }
@@ -243,10 +244,10 @@ export class Autoscaler {
       const launches = this.pendingLaunches.get(fleet.name) ?? [];
       launches.push(Date.now());
       this.pendingLaunches.set(fleet.name, launches);
-      console.info(`[autoscaler] fleet "${fleet.name}": launched ${id} (subnet ${subnetId}, ${capacityType})`);
+      logEvent('autoscaler', 'info', `fleet "${fleet.name}": launched ${id} (subnet ${subnetId}, ${capacityType})`);
       return true;
     } catch (err) {
-      console.error(`[autoscaler] fleet "${fleet.name}": launch failed (${capacityType})`, err);
+      logEvent('autoscaler', 'error', `fleet "${fleet.name}": launch failed (${capacityType})`, err);
       return false;
     }
   }

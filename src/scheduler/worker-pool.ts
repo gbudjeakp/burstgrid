@@ -1,6 +1,7 @@
 import type { ServerResponse } from 'node:http';
 import type { WorkerRegistration, WorkerHeartbeat, JobAssignment, Job } from '../types/index.js';
 import type { RedisWorkerRegistryBackend } from '../backends/redis.js';
+import { logEvent } from '../telemetry/index.js';
 
 const STALE_TIMEOUT_MS = 120_000; // 4× heartbeat jitter budget — event loop saturation under heavy load delays timers
 
@@ -63,14 +64,14 @@ export class WorkerPool {
       freeVcpus:      state.freeVcpus,
       freeMemoryMiB:  state.freeMemoryMiB,
       lastSeen:       state.lastSeen,
-    }).catch(err => console.error('[pool] Redis worker upsert error:', err));
+    }).catch(err => logEvent('pool', 'error', 'Redis worker upsert error:', err));
   }
 
   unregister(workerId: string): void {
     this.workers.delete(workerId);
     this.inflightJobs.delete(workerId);
     void this.redisWorkers?.remove(workerId).catch(err =>
-      console.error('[pool] Redis worker remove error:', err),
+      logEvent('pool', 'error', 'Redis worker remove error:', err),
     );
   }
 
@@ -137,7 +138,7 @@ export class WorkerPool {
       freeVcpus:      w.freeVcpus,
       freeMemoryMiB:  w.freeMemoryMiB,
       lastSeen:       w.lastSeen,
-    }).catch(err => console.error('[pool] Redis heartbeat sync error:', err));
+    }).catch(err => logEvent('pool', 'error', 'Redis heartbeat sync error:', err));
   }
 
   hasWorker(workerId: string): boolean {
@@ -277,7 +278,7 @@ export class WorkerPool {
       if (w.lastSeen < cutoff) {
         this.workers.delete(id);
         lostJobs.push(...this.drainWorkerJobs(id));
-        console.warn(`[pool] reaped stale worker ${id}`);
+        logEvent('pool', 'warn', `reaped stale worker ${id}`);
       }
     }
     return lostJobs;

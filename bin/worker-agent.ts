@@ -4,6 +4,7 @@ import { detectCapabilities, detectWorkerId } from '../src/worker/detect.js';
 import { loadConfig } from '../src/config/index.js';
 import { startWorkerHealthServer } from '../src/worker/health.js';
 import { SpotMonitor } from '../src/worker/spot.js';
+import { initTelemetry, logEvent } from '../src/telemetry/index.js';
 
 const cfg = loadConfig();
 
@@ -49,9 +50,10 @@ const capabilities = (BURSTGRID_CAPABILITIES ?? detectCapabilities().join(','))
 
 const workerId = BURSTGRID_WORKER_ID ?? await detectWorkerId();
 
-console.info(
-  `[worker-agent] id=${workerId} slots=${maxSlots} vcpus=${totalVcpus} ` +
-  `mem=${totalMemMiB}MiB caps=${capabilities.join(',')}`,
+await initTelemetry('burstgrid-worker');
+
+logEvent('worker-agent', 'info',
+  `id=${workerId} slots=${maxSlots} vcpus=${totalVcpus} mem=${totalMemMiB}MiB caps=${capabilities.join(',')}`,
 );
 
 const controller = new AbortController();
@@ -61,16 +63,16 @@ process.once('SIGTERM', () => controller.abort());
 if (BURSTGRID_SPOT_QUEUE_URL) {
   const spotMonitor = new SpotMonitor(BURSTGRID_SPOT_QUEUE_URL);
   spotMonitor.once('terminating', () => {
-    console.warn('[worker-agent] spot termination imminent — evicting jobs and draining');
+    logEvent('worker-agent', 'warn', 'spot termination imminent — evicting jobs and draining');
     // Proactively requeue inflight jobs now (2-min warning window).
     // Falls back to the 30s heartbeat-stale requeue if the scheduler is unreachable.
     void agent.evict().finally(() => controller.abort());
   });
-  spotMonitor.on('error', err => console.error('[worker-agent] spot monitor error', err));
+  spotMonitor.on('error', err => logEvent('worker-agent', 'error', 'spot monitor error', err));
   spotMonitor.start();
   controller.signal.addEventListener('abort', () => spotMonitor.stop(), { once: true });
 } else {
-  console.info('[worker-agent] BURSTGRID_SPOT_QUEUE_URL not set — spot interruption handling disabled');
+  logEvent('worker-agent', 'info', 'BURSTGRID_SPOT_QUEUE_URL not set — spot interruption handling disabled');
 }
 
 const agent = new WorkerAgent({

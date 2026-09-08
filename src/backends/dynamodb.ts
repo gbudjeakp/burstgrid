@@ -4,6 +4,7 @@ import {
 } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import type { IJobHistoryBackend, JobEvent } from './types.js';
+import { logEvent } from '../telemetry/index.js';
 
 /**
  * Writes job lifecycle events to a DynamoDB table.
@@ -49,7 +50,7 @@ export class DynamoDBJobHistory implements IJobHistoryBackend {
         }, { removeUndefinedValues: true }),
       }));
     } catch (err) {
-      console.error('[dynamo] failed to record job event', err);
+      logEvent('dynamo', 'error', 'failed to record job event', err);
     }
   }
 

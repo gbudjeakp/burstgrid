@@ -142,6 +142,10 @@ export RUNNER_ALLOW_RUNASROOT=1
 export HOME=/root
 mkdir -p /root
 
+# Exported (not just a local var) so job steps can reference $GUEST_IP directly,
+# e.g. a debug step doing `echo "SSH target: $GUEST_IP"` shows it in the job's own log.
+export GUEST_IP
+
 # Derive a unique runner name from the guest IP (guaranteed unique per-slot).
 # Falls back to a random hex string if GUEST_IP is not set.
 _ip_tag="$(echo "${GUEST_IP:-}" | tr '.' '-')"

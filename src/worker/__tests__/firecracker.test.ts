@@ -3,6 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { EventEmitter } from 'node:events';
 import { FirecrackerVM, type VMConfig } from '../firecracker.js';
 
 // ─── Mock child_process so no real firecracker binary is needed ───────────────
@@ -13,6 +14,14 @@ vi.mock('node:child_process', () => ({
     kill: vi.fn(),
     pid: 99999,
   })),
+  spawnSync: vi.fn(() => ({ status: 0, stderr: Buffer.from('') })),
+}));
+
+vi.mock('../../telemetry/index.js', () => ({
+  recordVmBootDuration: vi.fn(),
+  recordVmResourceUsage: vi.fn(),
+  logVmLine: vi.fn(),
+  logEvent: vi.fn(),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -235,5 +244,92 @@ describe('FirecrackerVM — jailer mode', () => {
   it('defaults to unjailed when useJailer is not set', () => {
     const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, jailerChrootBaseDir: chrootBase });
     expect((vm as unknown as { jailed: boolean }).jailed).toBe(false);
+  });
+});
+
+describe('FirecrackerVM — console log capture', () => {
+  it('forwards complete lines to logVmLine tagged with job/vm/worker IDs, buffering partial lines across chunks', async () => {
+    const { logVmLine } = await import('../../telemetry/index.js');
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-log-test', jobId: 'job-123', workerId: 'worker-abc' });
+
+    const proc = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+
+    (vm as unknown as { attachConsoleCapture(p: typeof proc): void }).attachConsoleCapture(proc);
+
+    // Split a single line across two chunks to verify buffering.
+    proc.stdout.emit('data', Buffer.from('Booting Linux ker'));
+    proc.stdout.emit('data', Buffer.from('nel...\nStarting sshd\n'));
+    proc.stderr.emit('data', Buffer.from('warning: something\n'));
+
+    const attrs = { jobId: 'job-123', vmId: 'vm-log-test', workerId: 'worker-abc' };
+    expect(logVmLine).toHaveBeenCalledWith(attrs, 'Booting Linux kernel...');
+    expect(logVmLine).toHaveBeenCalledWith(attrs, 'Starting sshd');
+    expect(logVmLine).toHaveBeenCalledWith(attrs, 'warning: something');
+    expect(logVmLine).toHaveBeenCalledTimes(3);
+  });
+
+  it('falls back to vmId and "unknown" when jobId/workerId are not provided', async () => {
+    const { logVmLine } = await import('../../telemetry/index.js');
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-no-ids' });
+
+    const proc = Object.assign(new EventEmitter(), {
+      stdout: new EventEmitter(),
+      stderr: new EventEmitter(),
+    });
+
+    (vm as unknown as { attachConsoleCapture(p: typeof proc): void }).attachConsoleCapture(proc);
+    proc.stdout.emit('data', Buffer.from('line one\n'));
+
+    expect(logVmLine).toHaveBeenCalledWith({ jobId: 'vm-no-ids', vmId: 'vm-no-ids', workerId: 'unknown' }, 'line one');
+  });
+});
+
+describe('FirecrackerVM — per-VM resource sampling', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('does nothing when the process has no pid', () => {
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-no-pid' });
+    (vm as unknown as { proc: { pid?: number } }).proc = {};
+    (vm as unknown as { startResourceSampling(): void }).startResourceSampling();
+    expect((vm as unknown as { resourceSampleTimer: unknown }).resourceSampleTimer).toBeNull();
+  });
+
+  it('samples CPU/memory from /proc on an interval and reports via recordVmResourceUsage', async () => {
+    const { recordVmResourceUsage } = await import('../../telemetry/index.js');
+    vi.useFakeTimers();
+
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-sample', jobId: 'job-9', workerId: 'worker-9' });
+    (vm as unknown as { proc: { pid: number } }).proc = { pid: 424242 };
+
+    const readFileSpy = vi.spyOn(fs, 'readFile').mockImplementation(async (p) => {
+      if (String(p).endsWith('/stat')) return '424242 (firecracker) S 1 424242 424242 0 -1 0 0 0 0 0 500 200 0 0 0 0 0 0';
+      if (String(p).endsWith('/statm')) return '1000 512 0 0 0 0 0';
+      throw new Error(`unexpected path ${p}`);
+    });
+
+    (vm as unknown as { startResourceSampling(): void }).startResourceSampling();
+    await vi.advanceTimersByTimeAsync(15_000);
+
+    expect(recordVmResourceUsage).toHaveBeenCalledWith(
+      { jobId: 'job-9', vmId: 'vm-sample', workerId: 'worker-9' },
+      0, // no prior sample yet, so cpuPercent is 0 on the first tick
+      512 * 4_096,
+    );
+
+    readFileSpy.mockRestore();
+  });
+
+  it('shutdown() clears the sampling timer', async () => {
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: 'vm-shutdown-sample' });
+    (vm as unknown as { proc: { pid: number; kill: () => void } }).proc = { pid: 1, kill: vi.fn() };
+    (vm as unknown as { startResourceSampling(): void }).startResourceSampling();
+
+    const clearIntervalSpy = vi.spyOn(global, 'clearInterval');
+    await vm.shutdown();
+    expect(clearIntervalSpy).toHaveBeenCalledWith((vm as unknown as { resourceSampleTimer: unknown }).resourceSampleTimer);
+    clearIntervalSpy.mockRestore();
   });
 });

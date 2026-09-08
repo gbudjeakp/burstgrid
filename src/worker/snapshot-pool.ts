@@ -4,6 +4,7 @@
  */
 import path from 'node:path';
 import { FirecrackerVM, type SnapshotPaths, type VMConfig } from './firecracker.js';
+import { logEvent } from '../telemetry/index.js';
 
 export interface SnapshotPoolConfig {
   /** Number of pre-warmed snapshots to keep ready. Default: 2. */
@@ -33,7 +34,7 @@ export class SnapshotPool {
     await Promise.all(
       Array.from({ length: this.poolSize }, (_, i) => this.createOne(`warmup-${i}`)),
     );
-    console.info(`[snapshot-pool] ${this.ready.length} snapshot(s) ready`);
+    logEvent('snapshot-pool', 'info', `${this.ready.length} snapshot(s) ready`);
   }
 
   /**
@@ -47,7 +48,7 @@ export class SnapshotPool {
       void this.replenish();
       return paths;
     }
-    console.warn('[snapshot-pool] pool empty — cold-booting a new snapshot (consider raising poolSize)');
+    logEvent('snapshot-pool', 'warn', 'pool empty — cold-booting a new snapshot (consider raising poolSize)');
     return this.createOne(`ondemand-${this.sequence++}`);
   }
 

@@ -56,6 +56,14 @@ receivers:
       load:
       processes:
 
+  # Host system logs (systemd journal) — service crashes, kernel OOM kills, docker daemon
+  # errors, sshd auth log. Requires the collector to be able to read /var/log/journal
+  # (root, or add the collector's user to the 'systemd-journal' group).
+  # Scoped to units that actually matter here; drop the `units` filter to capture everything.
+  journald:
+    directory: /var/log/journal
+    units: [burstgrid-worker, burstgrid-scheduler, docker, firecracker, sshd, kernel]
+
 # ── Processors ────────────────────────────────────────────────────────────────
 
 processors:
@@ -121,3 +129,20 @@ service:
       receivers:   [otlp, hostmetrics]
       processors:  [memory_limiter, resourcedetection/ec2, resource, batch]
       exporters:   [otlphttp/grafana]   # ← swap for: datadog / prometheusremotewrite / debug
+
+    # Job lifecycle spans from the scheduler (openJobSpan/endJobSpan). Previously
+    # missing — the scheduler was shipping OTLP traces that this collector just
+    # dropped since no traces pipeline consumed them.
+    traces:
+      receivers:   [otlp]
+      processors:  [memory_limiter, resourcedetection/ec2, resource, batch]
+      exporters:   [otlphttp/grafana]
+
+    # Per-microVM console output (kernel boot + vm-init.sh + job/runner logs),
+    # tagged with job.id/vm.id/worker.id attributes so a specific microVM's
+    # logs can be found in Grafana Logs/Loki.
+    logs:
+      receivers:   [otlp, journald]
+      processors:  [memory_limiter, resourcedetection/ec2, resource, batch]
+      exporters:   [otlphttp/grafana]
+

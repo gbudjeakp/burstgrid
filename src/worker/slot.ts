@@ -59,6 +59,8 @@ export interface SlotConfig {
   snapshotPool?: SnapshotPool;
   /** Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Default: false, opt in once jailer is set up on the host. */
   useJailer?: boolean;
+  /** SSH public key injected for debug access; only takes effect if the rootfs image has sshd installed. */
+  sshPublicKey?: string;
 }
 
 export class Slot {
@@ -91,6 +93,7 @@ export class Slot {
         repoUrl: this.cfg.repoUrl,
         slotIndex: this.cfg.slotIndex ?? 0,
         useJailer: this.cfg.useJailer,
+        sshPublicKey: this.cfg.sshPublicKey,
       };
 
       if (this.cfg.snapshotPool) {
@@ -102,6 +105,9 @@ export class Slot {
       } else {
         this.vm = new FirecrackerVM(vmCfg);
         await this.vm.boot();
+      }
+      if (this.cfg.sshPublicKey) {
+        console.info(`[slot] job ${this.cfg.jobId} debug SSH: ssh root@${this.vm.guestAddress} (from the worker host)`);
       }
       return;
     }

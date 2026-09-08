@@ -57,6 +57,7 @@ RUNNER_REPO_URL="$(extract RUNNER_REPO_URL)"
 REGISTRY_MIRROR="$(extract REGISTRY_MIRROR)"
 GUEST_IP="$(extract GUEST_IP)"
 GATEWAY="$(extract GATEWAY)"
+SSH_PUBKEY="$(extract SSH_PUBKEY_B64)"
 
 if [ -z "$RUNNER_TOKEN" ]; then
   echo "[init] ERROR: RUNNER_TOKEN not found in /proc/cmdline" >&2
@@ -74,6 +75,21 @@ if [ -n "$GUEST_IP" ] && [ -n "$GATEWAY" ]; then
   ip link set eth0 up
   ip route add default via "$GATEWAY"
   printf 'nameserver 8.8.8.8\nnameserver 8.8.4.4\n' > /etc/resolv.conf
+fi
+
+# ── Optional: debug SSH access ─────────────────────────────────────────────────
+# No inbound port is opened on the host for this — the guest is only reachable
+# from the worker host itself over its private /30 (GUEST_IP), which an operator
+# already reaches via SSM. sshd only starts if both a key was provided and the
+# rootfs image actually has sshd installed (most CI images won't).
+if [ -n "$SSH_PUBKEY" ] && command -v sshd >/dev/null 2>&1; then
+  mkdir -p /root/.ssh
+  echo "$SSH_PUBKEY" | base64 -d > /root/.ssh/authorized_keys
+  chmod 700 /root/.ssh
+  chmod 600 /root/.ssh/authorized_keys
+  mkdir -p /run/sshd
+  /usr/sbin/sshd
+  echo "[init] sshd started for debug access at ${GUEST_IP:-unknown}"
 fi
 
 # ── Optional: configure Docker registry mirror ────────────────────────────────

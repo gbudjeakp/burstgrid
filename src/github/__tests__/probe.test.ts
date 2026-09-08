@@ -3,7 +3,7 @@ import { JobQueue } from '../../scheduler/queue.js';
 import type { AppClient } from '../runner.js';
 import { markProvisioned, unmarkProvisioned, probeRun } from '../probe.js';
 
-vi.mock('../../telemetry/index.js', () => ({ openJobSpan: vi.fn() }));
+vi.mock('../../telemetry/index.js', () => ({ openJobSpan: vi.fn(), logEvent: vi.fn() }));
 
 // Unique IDs per test prevent provisionedIds map state from leaking across cases
 let nextJobId = 50_000;

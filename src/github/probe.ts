@@ -3,7 +3,7 @@ import { selectTier } from '../scheduler/router.js';
 import type { JobQueue } from '../scheduler/queue.js';
 import type { AppClient } from './runner.js';
 import type { Job } from '../types/index.js';
-import { openJobSpan } from '../telemetry/index.js';
+import { openJobSpan, logEvent } from '../telemetry/index.js';
 
 // Tracks GitHub job IDs we've already provisioned a runner for. Prevents double-provisioning
 // when the same job arrives via both a webhook event and the reconciler.
@@ -90,7 +90,7 @@ export async function probeRun(opts: ProbeOpts): Promise<void> {
     }
 
     if (provisioned > 0) {
-      console.info(`[probe] run=${runId} ${owner}/${repo}: provisioned ${provisioned} runner(s) for missed queued jobs`);
+      logEvent('probe', 'info', `run=${runId} ${owner}/${repo}: provisioned ${provisioned} runner(s) for missed queued jobs`);
     }
   } finally {
     reconciling.delete(runId);

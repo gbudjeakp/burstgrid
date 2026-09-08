@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { App } from '@octokit/app';
+import { logEvent } from '../telemetry/index.js';
 
 export class CircuitOpenError extends Error {
   readonly isCircuitOpen = true;
@@ -26,7 +27,7 @@ class CircuitBreaker {
         this.failures++;
         if (this.failures >= this.threshold) {
           this.openUntil = Date.now() + this.cooldownMs;
-          console.error(`[circuit-breaker] GitHub API opened after ${this.failures} failures, cooldown ${this.cooldownMs}ms`);
+          logEvent('circuit-breaker', 'error', `GitHub API opened after ${this.failures} failures, cooldown ${this.cooldownMs}ms`);
         }
       }
       throw err;

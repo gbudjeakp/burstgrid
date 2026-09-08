@@ -11,6 +11,7 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { logEvent } from '../telemetry/index.js';
 
 export interface CacheServerConfig {
   bucketName: string;
@@ -45,7 +46,7 @@ export class CacheServer {
   async start(): Promise<void> {
     this.server = http.createServer((req, res) => {
       void this.handle(req, res).catch(err => {
-        console.error('[cache-server] unhandled error:', err);
+        logEvent('cache-server', 'error', 'unhandled error:', err);
         if (!res.writableEnded) res.writeHead(500).end(JSON.stringify({ message: String(err) }));
       });
     });
@@ -55,7 +56,7 @@ export class CacheServer {
         resolve();
       });
     });
-    console.info(`[cache-server] listening on port ${this.port} (bucket: ${this.bucket})`);
+    logEvent('cache-server', 'info', `listening on port ${this.port} (bucket: ${this.bucket})`);
   }
 
   stop(): void {

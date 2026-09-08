@@ -3,7 +3,7 @@ import { JobStatus as Status } from '../types/index.js';
 import { Slot, type SlotMode } from './slot.js';
 import { CacheServer } from './cache-server.js';
 import { SnapshotPool } from './snapshot-pool.js';
-import { recordJobDuration } from '../telemetry/index.js';
+import { recordJobDuration, logEvent } from '../telemetry/index.js';
 
 export interface AgentConfig {
   schedulerUrl: string;
@@ -104,7 +104,7 @@ export class WorkerAgent {
     };
     await this.post('/v1/workers/register', reg);
     this.registered = true;
-    console.info(`[agent] registered ${this.cfg.workerId} (${this.cfg.maxSlots} slots, ${this.cfg.totalVcpus} vCPU, ${this.cfg.totalMemoryMiB} MiB)`);
+    logEvent('agent', 'info', `registered ${this.cfg.workerId} (${this.cfg.maxSlots} slots, ${this.cfg.totalVcpus} vCPU, ${this.cfg.totalMemoryMiB} MiB)`);
   }
 
   private async sendHeartbeat(): Promise<void> {
@@ -116,7 +116,7 @@ export class WorkerAgent {
       freeMemoryMiB: this.cfg.totalMemoryMiB - this.usedMemoryMiB,
     };
     await this.post(`/v1/workers/${this.cfg.workerId}/heartbeat`, hb).catch(err =>
-      console.warn('[agent] heartbeat failed', err),
+      logEvent('agent', 'warn', 'heartbeat failed', err),
     );
   }
 
@@ -129,11 +129,11 @@ export class WorkerAgent {
         delay = 1_000; // reset backoff on clean disconnect
       } catch (err) {
         if (signal.aborted) return;
-        console.warn(`[agent] stream error, reconnecting in ${delay}ms`, err);
+        logEvent('agent', 'warn', `stream error, reconnecting in ${delay}ms`, err);
         await sleep(delay);
         delay = Math.min(delay * 2, 30_000);
         // Re-register in case the scheduler restarted and lost our state
-        await this.register().catch(e => console.warn('[agent] re-register failed', e));
+        await this.register().catch(e => logEvent('agent', 'warn', 're-register failed', e));
       }
     }
   }
@@ -166,10 +166,10 @@ export class WorkerAgent {
             this.usedSlots++;
             void this.runJob(assignment);
           } else {
-            console.warn('[agent] received job at capacity — slot accounting drift detected');
+            logEvent('agent', 'warn', 'received job at capacity — slot accounting drift detected');
           }
         } catch {
-          console.warn('[agent] unparseable SSE event', line);
+          logEvent('agent', 'warn', `unparseable SSE event ${line}`);
         }
       }
     }
@@ -211,7 +211,7 @@ export class WorkerAgent {
     } catch (err) {
       await this.reportStatus(job.jobId, Status.Failed, String(err));
     } finally {
-      await slot.destroy().catch(err => console.warn('[agent] slot cleanup error', err));
+      await slot.destroy().catch(err => logEvent('agent', 'warn', 'slot cleanup error', err));
       this.freeSlotIndices.push(slotIndex);
       this.usedSlots--;
       this.usedVcpus -= job.vcpus;
@@ -223,14 +223,14 @@ export class WorkerAgent {
   /** Notify the scheduler to immediately requeue all inflight jobs for this worker. */
   async evict(): Promise<void> {
     await this.post(`/v1/workers/${this.cfg.workerId}/evict`, {}).catch(err =>
-      console.warn('[agent] evict request failed — scheduler will requeue via heartbeat timeout', err),
+      logEvent('agent', 'warn', 'evict request failed — scheduler will requeue via heartbeat timeout', err),
     );
   }
 
   private async reportStatus(jobId: string, status: JobStatus, error?: string): Promise<void> {
     const body: JobUpdate = { jobId, workerId: this.cfg.workerId, status, error };
     await this.post(`/v1/jobs/${jobId}/status`, body).catch(err =>
-      console.warn('[agent] status report failed', err),
+      logEvent('agent', 'warn', 'status report failed', err),
     );
   }
 

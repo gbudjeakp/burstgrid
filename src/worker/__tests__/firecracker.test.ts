@@ -21,6 +21,7 @@ vi.mock('../../telemetry/index.js', () => ({
   recordVmBootDuration: vi.fn(),
   recordVmResourceUsage: vi.fn(),
   logVmLine: vi.fn(),
+  logEvent: vi.fn(),
 }));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

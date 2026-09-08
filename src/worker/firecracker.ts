@@ -3,7 +3,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { recordVmBootDuration, recordVmResourceUsage, logVmLine } from '../telemetry/index.js';
+import { recordVmBootDuration, recordVmResourceUsage, logVmLine, logEvent } from '../telemetry/index.js';
 
 /** Performance contract: Firecracker microVMs should boot within this window. */
 export const VM_BOOT_TARGET_MS = 150;
@@ -169,7 +169,7 @@ export class FirecrackerVM {
     const elapsed = Date.now() - bootStart;
     recordVmBootDuration(elapsed);
     if (elapsed > VM_BOOT_TARGET_MS * 2) {
-      console.warn(`[firecracker] boot took ${elapsed}ms — expected <${VM_BOOT_TARGET_MS * 2}ms`);
+      logEvent('firecracker', 'warn', `boot took ${elapsed}ms — expected <${VM_BOOT_TARGET_MS * 2}ms`);
     }
   }
 

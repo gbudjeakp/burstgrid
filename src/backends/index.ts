@@ -4,6 +4,7 @@ import { SQSJobPoller } from './sqs.js';
 import { DynamoDBJobHistory } from './dynamodb.js';
 import type { IJobHistoryBackend } from './types.js';
 import type { JobQueue } from '../scheduler/queue.js';
+import { logEvent } from '../telemetry/index.js';
 
 export type { IQueueBackend, IWorkerRegistryBackend, IJobHistoryBackend, JobEvent, WorkerSnapshot } from './types.js';
 export { RedisQueueBackend, RedisWorkerRegistryBackend } from './redis.js';
@@ -51,7 +52,7 @@ export function createBackends(queue: JobQueue): ActiveBackends {
     redisClients.push(qRedis, wRedis);
     redisQueue   = new RedisQueueBackend(qRedis);
     redisWorkers = new RedisWorkerRegistryBackend(wRedis);
-    console.info('[backends] Redis enabled — queue durability + worker registry');
+    logEvent('backends', 'info', 'Redis enabled — queue durability + worker registry');
   }
 
   if (BURSTGRID_SQS_QUEUE_URL) {
@@ -59,7 +60,7 @@ export function createBackends(queue: JobQueue): ActiveBackends {
       { queueUrl: BURSTGRID_SQS_QUEUE_URL, region: BURSTGRID_SQS_REGION ?? AWS_REGION },
       queue,
     );
-    console.info('[backends] SQS job poller enabled');
+    logEvent('backends', 'info', 'SQS job poller enabled');
   }
 
   if (BURSTGRID_DYNAMODB_TABLE) {
@@ -67,7 +68,7 @@ export function createBackends(queue: JobQueue): ActiveBackends {
       BURSTGRID_DYNAMODB_TABLE,
       BURSTGRID_DYNAMODB_REGION ?? AWS_REGION,
     );
-    console.info('[backends] DynamoDB job history enabled');
+    logEvent('backends', 'info', 'DynamoDB job history enabled');
   }
 
   return {

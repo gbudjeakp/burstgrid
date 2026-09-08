@@ -31,6 +31,8 @@ export interface AgentConfig {
   s3Cache?: { bucketName: string; region?: string; keyPrefix?: string };
   /** Pre-warmed snapshot pool config. When set, the agent initialises a SnapshotPool on startup. */
   snapshotPoolCfg?: { size?: number; snapshotDir?: string };
+  /** Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Default: false, opt in once jailer is set up on the host. */
+  useJailer?: boolean;
 }
 
 export class WorkerAgent {
@@ -194,6 +196,7 @@ export class WorkerAgent {
       env: job.env,
       repoUrl: `https://github.com/${job.owner}/${job.repo}`,
       slotIndex,
+      useJailer: this.cfg.useJailer,
     });
 
     try {

@@ -37,6 +37,20 @@ export interface VMConfig {
    * Slot N gets tap{N}, host IP 172.20.0.(N*4+1)/30, guest IP 172.20.0.(N*4+2).
    */
   slotIndex?: number;
+  /**
+   * Run Firecracker through the jailer (chroot + dropped-privilege uid/gid) instead of
+   * spawning it directly. Firecracker's own docs recommend this for production so a
+   * vulnerability in the Firecracker process itself can't reach the rest of the host.
+   * Requires the `jailer` binary alongside `firecracker` and a writable chrootBaseDir.
+   * Default: false — opt in once jailer is set up on the worker host.
+   */
+  useJailer?: boolean;
+  /** uid the jailer drops Firecracker's privileges to inside the chroot. Default: 123 (Firecracker's own getting-started convention). */
+  jailerUid?: number;
+  /** gid the jailer drops Firecracker's privileges to inside the chroot. Default: 100. */
+  jailerGid?: number;
+  /** Base directory jailer creates each VM's chroot jail under (`<dir>/firecracker/<vmId>/root`). Default: /srv/jailer. */
+  jailerChrootBaseDir?: string;
 }
 
 export interface SnapshotPaths {
@@ -54,9 +68,19 @@ export class FirecrackerVM {
   private readonly guestIp: string;
   /** Per-VM sparse copy of rootfs — prevents concurrent VMs from sharing a writable ext4 image. */
   private rootfsCopy: string | null = null;
+  private readonly jailed: boolean;
+  private readonly chrootDir: string | null;
 
   constructor(private readonly cfg: VMConfig) {
-    this.sockDir = path.join(os.tmpdir(), 'burstgrid', cfg.vmId);
+    this.jailed = cfg.useJailer ?? false;
+    this.chrootDir = this.jailed
+      ? path.join(cfg.jailerChrootBaseDir ?? '/srv/jailer', 'firecracker', cfg.vmId, 'root')
+      : null;
+    // Unjailed: Firecracker's own control socket lives in our tmp sockDir.
+    // Jailed: the socket only exists inside the chroot, but that's still a real host path
+    // (chroot doesn't hide files from the host, it just changes what Firecracker itself sees as "/"),
+    // so we connect to it there directly instead of maintaining a separate tmp sockDir.
+    this.sockDir = this.chrootDir ?? path.join(os.tmpdir(), 'burstgrid', cfg.vmId);
     this.sockPath = path.join(this.sockDir, 'firecracker.sock');
     const slot = cfg.slotIndex ?? 0;
     this.tapName = `tap${slot}`;
@@ -83,9 +107,31 @@ export class FirecrackerVM {
 
     this.setupTap();
 
-    this.proc = spawn('firecracker', ['--api-sock', this.sockPath], {
-      stdio: 'inherit',
-    });
+    if (this.jailed) {
+      // Jailer chroots Firecracker to this.sockDir (the chroot root) before exec'ing it, so
+      // anything Firecracker itself needs to open — the kernel image, the api socket — has to
+      // physically exist inside that directory first, referenced by its in-chroot path (relative
+      // to the new "/") rather than the real host path.
+      const kernelDest = path.join(this.sockDir, 'vmlinux');
+      const kernelCopy = spawnSync('cp', [this.cfg.kernelPath, kernelDest]);
+      if (kernelCopy.status !== 0) {
+        throw new Error(`Failed to stage kernel into jailer chroot: ${kernelCopy.stderr?.toString() ?? 'unknown error'}`);
+      }
+      spawnSync('chown', [`${this.cfg.jailerUid ?? 123}:${this.cfg.jailerGid ?? 100}`, this.sockDir, copyDest, kernelDest]);
+
+      this.proc = spawn('jailer', [
+        '--id', this.cfg.vmId,
+        '--exec-file', '/usr/local/bin/firecracker',
+        '--uid', String(this.cfg.jailerUid ?? 123),
+        '--gid', String(this.cfg.jailerGid ?? 100),
+        '--chroot-base-dir', this.cfg.jailerChrootBaseDir ?? '/srv/jailer',
+        '--', '--api-sock', '/firecracker.sock',
+      ], { stdio: 'inherit' });
+    } else {
+      this.proc = spawn('firecracker', ['--api-sock', this.sockPath], {
+        stdio: 'inherit',
+      });
+    }
 
     this.exitPromise = new Promise((resolve, reject) => {
       this.proc!.on('exit', code => (code === 0 ? resolve() : reject(new Error(`firecracker exited ${code}`))));
@@ -110,9 +156,13 @@ export class FirecrackerVM {
   /**
    * Restore a previously created snapshot in a fresh Firecracker process.
    * Returns a booted FirecrackerVM ready for injectMmdsToken() + resume().
+   *
+   * Not yet jailed (unlike boot()) — snapshot/mem files come from an arbitrary host path
+   * the jailer chroot staging doesn't handle yet. Forcing useJailer off here keeps this
+   * fast-boot path working exactly as before until that's built out.
    */
   static async restoreFromSnapshot(cfg: VMConfig, paths: SnapshotPaths): Promise<FirecrackerVM> {
-    const vm = new FirecrackerVM(cfg);
+    const vm = new FirecrackerVM({ ...cfg, useJailer: false });
     await fs.mkdir(vm.sockDir, { recursive: true });
     await fs.unlink(vm.sockPath).catch(() => undefined);
 
@@ -161,7 +211,10 @@ export class FirecrackerVM {
 
   async shutdown(): Promise<void> {
     this.proc?.kill('SIGKILL');
-    await fs.rm(this.sockDir, { recursive: true, force: true });
+    // Jailed chroots may contain files owned by jailerUid/jailerGid rather than our own process,
+    // hence sudo — matches how the rest of vm-init.sh / userdata already assumes root on workers.
+    if (this.jailed) spawnSync('sudo', ['rm', '-rf', this.sockDir]);
+    else await fs.rm(this.sockDir, { recursive: true, force: true });
     this.teardownTap();
   }
 
@@ -176,6 +229,13 @@ export class FirecrackerVM {
   }
 
   private async configure(): Promise<void> {
+    // Firecracker itself resolves these paths against its own view of "/" — the real host path
+    // when unjailed, or the chroot root (this.sockDir) when jailed, where boot() already staged
+    // the kernel/rootfs copies and jailer redirects "/" for us.
+    const kernelPath = this.jailed ? '/vmlinux' : this.cfg.kernelPath;
+    const rootfsPath = this.jailed ? '/rootfs.img' : (this.rootfsCopy ?? this.cfg.rootfsPath);
+    const vsockPath = this.jailed ? '/vsock.sock' : path.join(this.sockDir, 'vsock.sock');
+
     if (this.cfg.mmdsMode) {
       // MMDS mode: token injected after boot/restore via injectMmdsToken(); boot args are minimal
       const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
@@ -183,7 +243,7 @@ export class FirecrackerVM {
         ? ` ACTIONS_CACHE_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_TOKEN=${this.cfg.workerToken ?? ''}`
         : '';
       await this.apiPut('/boot-source', {
-        kernel_image_path: this.cfg.kernelPath,
+        kernel_image_path: kernelPath,
         boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init MMDS_MODE=1 GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${mirrorArg}${cacheArg}`,
       });
       // Pre-populate MMDS with empty token so guest poll doesn't 404 on first request
@@ -198,13 +258,13 @@ export class FirecrackerVM {
         : '';
       const repoArg = this.cfg.repoUrl ? ` RUNNER_REPO_URL=${this.cfg.repoUrl}` : '';
       await this.apiPut('/boot-source', {
-        kernel_image_path: this.cfg.kernelPath,
+        kernel_image_path: kernelPath,
         boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels} GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${repoArg}${mirrorArg}${ephemeralArg}${cacheArg}`,
       });
     }
     await this.apiPut('/drives/rootfs', {
       drive_id: 'rootfs',
-      path_on_host: this.rootfsCopy ?? this.cfg.rootfsPath,
+      path_on_host: rootfsPath,
       is_root_device: true,
       is_read_only: false,
     });
@@ -221,7 +281,7 @@ export class FirecrackerVM {
     // OTel Collector at vsock CID 2 (VMADDR_CID_HOST), port 4317/4318
     await this.apiPut('/vsock', {
       guest_cid: 3,
-      uds_path: path.join(this.sockDir, 'vsock.sock'),
+      uds_path: vsockPath,
     });
   }
 

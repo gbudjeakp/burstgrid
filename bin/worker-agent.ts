@@ -29,6 +29,9 @@ const {
   BURSTGRID_HEALTH_PORT = '9090',
   // SQS queue URL for EventBridge spot interruption warnings (optional)
   BURSTGRID_SPOT_QUEUE_URL,
+  // Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Requires the
+  // jailer binary + a writable chroot base dir on the host. Default: false.
+  BURSTGRID_USE_JAILER,
 } = process.env;
 
 const cpuCount = os.cpus().length;
@@ -81,6 +84,7 @@ const agent = new WorkerAgent({
   runnerPath: BURSTGRID_RUNNER_PATH,
   registryMirror: BURSTGRID_REGISTRY_MIRROR,
   workerToken: BURSTGRID_WORKER_TOKEN,
+  useJailer: BURSTGRID_USE_JAILER === 'true',
 });
 
 const healthServer = startWorkerHealthServer(

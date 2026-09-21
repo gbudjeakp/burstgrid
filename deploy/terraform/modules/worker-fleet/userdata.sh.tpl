@@ -192,7 +192,6 @@ Environment=BURSTGRID_VM_IMAGE=/var/lib/burstgrid/rootfs.img
 Environment=BURSTGRID_KERNEL=/var/lib/burstgrid/vmlinux
 Environment=BURSTGRID_IMAGE_DIR=/var/lib/burstgrid/images
 Environment=BURSTGRID_WORKER_TOKEN=${worker_token}
-Environment=BURSTGRID_SPOT_QUEUE_URL=${spot_queue_url}
 Environment=AWS_REGION=$REGION
 Environment=AWS_AZ=$AZ
 ExecStart=/usr/bin/node /opt/burstgrid/worker-agent.mjs

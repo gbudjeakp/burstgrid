@@ -194,6 +194,19 @@ scheduler:
 
 Equivalent env overrides: `BURSTGRID_MAX_PACK_UTILIZATION=0.7` and `BURSTGRID_MAX_JOBS_PER_WORKER=8`.
 
+Spot interruption handling is centralized in the scheduler: EC2 emits an interruption warning to EventBridge, EventBridge sends it to SQS, and the scheduler consumes that queue, finds the affected EC2 instance, drains that worker's tracked jobs, and requeues them. Workers do not race each other on the shared interruption queue.
+
+For critical jobs, use an on-demand fleet:
+
+```yaml
+autoscaler:
+  fleets:
+    - name: critical
+      capacityType: on-demand
+```
+
+BurstGrid does not checkpoint a running GitHub Actions process mid-step. Jobs interrupted by spot are rerun from the workflow's last durable boundary. To make reruns cheap, use `actions/cache`, upload artifacts at phase boundaries, or split long jobs into smaller dependent jobs so GitHub can resume from the completed job graph rather than replaying one giant step.
+
 See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
 
 ## Build & test

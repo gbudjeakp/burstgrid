@@ -68,13 +68,6 @@ resource "aws_iam_role_policy" "worker" {
         Resource = ["arn:aws:s3:::${var.s3_artifacts_bucket}", "arn:aws:s3:::${var.s3_artifacts_bucket}/*"]
       },
       {
-        # Poll the spot interruption queue so the worker-agent can drain gracefully
-        Sid      = "SpotQueue"
-        Effect   = "Allow"
-        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
-        Resource = aws_sqs_queue.spot_interruptions.arn
-      },
-      {
         # Worker self-terminates when all slots are idle (no scheduler call needed)
         Sid      = "SelfTerminate"
         Effect   = "Allow"
@@ -166,7 +159,6 @@ resource "aws_launch_template" "fleet" {
     slots_per_worker    = each.value.slots_per_worker
     worker_token        = var.worker_token
     s3_artifacts_bucket = var.s3_artifacts_bucket
-    spot_queue_url      = aws_sqs_queue.spot_interruptions.url
     aws_region          = var.aws_region
     firecracker_version = "v1.16.1"
   }))

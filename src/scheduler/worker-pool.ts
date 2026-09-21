@@ -123,6 +123,17 @@ export class WorkerPool {
     return jobs;
   }
 
+  /** Drain and unregister the worker running on this EC2 instance ID. */
+  evictByEc2InstanceId(ec2InstanceId: string): { workerId: string; jobs: Job[] } | null {
+    for (const [workerId, worker] of this.workers) {
+      if (worker.ec2InstanceId !== ec2InstanceId && worker.instanceId !== ec2InstanceId) continue;
+      const jobs = this.drainWorkerJobs(workerId);
+      this.unregister(workerId);
+      return { workerId, jobs };
+    }
+    return null;
+  }
+
   /** Active inflight job count for a specific repo. */
   runningJobsFor(owner: string, repo: string): number {
     return this.repoInflight.get(`${owner}/${repo}`) ?? 0;

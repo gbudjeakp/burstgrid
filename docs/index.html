@@ -19,6 +19,8 @@
       --accent:   #f97316;
       --accent-lo:#1c0f05;
       --mono:     "SF Mono", ui-monospace, "Cascadia Code", "Fira Code", Consolas, monospace;
+      --ok:       #4ade80;
+      --warn:     #fbbf24;
     }
 
     html { scroll-behavior: smooth; }
@@ -177,6 +179,11 @@
     .env-table tr:last-child td { border-bottom: none; }
     .env-table td:first-child { font-family: var(--mono); font-size: 11.5px; color: var(--text); white-space: nowrap; }
     .env-table td:last-child { color: #a1a1aa; }
+    .badge { display:inline-flex; align-items:center; padding:2px 7px; border-radius:99px; font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; white-space:nowrap; }
+    .badge-req { background:rgba(248,113,113,.11); color:#f87171; border:1px solid rgba(248,113,113,.22); }
+    .badge-opt { background:rgba(96,165,250,.10); color:#60a5fa; border:1px solid rgba(96,165,250,.22); }
+    .badge-auto { background:rgba(74,222,128,.10); color:var(--ok); border:1px solid rgba(74,222,128,.22); }
+    .badge-rec { background:rgba(251,191,36,.10); color:var(--warn); border:1px solid rgba(251,191,36,.22); }
     .steps { padding: 18px 24px; font-family: var(--mono); font-size: 12.5px; line-height: 2; color: #a1a1aa; }
     .steps span { color: var(--text); }
     .steps code { font-size: 11.5px; background: #09090b; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; }
@@ -377,6 +384,10 @@
           <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="2,4 6,8 10,4"/></svg>
         </button>
         <div class="sidebar-group-items">
+          <a href="#configuration" class="sidebar-link">Overview</a>
+          <a href="#config-env-reference" class="sidebar-link sub">Environment reference</a>
+          <a href="#config-runtime" class="sidebar-link sub">Runtime safety</a>
+          <a href="#config-spot" class="sidebar-link sub">Spot handling</a>
           <a href="#config-cache" class="sidebar-link sub">Actions cache</a>
           <a href="#config-concurrency" class="sidebar-link sub">Per-repo limits</a>
           <a href="#config-dynamodb" class="sidebar-link sub">DynamoDB</a>
@@ -585,7 +596,7 @@
 <div class="section" id="how-it-works">
   <div class="label">The flow</div>
   <h2>Webhook to running job in four hops</h2>
-  <p class="section-desc">No polling. No message broker. No Kubernetes. Just a webhook, a queue, a persistent SSE connection, and a VM that exists for exactly as long as the job does.</p>
+  <p class="section-desc">No Kubernetes. No job-path message broker. Just a webhook, a scheduler queue, a persistent SSE connection, and a VM that exists for exactly as long as the job does.</p>
 
   <div class="flow">
     <div class="flow-step" id="flow-webhook">
@@ -665,8 +676,9 @@
         <div class="flow-title">Worker boots a Firecracker VM; runner picks up the job</div>
         <div class="flow-body">
           The worker agent calls the Firecracker Unix socket API to boot a microVM with exactly the requested
-          vCPU and RAM. The runner token and size labels are injected as kernel boot args; the init script
-          inside the VM reads <code>/proc/cmdline</code>, calls <code>./config.sh --ephemeral</code> to register with GitHub,
+          vCPU and RAM. Non-secret network hints are passed as boot args; runner/cache secrets are delivered through
+          Firecracker MMDS by default so they do not appear in guest <code>/proc/cmdline</code>. The init script
+          inside the VM reads MMDS, calls <code>./config.sh --ephemeral</code> to register with GitHub,
           then <code>./run.sh</code> to execute the job. When it exits, the VM is killed, the disk is discarded,
           and the slot is freed. The rootfs is <strong>never reused</strong>.
         </div>
@@ -674,9 +686,8 @@
           <div class="snippet-tab">Firecracker API &rarr; PUT /boot-source</div>
           <div class="snippet-body"><span class="s-cm">{</span>
   <span class="s-key">"kernel_image_path"</span>: <span class="s-str">"/opt/burstgrid/vmlinux"</span>,
-  <span class="s-key">"boot_args"</span>: <span class="s-str">"console=ttyS0 reboot=k panic=1
-    RUNNER_TOKEN=AABCDEFGHIJKLMNOPQ
-    RUNNER_LABELS=self-hosted,linux,burstgrid:size=large"</span>
+  <span class="s-key">"boot_args"</span>: <span class="s-str">"console=ttyS0 reboot=k panic=1 init_on_free=1 nomodule
+    MMDS_MODE=1 GUEST_IP=172.20.0.2 GATEWAY=172.20.0.1"</span>
 <span class="s-cm">}</span></div>
         </div>
       </div>
@@ -880,8 +891,121 @@ Next steps:
 <!-- Configuration -->
 <div class="section" id="configuration">
   <div class="label">Configuration</div>
-  <h2>Optional features, all env vars</h2>
-  <p class="section-desc">No config file required. Each feature below activates with one environment variable — set them on the scheduler unless otherwise noted.</p>
+  <h2>Environment variables and config, without guessing</h2>
+  <p class="section-desc">Start with <code>npx burstgrid setup</code>, then use <code>npx burstgrid doctor</code> before a real run. Terraform fills most production variables for you; local and custom deployments can use the reference below.</p>
+
+  <div class="two-col">
+    <div class="card">
+      <h3>Recommended operator flow</h3>
+      <div class="steps">
+        <span>1.</span> <code>npx burstgrid setup</code> — writes Terraform vars and secrets<br>
+        <span>2.</span> Build/upload rootfs + kernel artifacts<br>
+        <span>3.</span> <code>npx burstgrid deploy</code> — uploads binaries and applies infra<br>
+        <span>4.</span> <code>npx burstgrid init</code> — writes launch template IDs<br>
+        <span>5.</span> <code>npx burstgrid doctor</code> — preflight safety and blast-radius checks
+      </div>
+    </div>
+    <div class="card">
+      <h3>Legend</h3>
+      <table class="env-table">
+        <tbody>
+          <tr><td><span class="badge badge-req">Required</span></td><td>Must be provided unless the listed alternative is used.</td></tr>
+          <tr><td><span class="badge badge-auto">Auto</span></td><td>Usually generated by Terraform userdata or <code>setup</code>.</td></tr>
+          <tr><td><span class="badge badge-opt">Optional</span></td><td>Enables an extra feature or overrides a default.</td></tr>
+          <tr><td><span class="badge badge-rec">Recommended</span></td><td>Strongly recommended for production or realistic tests.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="config-env-reference" style="margin-bottom:16px;">
+    <h3>Scheduler environment</h3>
+    <table class="env-table">
+      <thead><tr><th>Variable</th><th>Status</th><th>Used by</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>GITHUB_APP_ID + GITHUB_PRIVATE_KEY_PATH</td><td><span class="badge badge-req">Required</span></td><td>scheduler</td><td>Recommended auth path for minting ephemeral runner registration tokens. Use <code>GITHUB_PRIVATE_KEY</code> instead of path if injecting PEM text directly, or use <code>GITHUB_TOKEN</code> for simpler single-repo tests.</td></tr>
+        <tr><td>GITHUB_TOKEN</td><td><span class="badge badge-req">Alternative</span></td><td>scheduler</td><td>Simpler PAT-based auth for single-repo tests. Use instead of GitHub App credentials.</td></tr>
+        <tr><td>BURSTGRID_WEBHOOK_SECRET</td><td><span class="badge badge-rec">Recommended</span></td><td>scheduler</td><td>Validates GitHub webhook HMAC. Empty is allowed for local dev only.</td></tr>
+        <tr><td>BURSTGRID_WORKER_TOKEN</td><td><span class="badge badge-rec">Recommended</span></td><td>scheduler + worker</td><td>Shared bearer token for worker registration, heartbeat, stream, status, and evict routes. Empty disables worker auth for local dev.</td></tr>
+        <tr><td>BURSTGRID_FLEETS</td><td><span class="badge badge-auto">Auto</span></td><td>scheduler</td><td>JSON fleet config rendered by Terraform. Prefer <code>autoscaler.fleets</code> in YAML for local/manual config.</td></tr>
+        <tr><td>BURSTGRID_SPOT_QUEUE_URL</td><td><span class="badge badge-auto">Auto</span></td><td>scheduler</td><td>SQS queue receiving EC2 spot interruption warnings. The scheduler consumes it centrally and requeues jobs from the affected worker.</td></tr>
+        <tr><td>BURSTGRID_ADDR / BURSTGRID_PORT</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Bind address and port. Defaults: <code>0.0.0.0</code> and <code>8080</code>.</td></tr>
+        <tr><td>BURSTGRID_CONFIG / BURSTGRID_CONFIG_PATH</td><td><span class="badge badge-opt">Optional</span></td><td>all processes</td><td>Path to <code>burstgrid.config.yaml</code>. Defaults to project-root <code>burstgrid.config.yaml</code>.</td></tr>
+        <tr><td>BURSTGRID_MAX_QUEUE_DEPTH</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Queue admission limit before returning <code>503</code> to GitHub so it retries webhook delivery.</td></tr>
+        <tr><td>BURSTGRID_WATCHED_REPOS</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Comma-separated <code>owner/repo</code> list for periodic reconcile of queued GitHub jobs missed by webhook delivery.</td></tr>
+        <tr><td>BURSTGRID_RECONCILE_INTERVAL_MS</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Reconciler interval. Defaults to 120 seconds.</td></tr>
+        <tr><td>BURSTGRID_AUTOSCALER</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td><code>true|false|1|0</code> override for <code>autoscaler.enabled</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3>Worker environment</h3>
+    <table class="env-table">
+      <thead><tr><th>Variable</th><th>Status</th><th>Mode</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>BURSTGRID_SCHEDULER_URL</td><td><span class="badge badge-req">Required</span></td><td>all</td><td>Scheduler URL the worker registers against.</td></tr>
+        <tr><td>BURSTGRID_WORKER_ID</td><td><span class="badge badge-auto">Auto</span></td><td>all</td><td>Worker identity. Defaults to EC2 instance ID when metadata is available.</td></tr>
+        <tr><td>BURSTGRID_WORKER_TOKEN</td><td><span class="badge badge-rec">Recommended</span></td><td>all</td><td>Bearer token sent to scheduler. Must match scheduler <code>BURSTGRID_WORKER_TOKEN</code>.</td></tr>
+        <tr><td>BURSTGRID_MODE</td><td><span class="badge badge-opt">Optional</span></td><td>all</td><td><code>firecracker</code> (default), <code>process</code> for GPU/bare-metal, or <code>simulate</code> for local dev.</td></tr>
+        <tr><td>BURSTGRID_SLOTS</td><td><span class="badge badge-auto">Auto</span></td><td>all</td><td>Max concurrent jobs on this worker. Terraform sets this from fleet <code>slots_per_worker</code>; local default is half CPU count.</td></tr>
+        <tr><td>BURSTGRID_VCPUS / BURSTGRID_MEMORY_MIB</td><td><span class="badge badge-opt">Optional</span></td><td>all</td><td>Advertised worker capacity. Defaults to host CPU and memory.</td></tr>
+        <tr><td>BURSTGRID_CAPABILITIES</td><td><span class="badge badge-opt">Optional</span></td><td>all</td><td>Comma-separated labels the worker can serve, e.g. <code>linux,arm64,docker,gpu</code>. Defaults are auto-detected.</td></tr>
+        <tr><td>BURSTGRID_VM_IMAGE / BURSTGRID_KERNEL</td><td><span class="badge badge-req">Required</span></td><td>firecracker</td><td>Rootfs image and kernel path for microVM boot. Terraform userdata defaults to <code>/var/lib/burstgrid/rootfs.img</code> and <code>/var/lib/burstgrid/vmlinux</code>.</td></tr>
+        <tr><td>BURSTGRID_IMAGE_DIR</td><td><span class="badge badge-opt">Optional</span></td><td>firecracker</td><td>Directory for <code>burstgrid:image=&lt;name&gt;</code> rootfs resolution.</td></tr>
+        <tr><td>BURSTGRID_SECRET_DELIVERY</td><td><span class="badge badge-rec">Recommended</span></td><td>firecracker</td><td><code>mmds</code> (default) keeps runner/cache tokens out of guest <code>/proc/cmdline</code>. <code>cmdline</code> is emergency rollback for old rootfs images.</td></tr>
+        <tr><td>BURSTGRID_USE_JAILER</td><td><span class="badge badge-rec">Recommended</span></td><td>firecracker</td><td>Runs Firecracker through jailer chroot + uid/gid drop when host is prepared for it.</td></tr>
+        <tr><td>BURSTGRID_SNAPSHOT_POOL_SIZE</td><td><span class="badge badge-opt">Optional</span></td><td>firecracker</td><td>Pre-warmed snapshot count per worker for faster first dispatch.</td></tr>
+        <tr><td>BURSTGRID_RUNNER_PATH</td><td><span class="badge badge-opt">Optional</span></td><td>process</td><td>Runner script path for process/GPU mode. Defaults to <code>./run.sh</code>.</td></tr>
+        <tr><td>BURSTGRID_SSH_PUBLIC_KEY</td><td><span class="badge badge-opt">Optional</span></td><td>firecracker</td><td>Debug SSH public key injected into guests only when rootfs has <code>sshd</code>. No host port is opened.</td></tr>
+        <tr><td>BURSTGRID_HEALTH_PORT</td><td><span class="badge badge-opt">Optional</span></td><td>all</td><td>Worker health endpoint port. Default <code>9090</code>.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <h3>Shared optional services</h3>
+    <table class="env-table">
+      <thead><tr><th>Variable</th><th>Status</th><th>Set on</th><th>What it does</th></tr></thead>
+      <tbody>
+        <tr><td>OTEL_EXPORTER_OTLP_ENDPOINT</td><td><span class="badge badge-rec">Recommended</span></td><td>scheduler + worker</td><td>Enables OTel metrics, traces, app logs, microVM console logs, and per-VM CPU/memory. Point to collector HTTP endpoint, e.g. <code>http://localhost:4318</code>.</td></tr>
+        <tr><td>BURSTGRID_S3_CACHE_BUCKET / REGION</td><td><span class="badge badge-opt">Optional</span></td><td>worker</td><td>Starts the S3-backed Actions cache server and injects cache env into VM guests.</td></tr>
+        <tr><td>BURSTGRID_REGISTRY_MIRROR</td><td><span class="badge badge-opt">Optional</span></td><td>worker</td><td>Docker registry mirror passed into Firecracker guests.</td></tr>
+        <tr><td>BURSTGRID_REDIS_URL</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Redis-backed durable queue and worker registry.</td></tr>
+        <tr><td>BURSTGRID_SQS_QUEUE_URL / REGION</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Optional SQS job queue backend. Different from the spot-interruption queue Terraform wires as <code>BURSTGRID_SPOT_QUEUE_URL</code>.</td></tr>
+        <tr><td>BURSTGRID_DYNAMODB_TABLE / REGION</td><td><span class="badge badge-opt">Optional</span></td><td>scheduler</td><td>Append-only job event history for queued/dispatched/running/completed/failed transitions.</td></tr>
+        <tr><td>BURSTGRID_S3_BUCKET</td><td><span class="badge badge-opt">Optional</span></td><td>CLI</td><td>Artifact bucket fallback for <code>build</code>, <code>deploy</code>, and <code>bake-ami</code> commands.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="feat-grid" style="margin-bottom:1px;">
+    <div class="feat-cell" id="config-runtime">
+      <h3>Runtime safety defaults</h3>
+      <p><code>worker.secretDelivery: mmds</code> is the default. It keeps runner tokens, cache tokens, repo URLs, registry mirrors, and debug SSH keys out of the guest kernel command line. The guest init fetches them from Firecracker MMDS after networking is up.</p>
+      <div class="snippet" style="margin-top:14px;"><div class="snippet-body"><span class="s-key">worker</span>:
+  <span class="s-key">secretDelivery</span>: <span class="s-str">mmds</span>
+  <span class="s-key">snapshotPool</span>:
+    <span class="s-key">size</span>: <span class="s-num">1</span></div></div>
+    </div>
+    <div class="feat-cell" id="config-spot">
+      <h3>Spot interruption handling</h3>
+      <p>The scheduler consumes the EC2 spot interruption SQS queue centrally, finds the affected worker by EC2 instance ID, drains only that worker's tracked jobs, and requeues them. Workers do not race each other on the shared queue.</p>
+      <div class="snippet" style="margin-top:14px;"><div class="snippet-body"><span class="s-key">scheduler</span>:
+  <span class="s-key">maxPackUtilization</span>: <span class="s-num">0.7</span>
+  <span class="s-key">maxActiveJobsPerWorker</span>: <span class="s-num">8</span>
+
+<span class="s-key">autoscaler</span>:
+  <span class="s-key">fleets</span>:
+    - <span class="s-key">name</span>: <span class="s-str">critical</span>
+      <span class="s-key">capacityType</span>: <span class="s-str">on-demand</span></div></div>
+    </div>
+  </div>
+
+  <p class="section-desc" style="margin-top:24px;margin-bottom:28px;">BurstGrid does not checkpoint an arbitrary running shell process mid-step. Interrupted spot jobs rerun from the workflow's last durable boundary. Make reruns cheap with <code>actions/cache</code>, artifacts at phase boundaries, and smaller dependent jobs instead of one giant step.</p>
+
+  <h2 style="margin-top:28px;">Optional feature examples</h2>
+  <p class="section-desc">Each feature below activates with one environment variable or a small YAML block.</p>
   <div class="feat-grid">
 
     <div class="feat-cell" id="config-cache">

@@ -81,29 +81,17 @@ jobs:
 
 ## Configuration
 
-Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup. Every YAML key can also be set via environment variable — no config file required.
+Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All YAML keys are **camelCase** and can also be set through environment variables.
 
-| Env var | What it does |
-|---|---|
-| `BURSTGRID_REDIS_URL` | Redis queue backend (default: in-memory) |
-| `BURSTGRID_SQS_QUEUE_URL` + `BURSTGRID_SQS_REGION` | SQS queue backend — durable, no Redis needed |
-| `BURSTGRID_DYNAMODB_TABLE` + `BURSTGRID_DYNAMODB_REGION` | DynamoDB job deduplication — drops duplicate webhook deliveries, survives restarts |
-| `BURSTGRID_S3_CACHE_BUCKET` + `BURSTGRID_S3_CACHE_REGION` | Serve GitHub Actions cache protocol over S3 — `actions/cache` works with no workflow changes |
-| `BURSTGRID_REPO_CONCURRENCY` | Default per-repo concurrency cap (int) |
-| `BURSTGRID_SNAPSHOT_POOL_SIZE` | Pre-boot N Firecracker VMs per worker for sub-millisecond first dispatch |
-| `BURSTGRID_SECRET_DELIVERY` | `mmds` (default) keeps runner/cache tokens out of guest `/proc/cmdline`; `cmdline` is emergency rollback |
-| `BURSTGRID_MAX_PACK_UTILIZATION` | Placement density target, e.g. `0.7`; lower spreads jobs across more workers |
-| `BURSTGRID_MAX_JOBS_PER_WORKER` | Hard cap on active jobs per worker to limit spot interruption blast radius |
+For the complete required/optional environment variable reference, see the [docs site](https://gbudjeakp.github.io/burstgrid/#configuration).
 
-### Preflight doctor
-
-Before a real test or production rollout, run:
+Before a real test or production rollout, run the preflight checker:
 
 ```bash
 npx burstgrid doctor
 ```
 
-It checks the local config and prints exact env/config overrides for the safer defaults: MMDS secret delivery, snapshot pool, placement density, and max active jobs per worker.
+It checks local config and prints exact env/config overrides for safer defaults: MMDS secret delivery, snapshot pool, placement density, and max active jobs per worker.
 
 ### Per-repo concurrency limits
 
@@ -184,7 +172,7 @@ Idle workers terminate automatically after 300 s. One warm standby is kept per f
 
 ### Spot interruption blast radius
 
-BurstGrid bin-packs by default so idle hosts can actually drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. Use these knobs when you care more about limiting disruption than absolute minimum host count:
+BurstGrid bin-packs by default so idle hosts can drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. For production, cap placement density and active jobs per worker:
 
 ```yaml
 scheduler:
@@ -192,20 +180,7 @@ scheduler:
   maxActiveJobsPerWorker: 8   # even a 32-slot metal host only gets 8 active jobs
 ```
 
-Equivalent env overrides: `BURSTGRID_MAX_PACK_UTILIZATION=0.7` and `BURSTGRID_MAX_JOBS_PER_WORKER=8`.
-
-Spot interruption handling is centralized in the scheduler: EC2 emits an interruption warning to EventBridge, EventBridge sends it to SQS, and the scheduler consumes that queue, finds the affected EC2 instance, drains that worker's tracked jobs, and requeues them. Workers do not race each other on the shared interruption queue.
-
-For critical jobs, use an on-demand fleet:
-
-```yaml
-autoscaler:
-  fleets:
-    - name: critical
-      capacityType: on-demand
-```
-
-BurstGrid does not checkpoint a running GitHub Actions process mid-step. Jobs interrupted by spot are rerun from the workflow's last durable boundary. To make reruns cheap, use `actions/cache`, upload artifacts at phase boundaries, or split long jobs into smaller dependent jobs so GitHub can resume from the completed job graph rather than replaying one giant step.
+The scheduler handles EC2 spot interruption warnings centrally and requeues jobs from the affected worker. Critical fleets can use `capacityType: on-demand`. See the [docs site](https://gbudjeakp.github.io/burstgrid/#config-spot) for the full tradeoff and checkpointing guidance.
 
 See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
 
@@ -215,6 +190,6 @@ See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deplo
 pnpm install
 pnpm build       # dist/
 pnpm typecheck
-pnpm test        # 218 tests
+pnpm test
 pnpm lint        # oxlint
 ```

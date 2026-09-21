@@ -8,6 +8,8 @@ const HELP = `
 Usage: burstgrid <command> [options]
 
 Commands:
+  scheduler Start the scheduler process
+  worker    Start the worker agent process
   setup     Auto-detect VPC/subnet/AMI and write deploy/terraform/terraform.tfvars
   deploy    Build, upload artefacts to S3, and optionally run terraform apply
   build     Build a Firecracker rootfs image from a Dockerfile; optionally push to S3
@@ -33,6 +35,13 @@ const __dirname = path.dirname(__filename);
 const ext = __filename.endsWith('.mjs') ? '.mjs' : '.js';
 
 switch (cmd) {
+  case 'scheduler':
+    await import(path.join(__dirname, `scheduler${ext}`));
+    break;
+  case 'worker':
+  case 'worker-agent':
+    await import(path.join(__dirname, `worker-agent${ext}`));
+    break;
   case 'setup':
     await import(path.join(__dirname, `setup${ext}`));
     break;

@@ -26,6 +26,7 @@ const {
   BURSTGRID_RUNNER_PATH,
   // Pull-through registry mirror — set to http://<host>:5000 to cache Docker Hub pulls
   BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
+  BURSTGRID_SECRET_DELIVERY = cfg.worker?.secretDelivery ?? 'mmds',
   BURSTGRID_WORKER_TOKEN = '',
   BURSTGRID_HEALTH_PORT = '9090',
   // SQS queue URL for EventBridge spot interruption warnings (optional)
@@ -88,6 +89,7 @@ const agent = new WorkerAgent({
   imageDir: BURSTGRID_IMAGE_DIR,
   runnerPath: BURSTGRID_RUNNER_PATH,
   registryMirror: BURSTGRID_REGISTRY_MIRROR,
+  secretDelivery: BURSTGRID_SECRET_DELIVERY as 'mmds' | 'cmdline',
   workerToken: BURSTGRID_WORKER_TOKEN,
   useJailer: BURSTGRID_USE_JAILER === 'true',
   sshPublicKey: BURSTGRID_SSH_PUBLIC_KEY,

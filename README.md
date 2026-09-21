@@ -91,6 +91,19 @@ Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.ya
 | `BURSTGRID_S3_CACHE_BUCKET` + `BURSTGRID_S3_CACHE_REGION` | Serve GitHub Actions cache protocol over S3 — `actions/cache` works with no workflow changes |
 | `BURSTGRID_REPO_CONCURRENCY` | Default per-repo concurrency cap (int) |
 | `BURSTGRID_SNAPSHOT_POOL_SIZE` | Pre-boot N Firecracker VMs per worker for sub-millisecond first dispatch |
+| `BURSTGRID_SECRET_DELIVERY` | `mmds` (default) keeps runner/cache tokens out of guest `/proc/cmdline`; `cmdline` is emergency rollback |
+| `BURSTGRID_MAX_PACK_UTILIZATION` | Placement density target, e.g. `0.7`; lower spreads jobs across more workers |
+| `BURSTGRID_MAX_JOBS_PER_WORKER` | Hard cap on active jobs per worker to limit spot interruption blast radius |
+
+### Preflight doctor
+
+Before a real test or production rollout, run:
+
+```bash
+npx burstgrid doctor
+```
+
+It checks the local config and prints exact env/config overrides for the safer defaults: MMDS secret delivery, snapshot pool, placement density, and max active jobs per worker.
 
 ### Per-repo concurrency limits
 
@@ -168,6 +181,18 @@ That's the only change needed in your workflow files.
 ### Scale-down
 
 Idle workers terminate automatically after 300 s. One warm standby is kept per fleet to eliminate cold-start latency. Set `scaleDownAfterIdleSec: 0` to disable.
+
+### Spot interruption blast radius
+
+BurstGrid bin-packs by default so idle hosts can actually drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. Use these knobs when you care more about limiting disruption than absolute minimum host count:
+
+```yaml
+scheduler:
+  maxPackUtilization: 0.7     # stop packing a host once the next job would push it above 70% vCPU
+  maxActiveJobsPerWorker: 8   # even a 32-slot metal host only gets 8 active jobs
+```
+
+Equivalent env overrides: `BURSTGRID_MAX_PACK_UTILIZATION=0.7` and `BURSTGRID_MAX_JOBS_PER_WORKER=8`.
 
 See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
 

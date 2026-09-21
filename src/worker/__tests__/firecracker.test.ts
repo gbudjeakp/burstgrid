@@ -74,7 +74,7 @@ const BASE_CFG: VMConfig = {
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
-describe('FirecrackerVM — boot-arg mode (default)', () => {
+describe('FirecrackerVM — legacy boot-arg secret delivery', () => {
   const VM_ID = 'test-vm-boot';
   let sockDir: string;
   let api: { requests: RecordedRequest[]; stop: () => void };
@@ -92,7 +92,7 @@ describe('FirecrackerVM — boot-arg mode (default)', () => {
   });
 
   it('configure() sends boot-source with token in boot_args', async () => {
-    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID });
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, secretDelivery: 'cmdline' });
     await (vm as unknown as { configure(): Promise<void> }).configure();
 
     const bootSource = api.requests.find(r => r.path === '/boot-source');
@@ -102,7 +102,7 @@ describe('FirecrackerVM — boot-arg mode (default)', () => {
   });
 
   it('configure() injects REGISTRY_MIRROR when registryMirror is set', async () => {
-    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, registryMirror: 'http://mirror.internal' });
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, registryMirror: 'http://mirror.internal', secretDelivery: 'cmdline' });
     await (vm as unknown as { configure(): Promise<void> }).configure();
 
     const bootSource = api.requests.find(r => r.path === '/boot-source');
@@ -111,7 +111,7 @@ describe('FirecrackerVM — boot-arg mode (default)', () => {
 
   it("configure() base64-encodes the SSH public key in boot_args so spaces in the key survive the cmdline's space-delimited tokenizing", async () => {
     const pubkey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI test@example.com';
-    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, sshPublicKey: pubkey });
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, sshPublicKey: pubkey, secretDelivery: 'cmdline' });
     await (vm as unknown as { configure(): Promise<void> }).configure();
 
     const bootSource = api.requests.find(r => r.path === '/boot-source');
@@ -122,12 +122,54 @@ describe('FirecrackerVM — boot-arg mode (default)', () => {
   });
 
   it('configure() injects ACTIONS_CACHE_URL when cacheServerUrl is set', async () => {
-    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, cacheServerUrl: 'http://127.0.0.1:4321/', workerToken: 'wt' });
+    const vm = new FirecrackerVM({ ...BASE_CFG, vmId: VM_ID, cacheServerUrl: 'http://127.0.0.1:4321/', workerToken: 'wt', secretDelivery: 'cmdline' });
     await (vm as unknown as { configure(): Promise<void> }).configure();
 
     const bootArgs = (api.requests.find(r => r.path === '/boot-source')!.body as { boot_args: string }).boot_args;
     expect(bootArgs).toContain('ACTIONS_CACHE_URL=http://127.0.0.1:4321/');
     expect(bootArgs).toContain('ACTIONS_RUNTIME_TOKEN=wt');
+  });
+});
+
+describe('FirecrackerVM — MMDS secret delivery (default)', () => {
+  const VM_ID = 'test-vm-mmds-default';
+  let sockDir: string;
+  let api: { requests: RecordedRequest[]; stop: () => void };
+
+  beforeEach(async () => {
+    sockDir = path.join(os.tmpdir(), 'burstgrid', VM_ID);
+    await fs.mkdir(sockDir, { recursive: true });
+    api = await startMockApiServer(vmSockPath(VM_ID));
+  });
+
+  afterEach(async () => {
+    api.stop();
+    await fs.rm(sockDir, { recursive: true, force: true });
+    vi.clearAllMocks();
+  });
+
+  it('keeps runner and cache tokens out of boot_args and stores them in MMDS', async () => {
+    const vm = new FirecrackerVM({
+      ...BASE_CFG,
+      vmId: VM_ID,
+      repoUrl: 'https://github.com/acme/repo',
+      cacheServerUrl: 'http://127.0.0.1:4321/',
+      workerToken: 'worker-secret',
+    });
+    await (vm as unknown as { configure(): Promise<void> }).configure();
+
+    const bootArgs = (api.requests.find(r => r.path === '/boot-source')!.body as { boot_args: string }).boot_args;
+    expect(bootArgs).toContain('MMDS_MODE=1');
+    expect(bootArgs).toContain('init_on_free=1');
+    expect(bootArgs).toContain('nomodule');
+    expect(bootArgs).not.toContain('RUNNER_TOKEN=tok');
+    expect(bootArgs).not.toContain('ACTIONS_RUNTIME_TOKEN=worker-secret');
+
+    const meta = (api.requests.find(r => r.path === '/mmds' && r.method === 'PUT')!.body as { latest: { 'meta-data': Record<string, string> } }).latest['meta-data'];
+    expect(meta['runner-token']).toBe('tok');
+    expect(meta['runner-labels']).toBe('linux');
+    expect(meta['runner-repo-url']).toBe('https://github.com/acme/repo');
+    expect(meta['actions-runtime-token']).toBe('worker-secret');
   });
 });
 

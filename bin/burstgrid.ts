@@ -12,6 +12,7 @@ Commands:
   deploy    Build, upload artefacts to S3, and optionally run terraform apply
   build     Build a Firecracker rootfs image from a Dockerfile; optionally push to S3
   bake-ami  Bake a worker AMI (Firecracker + runner + vmlinux + rootfs pre-installed) via Packer
+  doctor    Preflight hardening, observability, and spot blast-radius checks
   init      Scaffold burstgrid.config.yaml from live AWS resources
   validate  Parse and validate an existing burstgrid.config.yaml
 
@@ -43,6 +44,9 @@ switch (cmd) {
     break;
   case 'bake-ami':
     await import(path.join(__dirname, `bake-ami${ext}`));
+    break;
+  case 'doctor':
+    await import(path.join(__dirname, `doctor${ext}`));
     break;
   case 'init':
     await import(path.join(__dirname, `init${ext}`));

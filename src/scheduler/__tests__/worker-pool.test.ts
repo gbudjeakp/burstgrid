@@ -156,6 +156,19 @@ describe('WorkerPool', () => {
       pool.assign('w1', { ...assignment('hog'), vcpus: 8, memoryMiB: 2_048 });
       expect(pool.bestWorker(['linux'], 4, 4_096)).toBeNull();
     });
+
+    it('honors maxActiveJobsPerWorker even when slots and vCPU remain', () => {
+      const capped = new WorkerPool(undefined, { maxActiveJobsPerWorker: 1 });
+      capped.register(reg('w1', 4));
+      capped.register(reg('w2', 4));
+      capped.setStream('w1', mockStream());
+      capped.setStream('w2', mockStream());
+      capped.assign('w1', assignment('existing'));
+      capped.trackJob('w1', job('existing'));
+
+      expect(capped.bestWorker(['linux'], 2, 2_048)).toBe('w2');
+      expect(capped.totalFreeVcpus).toBe(8); // w1 has free vCPU, but no schedulable blast-radius budget
+    });
   });
 
   describe('heartbeat', () => {

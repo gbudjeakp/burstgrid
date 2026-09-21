@@ -58,6 +58,31 @@ REGISTRY_MIRROR="$(extract REGISTRY_MIRROR)"
 GUEST_IP="$(extract GUEST_IP)"
 GATEWAY="$(extract GATEWAY)"
 SSH_PUBKEY="$(extract SSH_PUBKEY_B64)"
+MMDS_MODE="$(extract MMDS_MODE)"
+ACTIONS_CACHE_URL="$(extract ACTIONS_CACHE_URL)"
+ACTIONS_RUNTIME_URL="$(extract ACTIONS_RUNTIME_URL)"
+ACTIONS_RUNTIME_TOKEN="$(extract ACTIONS_RUNTIME_TOKEN)"
+
+mmds_get() {
+  curl -fsS --connect-timeout 1 --max-time 2 "http://169.254.169.254/latest/meta-data/$1" 2>/dev/null || true
+}
+
+if [ "$MMDS_MODE" = "1" ]; then
+  i=0
+  while [ $i -lt 120 ]; do
+    RUNNER_TOKEN="$(mmds_get runner-token)"
+    RUNNER_LABELS="$(mmds_get runner-labels)"
+    RUNNER_REPO_URL="$(mmds_get runner-repo-url)"
+    REGISTRY_MIRROR="$(mmds_get registry-mirror)"
+    ACTIONS_CACHE_URL="$(mmds_get actions-cache-url)"
+    ACTIONS_RUNTIME_URL="$(mmds_get actions-runtime-url)"
+    ACTIONS_RUNTIME_TOKEN="$(mmds_get actions-runtime-token)"
+    SSH_PUBKEY="$(mmds_get ssh-public-key-b64)"
+    [ -n "$RUNNER_TOKEN" ] && [ -n "$RUNNER_REPO_URL" ] && break
+    sleep 0.25
+    i=$((i+1))
+  done
+fi
 
 if [ -z "$RUNNER_TOKEN" ]; then
   echo "[init] ERROR: RUNNER_TOKEN not found in /proc/cmdline" >&2
@@ -145,6 +170,9 @@ mkdir -p /root
 # Exported (not just a local var) so job steps can reference $GUEST_IP directly,
 # e.g. a debug step doing `echo "SSH target: $GUEST_IP"` shows it in the job's own log.
 export GUEST_IP
+export ACTIONS_CACHE_URL
+export ACTIONS_RUNTIME_URL
+export ACTIONS_RUNTIME_TOKEN
 
 # Derive a unique runner name from the guest IP (guaranteed unique per-slot).
 # Falls back to a random hex string if GUEST_IP is not set.

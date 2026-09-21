@@ -52,6 +52,9 @@ const pool  = new WorkerPool((lostJobs) => {
     logEvent('scheduler', 'warn', `re-queuing job ${job.id} from reaped worker`);
     queue.requeue(job);
   }
+}, {
+  maxPackUtilization: cfg.scheduler?.maxPackUtilization,
+  maxActiveJobsPerWorker: cfg.scheduler?.maxActiveJobsPerWorker,
 });
 const router = new Router(queue, pool);
 const metaCache = new JobMetaCache();

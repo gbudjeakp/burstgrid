@@ -54,6 +54,8 @@ export interface SlotConfig {
   env?: Record<string, string>;
   /** GitHub repo URL passed as RUNNER_REPO_URL to the runner script (e.g. https://github.com/owner/repo). */
   repoUrl?: string;
+  /** Delivery path for runner/cache secrets. Default: 'mmds' keeps secrets out of /proc/cmdline. */
+  secretDelivery?: 'mmds' | 'cmdline';
   /** Index of this slot (0-based); maps to /opt/actions-runner-<N> for credential isolation. */
   slotIndex?: number;
   /** Pre-warmed snapshot pool; when provided, VMs restore from snapshot (~5ms) instead of cold-booting (~150ms). */
@@ -96,6 +98,7 @@ export class Slot {
         workerToken: this.cfg.workerToken,
         runnerEphemeral: this.cfg.runnerEphemeral ?? true,
         repoUrl: this.cfg.repoUrl,
+        secretDelivery: this.cfg.secretDelivery,
         slotIndex: this.cfg.slotIndex ?? 0,
         useJailer: this.cfg.useJailer,
         sshPublicKey: this.cfg.sshPublicKey,

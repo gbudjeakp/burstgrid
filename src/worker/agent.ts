@@ -25,6 +25,8 @@ export interface AgentConfig {
   runnerPath?: string;
   /** Docker pull-through registry mirror URL forwarded to each VM. */
   registryMirror?: string;
+  /** Delivery path for runner/cache secrets. Default: 'mmds'. */
+  secretDelivery?: 'mmds' | 'cmdline';
   /** Shared secret for authenticating to the scheduler. Set BURSTGRID_WORKER_TOKEN on both sides. */
   workerToken?: string;
   /** S3-backed Actions cache. When set, a CacheServer starts and ACTIONS_CACHE_URL is injected into VMs. */
@@ -75,6 +77,7 @@ export class WorkerAgent {
           memoryMiB: 2_048,
           vcpus: 2,
           registryMirror: this.cfg.registryMirror,
+          secretDelivery: this.cfg.secretDelivery,
           cacheServerUrl: this.cacheServer ? `http://127.0.0.1:${this.cacheServer.port}/` : undefined,
           workerToken: this.cfg.workerToken,
         },
@@ -192,6 +195,7 @@ export class WorkerAgent {
       imageCatalog: this.cfg.imageCatalog,
       runnerPath: this.cfg.runnerPath,
       registryMirror: job.registryMirror ?? this.cfg.registryMirror,
+      secretDelivery: this.cfg.secretDelivery,
       cacheServerUrl: this.cacheServer ? `http://127.0.0.1:${this.cacheServer.port}/` : undefined,
       workerToken: this.cfg.workerToken,
       snapshotPool: this.snapshotPool ?? undefined,

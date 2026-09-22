@@ -19,6 +19,14 @@ variable "github_app_id" {
   type    = number
   default = 0
 }
+variable "secret_source" { type = string }
+variable "webhook_secret_ssm_parameter" { type = string }
+variable "worker_token_ssm_parameter" { type = string }
+variable "github_token_ssm_parameter" { type = string }
+variable "github_app_key_ssm_parameter" { type = string }
+variable "otel_collector_enabled" { type = bool }
+variable "otel_collector_version" { type = string }
+variable "otel_env_ssm_parameter" { type = string }
 variable "burstgrid_fleets" { type = string } # JSON — rendered in root module
 variable "s3_artifacts_bucket" { type = string }
 variable "spot_queue_url" { type = string }
@@ -71,6 +79,18 @@ resource "aws_iam_role_policy" "scheduler" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Sid    = "ReadBurstGridSecrets"
+        Effect = "Allow"
+        Action = ["ssm:GetParameter"]
+        Resource = [
+          "arn:aws:ssm:${var.aws_region}:*:parameter${var.webhook_secret_ssm_parameter}",
+          "arn:aws:ssm:${var.aws_region}:*:parameter${var.worker_token_ssm_parameter}",
+          "arn:aws:ssm:${var.aws_region}:*:parameter${var.github_token_ssm_parameter}",
+          "arn:aws:ssm:${var.aws_region}:*:parameter${var.github_app_key_ssm_parameter}",
+          "arn:aws:ssm:${var.aws_region}:*:parameter${var.otel_env_ssm_parameter}",
+        ]
+      },
       {
         Sid    = "LaunchWorkers"
         Effect = "Allow"
@@ -151,14 +171,22 @@ resource "aws_instance" "scheduler" {
   }
 
   user_data = base64encode(templatefile("${path.module}/userdata.sh.tpl", {
-    webhook_secret      = var.webhook_secret
-    worker_token        = var.worker_token
-    github_token        = var.github_token
-    github_app_id       = var.github_app_id
-    burstgrid_fleets    = var.burstgrid_fleets
-    s3_artifacts_bucket = var.s3_artifacts_bucket
-    spot_queue_url      = var.spot_queue_url
-    aws_region          = var.aws_region
+    webhook_secret               = var.webhook_secret
+    worker_token                 = var.worker_token
+    github_token                 = var.github_token
+    github_app_id                = var.github_app_id
+    secret_source                = var.secret_source
+    webhook_secret_ssm_parameter = var.webhook_secret_ssm_parameter
+    worker_token_ssm_parameter   = var.worker_token_ssm_parameter
+    github_token_ssm_parameter   = var.github_token_ssm_parameter
+    github_app_key_ssm_parameter = var.github_app_key_ssm_parameter
+    otel_collector_enabled       = var.otel_collector_enabled
+    otel_collector_version       = var.otel_collector_version
+    otel_env_ssm_parameter       = var.otel_env_ssm_parameter
+    burstgrid_fleets             = var.burstgrid_fleets
+    s3_artifacts_bucket          = var.s3_artifacts_bucket
+    spot_queue_url               = var.spot_queue_url
+    aws_region                   = var.aws_region
   }))
 
   tags = merge(var.tags, { Name = "burstgrid-scheduler", "burstgrid:role" = "scheduler" })
@@ -166,6 +194,10 @@ resource "aws_instance" "scheduler" {
   lifecycle {
     # Replacing the instance and re-associating the EIP is safer than in-place updates
     create_before_destroy = true
+    precondition {
+      condition     = var.secret_source != "terraform" || (var.webhook_secret != "" && var.worker_token != "")
+      error_message = "webhook_secret and worker_token must be set when secret_source=terraform."
+    }
   }
 }
 

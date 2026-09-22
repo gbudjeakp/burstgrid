@@ -72,6 +72,7 @@ if (dryRun) console.log('[deploy] dry-run — no changes will be made');
 const artifacts = [
   path.join(root, 'dist', 'scheduler.mjs'),
   path.join(root, 'dist', 'worker-agent.mjs'),
+  path.join(root, 'deploy', 'otel-collector', 'collector.yaml'),
 ];
 
 const needsBuild = artifacts.some(f => !fs.existsSync(f));
@@ -108,7 +109,7 @@ if (runTf && !toolAvailable('terraform')) {
 // ── Upload to S3 ──────────────────────────────────────────────────────────────
 
 for (const file of artifacts) {
-  const key = `${prefix}${path.basename(file)}`;
+  const key = `${prefix}${path.basename(file) === 'collector.yaml' ? 'otel-collector.yaml' : path.basename(file)}`;
   const s3Uri = `s3://${bucket}/${key}`;
   console.log(`[deploy] upload ${path.relative(root, file)} → ${s3Uri}`);
   if (!dryRun) {

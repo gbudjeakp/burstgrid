@@ -125,9 +125,43 @@ nat_subnet_id       = "subnet-xxxxxxxx"
 scheduler_ami       = "ami-xxxxxxxx"       # stock Ubuntu 24.04 ARM64
 worker_ami          = "ami-xxxxxxxx"       # recommended: output of `npx burstgrid bake-ami` (stock Ubuntu also works, slower boot)
 s3_artifacts_bucket = "my-burstgrid-bucket"
-webhook_secret      = "your-webhook-secret"
-worker_token        = "your-worker-token"
 ```
+
+By default, production secrets come from SSM Parameter Store instead of
+`terraform.tfvars` or EC2 user data. Before applying Terraform, create these
+`SecureString` parameters (adjust `ssm_parameter_prefix` if needed):
+
+```bash
+aws ssm put-parameter --name /burstgrid/webhook-secret --type SecureString --value '...'
+aws ssm put-parameter --name /burstgrid/worker-token --type SecureString --value '...'
+aws ssm put-parameter --name /burstgrid/github-app-private-key --type SecureString --value "$(cat app.pem)"
+# Or, for PAT authentication:
+aws ssm put-parameter --name /burstgrid/github-token --type SecureString --value 'ghp_...'
+```
+
+Set `secret_source = "terraform"` only if you explicitly accept secrets in
+Terraform state and launch user data; that compatibility mode requires
+`webhook_secret` and `worker_token` in `terraform.tfvars`.
+
+### OpenTelemetry collector
+
+The collector configuration already in `deploy/otel-collector/collector.yaml`
+is wired into both EC2 roles when enabled. Store its exporter environment as a
+multi-line SSM SecureString, then enable it in `terraform.tfvars`:
+
+```bash
+aws ssm put-parameter --name /burstgrid/otel-collector-env --type SecureString \
+  --value $'GRAFANA_OTLP_ENDPOINT=https://.../otlp\nGRAFANA_INSTANCE_ID=123\nGRAFANA_API_KEY=...'
+```
+
+```hcl
+otel_collector_enabled = true
+```
+
+On launch, the scheduler and workers run `otelcol-contrib` locally, load that
+environment without putting credentials in user data, and export app telemetry
+to `http://127.0.0.1:4318`. The setting defaults to `false` because the checked
+in collector pipeline requires exporter credentials.
 
 ### 2. Bake the worker AMI (recommended)
 
@@ -183,6 +217,10 @@ scheduler:
 The scheduler handles EC2 spot interruption warnings centrally and requeues jobs from the affected worker. Critical fleets can use `capacityType: on-demand`. See the [docs site](https://gbudjeakp.github.io/burstgrid/#config-spot) for the full tradeoff and checkpointing guidance.
 
 See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
+The deploy command also uploads the collector configuration. Import
+[`deploy/grafana/alerts.yaml`](deploy/grafana/alerts.yaml) into Grafana Alerting
+or Prometheus to alert on queue age, unavailable capacity, launch failures,
+throttling, VM boot latency, and runner setup failures.
 
 ## Build & test
 

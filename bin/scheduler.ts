@@ -99,6 +99,11 @@ registerSchedulerObservers(
   () => queue.depth,
   () => pool.connectedCount,
   () => pool.totalFreeSlots,
+  () => {
+    let oldest = 0;
+    for (const job of queue.jobs()) oldest = Math.max(oldest, Date.now() - job.queuedAt.getTime());
+    return oldest / 1_000;
+  },
 );
 
 const ghClient = GITHUB_TOKEN

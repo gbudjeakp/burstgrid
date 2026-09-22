@@ -8,7 +8,7 @@ import {
 import type { WorkerPool } from '../scheduler/worker-pool.js';
 import type { JobQueue } from '../scheduler/queue.js';
 import { VM_SIZES, vmSizeFromLabels } from '../types/index.js';
-import { logEvent } from '../telemetry/index.js';
+import { logEvent, recordWorkerLaunchFailure } from '../telemetry/index.js';
 
 export interface TierFleet {
   /** Human-readable name for logging (e.g. 'standard', 'large', 'xlarge'). */
@@ -247,6 +247,8 @@ export class Autoscaler {
       logEvent('autoscaler', 'info', `fleet "${fleet.name}": launched ${id} (subnet ${subnetId}, ${capacityType})`);
       return true;
     } catch (err) {
+      const text = err instanceof Error ? `${err.name} ${err.message}` : String(err);
+      recordWorkerLaunchFailure(/throttl|requestlimitexceeded/i.test(text) ? 'throttled' : 'error', fleet.name);
       logEvent('autoscaler', 'error', `fleet "${fleet.name}": launch failed (${capacityType})`, err);
       return false;
     }

@@ -736,11 +736,21 @@
         <div class="flow-title">Run <code>burstgrid setup</code>, then <code>burstgrid deploy</code>, then <code>burstgrid init</code></div>
         <div class="flow-body">
           <code>burstgrid setup</code> detects your default VPC, public subnet, and the latest Ubuntu 24.04 AMI automatically,
-          generates webhook and worker secrets, and writes <code>deploy/terraform/terraform.tfvars</code> for you.
+          generates webhook and worker secrets in AWS Systems Manager Parameter Store (SSM), and writes
+          <code>deploy/terraform/terraform.tfvars</code> for you.
           Then <code>burstgrid deploy</code> builds the binaries, uploads them to S3, and calls <code>terraform apply</code>.
           Finally, <code>burstgrid init</code> reads the deployed EC2 Launch Templates and writes their IDs back into
           <code>burstgrid.config.yaml</code> — the autoscaler won&rsquo;t launch workers without these.
           No digging around the AWS console.
+        </div>
+        <div class="card" style="margin:16px 0;">
+          <strong>Production secret source: SSM SecureString (default).</strong>
+          The scheduler and workers fetch <code>/burstgrid/webhook-secret</code> and
+          <code>/burstgrid/worker-token</code> with their instance IAM roles after boot. This keeps
+          secrets out of Terraform state and EC2 user data. Add the GitHub credential you use as
+          <code>/burstgrid/github-app-private-key</code> or <code>/burstgrid/github-token</code>.
+          Use <code>npx burstgrid setup --secret-source terraform</code> only for the legacy path,
+          where secrets are written to <code>terraform.tfvars</code> and embedded in launch data.
         </div>
         <div class="snippet">
           <div class="snippet-tab">Step 1 — scaffold terraform.tfvars</div>
@@ -753,8 +763,9 @@ BurstGrid setup
   <span class="t-ok">✓</span> Public subnet                subnet-0a2b3c4d5e6f7890
   <span class="t-ok">✓</span> Ubuntu 24.04 ARM64 AMI       ami-0d3e4f5a6b7c8d9e0
   <span class="t-ok">✓</span> S3 bucket                    burstgrid-123456789012
-  <span class="t-ok">✓</span> Webhook secret               (generated)
-  <span class="t-ok">✓</span> Worker token                 (generated)
+  <span class="t-ok">✓</span> Webhook secret               (generated → SSM)
+  <span class="t-ok">✓</span> Worker token                 (generated → SSM)
+  <span class="t-ok">✓</span> Secret source                SSM Parameter Store (/burstgrid)
 
   Wrote deploy/terraform/terraform.tfvars
 
@@ -778,8 +789,8 @@ Next steps:
        aws s3 cp /tmp/vmlinux-aarch64 s3://burstgrid-123456789012/vmlinux-aarch64
 
   3. Set GitHub credentials (choose one):
-       GitHub App (recommended):  export GITHUB_APP_ID=&lt;id&gt; GITHUB_PRIVATE_KEY_PATH=&lt;path&gt;
-       Personal access token:     export GITHUB_TOKEN=&lt;token&gt;  (fine-grained, repo scope)
+       GitHub App (recommended):  aws ssm put-parameter --name /burstgrid/github-app-private-key --type SecureString --value "$(cat app.pem)"
+       Personal access token:     aws ssm put-parameter --name /burstgrid/github-token --type SecureString --value &lt;token&gt;
 
   4. Deploy infrastructure:
        npx burstgrid deploy
@@ -791,7 +802,7 @@ Next steps:
        GitHub repo &rarr; Settings &rarr; Webhooks &rarr; Add webhook
        Payload URL:   http://&lt;scheduler-ip&gt;:8080/webhook
        Content type:  application/json
-       Secret:        &lt;webhook_secret from deploy/terraform/terraform.tfvars&gt;
+       Secret:        &lt;value in SSM /burstgrid/webhook-secret&gt;
        Events:        select "Workflow jobs" (workflow_job)</div>
         </div>
         <div class="snippet" style="margin-top:10px;">

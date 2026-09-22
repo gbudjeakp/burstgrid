@@ -6,6 +6,11 @@ variable "worker_token" {
   type      = string
   sensitive = true
 }
+variable "secret_source" { type = string }
+variable "worker_token_ssm_parameter" { type = string }
+variable "otel_collector_enabled" { type = bool }
+variable "otel_collector_version" { type = string }
+variable "otel_env_ssm_parameter" { type = string }
 variable "s3_artifacts_bucket" { type = string }
 variable "aws_region" { type = string }
 variable "tags" {
@@ -60,6 +65,18 @@ resource "aws_iam_role_policy" "worker" {
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
+      {
+        Sid      = "ReadWorkerToken"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter${var.worker_token_ssm_parameter}"
+      },
+      {
+        Sid      = "ReadOtelCollectorConfig"
+        Effect   = "Allow"
+        Action   = "ssm:GetParameter"
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter${var.otel_env_ssm_parameter}"
+      },
       {
         # Download the worker-agent binary at boot
         Sid      = "S3Artifacts"
@@ -153,14 +170,19 @@ resource "aws_launch_template" "fleet" {
   vpc_security_group_ids = [aws_security_group.worker.id]
 
   # scheduler_endpoint is baked in by the caller (root module) after the scheduler EIP is known.
-  # worker_token is baked in here so each worker can auth with the scheduler on connect.
+  # In the default SSM mode, worker_token is fetched at instance boot rather than embedded here.
   user_data = base64encode(templatefile("${path.module}/userdata.sh.tpl", {
-    scheduler_url       = var.scheduler_url
-    slots_per_worker    = each.value.slots_per_worker
-    worker_token        = var.worker_token
-    s3_artifacts_bucket = var.s3_artifacts_bucket
-    aws_region          = var.aws_region
-    firecracker_version = "v1.16.1"
+    scheduler_url              = var.scheduler_url
+    slots_per_worker           = each.value.slots_per_worker
+    worker_token               = var.worker_token
+    secret_source              = var.secret_source
+    worker_token_ssm_parameter = var.worker_token_ssm_parameter
+    otel_collector_enabled     = var.otel_collector_enabled
+    otel_collector_version     = var.otel_collector_version
+    otel_env_ssm_parameter     = var.otel_env_ssm_parameter
+    s3_artifacts_bucket        = var.s3_artifacts_bucket
+    aws_region                 = var.aws_region
+    firecracker_version        = "v1.16.1"
   }))
 
   metadata_options {
@@ -188,7 +210,13 @@ resource "aws_launch_template" "fleet" {
     })
   }
 
-  lifecycle { create_before_destroy = true }
+  lifecycle {
+    create_before_destroy = true
+    precondition {
+      condition     = var.secret_source != "terraform" || var.worker_token != ""
+      error_message = "worker_token must be set when secret_source=terraform."
+    }
+  }
 }
 
 output "worker_role_arn" { value = aws_iam_role.worker.arn }

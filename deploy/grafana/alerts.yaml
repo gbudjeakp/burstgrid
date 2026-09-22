@@ -1,0 +1,42 @@
+# Prometheus/Mimir alerting rules for the BurstGrid dashboard. Import this rule
+# group into Grafana Alerting (or Prometheus rule_files) and route the alerts to
+# the on-call receiver used by your organization.
+groups:
+  - name: burstgrid-capacity
+    rules:
+      - alert: BurstGridQueuedJobsTooOld
+        expr: burstgrid_queue_oldest_age_seconds > 300
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: BurstGrid has a job queued for more than five minutes.
+      - alert: BurstGridNoCapableWorkers
+        expr: burstgrid_queue_depth > 0 and burstgrid_workers_free_slots == 0
+        for: 3m
+        labels: { severity: critical }
+        annotations:
+          summary: BurstGrid has queued work but no free worker capacity.
+      - alert: BurstGridWorkerLaunchFailures
+        expr: increase(burstgrid_worker_launch_failures_total[10m]) > 2
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Worker launches are repeatedly failing.
+      - alert: BurstGridEc2ApiThrottling
+        expr: increase(burstgrid_worker_launch_failures_total{reason="throttled"}[10m]) > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: EC2 API throttling is preventing BurstGrid scale-up.
+      - alert: BurstGridVmBootP95Slow
+        expr: histogram_quantile(0.95, sum(rate(burstgrid_vm_boot_duration_ms_bucket[10m])) by (le)) > 1000
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: Firecracker VM boot p95 exceeds one second.
+      - alert: BurstGridRunnerSetupFailures
+        expr: increase(burstgrid_runner_setup_failures_total[10m]) > 2
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: Runner or VM configuration is failing before jobs start.

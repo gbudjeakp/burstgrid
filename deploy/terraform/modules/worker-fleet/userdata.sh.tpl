@@ -44,6 +44,15 @@ unzip -q /tmp/awscliv2.zip -d /tmp/awscliv2
 rm -rf /tmp/awscliv2 /tmp/awscliv2.zip
 AWS=/usr/local/bin/aws
 
+# Fetch shared worker authentication only after the IAM instance profile is
+# available. This avoids preserving it in EC2 launch-template user data.
+%{ if secret_source == "ssm" ~}
+WORKER_TOKEN=$($AWS ssm get-parameter --name '${worker_token_ssm_parameter}' --with-decryption \
+  --region "$REGION" --query Parameter.Value --output text)
+%{ else ~}
+WORKER_TOKEN='${worker_token}'
+%{ endif ~}
+
 # ── Firecracker (skip if baked into the AMI; else S3 same-region; else GitHub) ─
 FC_S3="s3://$BUCKET/bin/firecracker-$FC_ARCH"
 if [ -x /usr/local/bin/firecracker ]; then
@@ -113,6 +122,35 @@ done
 mkdir -p /opt/burstgrid
 $AWS s3 cp "s3://$BUCKET/worker-agent.mjs" /opt/burstgrid/worker-agent.mjs
 
+%{ if otel_collector_enabled ~}
+# Baked AMIs already contain the collector; stock AMIs install the matching arch.
+if [ ! -x /usr/local/bin/otelcol-contrib ]; then
+  OTEL_ARCH=$([ "$ARCH" = "aarch64" ] && echo arm64 || echo amd64)
+  curl -fsSL "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${otel_collector_version}/otelcol-contrib_${otel_collector_version}_linux_$${OTEL_ARCH}.tar.gz" | tar -xz -C /usr/local/bin otelcol-contrib
+fi
+install -d -m 0755 /etc/burstgrid /etc/otelcol-contrib
+$AWS s3 cp "s3://$BUCKET/otel-collector.yaml" /etc/otelcol-contrib/collector.yaml
+$AWS ssm get-parameter --name '${otel_env_ssm_parameter}' --with-decryption \
+  --region "$REGION" --query Parameter.Value --output text > /etc/burstgrid/otelcol.env
+chmod 600 /etc/burstgrid/otelcol.env
+cat > /etc/systemd/system/burstgrid-otelcol.service << 'OTELUNIT'
+[Unit]
+Description=BurstGrid OpenTelemetry Collector
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/burstgrid/otelcol.env
+ExecStart=/usr/local/bin/otelcol-contrib --config /etc/otelcol-contrib/collector.yaml
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+OTELUNIT
+%{ endif ~}
+
 # ── VM kernel + rootfs (skip download only if the baked AMI copy still matches S3) ─
 mkdir -p /var/lib/burstgrid
 BAKED_VERSIONS=/var/lib/burstgrid/.baked-versions
@@ -181,6 +219,10 @@ cat > /etc/systemd/system/burstgrid-worker.service << EOF
 Description=BurstGrid Worker Agent
 After=network-online.target
 Wants=network-online.target
+%{ if otel_collector_enabled ~}
+After=burstgrid-otelcol.service
+Wants=burstgrid-otelcol.service
+%{ endif ~}
 
 [Service]
 Type=simple
@@ -191,10 +233,12 @@ Environment=BURSTGRID_MODE=firecracker
 Environment=BURSTGRID_VM_IMAGE=/var/lib/burstgrid/rootfs.img
 Environment=BURSTGRID_KERNEL=/var/lib/burstgrid/vmlinux
 Environment=BURSTGRID_IMAGE_DIR=/var/lib/burstgrid/images
-Environment=BURSTGRID_WORKER_TOKEN=${worker_token}
-Environment=BURSTGRID_SPOT_QUEUE_URL=${spot_queue_url}
+Environment=BURSTGRID_WORKER_TOKEN=$WORKER_TOKEN
 Environment=AWS_REGION=$REGION
 Environment=AWS_AZ=$AZ
+%{ if otel_collector_enabled ~}
+Environment=OTEL_EXPORTER_OTLP_ENDPOINT=http://127.0.0.1:4318
+%{ endif ~}
 ExecStart=/usr/bin/node /opt/burstgrid/worker-agent.mjs
 Restart=on-failure
 RestartSec=5
@@ -206,5 +250,8 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+%{ if otel_collector_enabled ~}
+systemctl enable --now burstgrid-otelcol
+%{ endif ~}
 systemctl enable --now burstgrid-worker
 echo "[bootstrap] worker-agent started"

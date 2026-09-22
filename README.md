@@ -81,16 +81,17 @@ jobs:
 
 ## Configuration
 
-Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All keys are **camelCase** — the schema is Zod-validated at startup. Every YAML key can also be set via environment variable — no config file required.
+Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All YAML keys are **camelCase** and can also be set through environment variables.
 
-| Env var | What it does |
-|---|---|
-| `BURSTGRID_REDIS_URL` | Redis queue backend (default: in-memory) |
-| `BURSTGRID_SQS_QUEUE_URL` + `BURSTGRID_SQS_REGION` | SQS queue backend — durable, no Redis needed |
-| `BURSTGRID_DYNAMODB_TABLE` + `BURSTGRID_DYNAMODB_REGION` | DynamoDB job deduplication — drops duplicate webhook deliveries, survives restarts |
-| `BURSTGRID_S3_CACHE_BUCKET` + `BURSTGRID_S3_CACHE_REGION` | Serve GitHub Actions cache protocol over S3 — `actions/cache` works with no workflow changes |
-| `BURSTGRID_REPO_CONCURRENCY` | Default per-repo concurrency cap (int) |
-| `BURSTGRID_SNAPSHOT_POOL_SIZE` | Pre-boot N Firecracker VMs per worker for sub-millisecond first dispatch |
+For the complete required/optional environment variable reference, see the [docs site](https://gbudjeakp.github.io/burstgrid/#configuration).
+
+Before a real test or production rollout, run the preflight checker:
+
+```bash
+npx burstgrid doctor
+```
+
+It checks local config and prints exact env/config overrides for safer defaults: MMDS secret delivery, snapshot pool, placement density, and max active jobs per worker.
 
 ### Per-repo concurrency limits
 
@@ -124,9 +125,43 @@ nat_subnet_id       = "subnet-xxxxxxxx"
 scheduler_ami       = "ami-xxxxxxxx"       # stock Ubuntu 24.04 ARM64
 worker_ami          = "ami-xxxxxxxx"       # recommended: output of `npx burstgrid bake-ami` (stock Ubuntu also works, slower boot)
 s3_artifacts_bucket = "my-burstgrid-bucket"
-webhook_secret      = "your-webhook-secret"
-worker_token        = "your-worker-token"
 ```
+
+By default, production secrets come from SSM Parameter Store instead of
+`terraform.tfvars` or EC2 user data. Before applying Terraform, create these
+`SecureString` parameters (adjust `ssm_parameter_prefix` if needed):
+
+```bash
+aws ssm put-parameter --name /burstgrid/webhook-secret --type SecureString --value '...'
+aws ssm put-parameter --name /burstgrid/worker-token --type SecureString --value '...'
+aws ssm put-parameter --name /burstgrid/github-app-private-key --type SecureString --value "$(cat app.pem)"
+# Or, for PAT authentication:
+aws ssm put-parameter --name /burstgrid/github-token --type SecureString --value 'ghp_...'
+```
+
+Set `secret_source = "terraform"` only if you explicitly accept secrets in
+Terraform state and launch user data; that compatibility mode requires
+`webhook_secret` and `worker_token` in `terraform.tfvars`.
+
+### OpenTelemetry collector
+
+The collector configuration already in `deploy/otel-collector/collector.yaml`
+is wired into both EC2 roles when enabled. Store its exporter environment as a
+multi-line SSM SecureString, then enable it in `terraform.tfvars`:
+
+```bash
+aws ssm put-parameter --name /burstgrid/otel-collector-env --type SecureString \
+  --value $'GRAFANA_OTLP_ENDPOINT=https://.../otlp\nGRAFANA_INSTANCE_ID=123\nGRAFANA_API_KEY=...'
+```
+
+```hcl
+otel_collector_enabled = true
+```
+
+On launch, the scheduler and workers run `otelcol-contrib` locally, load that
+environment without putting credentials in user data, and export app telemetry
+to `http://127.0.0.1:4318`. The setting defaults to `false` because the checked
+in collector pipeline requires exporter credentials.
 
 ### 2. Bake the worker AMI (recommended)
 
@@ -169,7 +204,23 @@ That's the only change needed in your workflow files.
 
 Idle workers terminate automatically after 300 s. One warm standby is kept per fleet to eliminate cold-start latency. Set `scaleDownAfterIdleSec: 0` to disable.
 
+### Spot interruption blast radius
+
+BurstGrid bin-packs by default so idle hosts can drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. For production, cap placement density and active jobs per worker:
+
+```yaml
+scheduler:
+  maxPackUtilization: 0.7     # stop packing a host once the next job would push it above 70% vCPU
+  maxActiveJobsPerWorker: 8   # even a 32-slot metal host only gets 8 active jobs
+```
+
+The scheduler handles EC2 spot interruption warnings centrally and requeues jobs from the affected worker. Critical fleets can use `capacityType: on-demand`. See the [docs site](https://gbudjeakp.github.io/burstgrid/#config-spot) for the full tradeoff and checkpointing guidance.
+
 See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
+The deploy command also uploads the collector configuration. Import
+[`deploy/grafana/alerts.yaml`](deploy/grafana/alerts.yaml) into Grafana Alerting
+or Prometheus to alert on queue age, unavailable capacity, launch failures,
+throttling, VM boot latency, and runner setup failures.
 
 ## Build & test
 
@@ -177,6 +228,6 @@ See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deplo
 pnpm install
 pnpm build       # dist/
 pnpm typecheck
-pnpm test        # 218 tests
+pnpm test
 pnpm lint        # oxlint
 ```

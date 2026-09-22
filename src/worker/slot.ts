@@ -3,7 +3,7 @@ import path from 'node:path';
 import { FirecrackerVM, VM_BOOT_TARGET_MS, type VMConfig } from './firecracker.js';
 import type { SnapshotPool } from './snapshot-pool.js';
 import { vmSizeFromLabels, type RootfsImage } from '../types/index.js';
-import { logEvent } from '../telemetry/index.js';
+import { logEvent, recordRunnerSetupFailure } from '../telemetry/index.js';
 
 /** How the slot executes jobs on this host. */
 export type SlotMode = 'firecracker' | 'process' | 'simulate';
@@ -54,6 +54,8 @@ export interface SlotConfig {
   env?: Record<string, string>;
   /** GitHub repo URL passed as RUNNER_REPO_URL to the runner script (e.g. https://github.com/owner/repo). */
   repoUrl?: string;
+  /** Delivery path for runner/cache secrets. Default: 'mmds' keeps secrets out of /proc/cmdline. */
+  secretDelivery?: 'mmds' | 'cmdline';
   /** Index of this slot (0-based); maps to /opt/actions-runner-<N> for credential isolation. */
   slotIndex?: number;
   /** Pre-warmed snapshot pool; when provided, VMs restore from snapshot (~5ms) instead of cold-booting (~150ms). */
@@ -74,6 +76,7 @@ export class Slot {
   constructor(private readonly cfg: SlotConfig) {}
 
   async start(runnerToken: string, labels: string[]): Promise<void> {
+    try {
     // simulate: sleep VM_BOOT_TARGET_MS so callers experience realistic boot latency
     if (this.cfg.mode === 'simulate') { await sleep(VM_BOOT_TARGET_MS); return; }
 
@@ -96,6 +99,7 @@ export class Slot {
         workerToken: this.cfg.workerToken,
         runnerEphemeral: this.cfg.runnerEphemeral ?? true,
         repoUrl: this.cfg.repoUrl,
+        secretDelivery: this.cfg.secretDelivery,
         slotIndex: this.cfg.slotIndex ?? 0,
         useJailer: this.cfg.useJailer,
         sshPublicKey: this.cfg.sshPublicKey,
@@ -143,6 +147,10 @@ export class Slot {
       child.on('exit', code => (code === 0 ? resolve() : reject(new Error(`runner exited ${code}`))));
       child.on('error', reject);
     });
+    } catch (err) {
+      recordRunnerSetupFailure(this.cfg.mode);
+      throw err;
+    }
   }
 
   async wait(): Promise<void> {

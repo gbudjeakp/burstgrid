@@ -28,6 +28,8 @@ export interface VMConfig {
   workerToken?: string;
   /** GitHub repo URL (https://github.com/owner/repo) — required for runner registration. */
   repoUrl?: string;
+  /** Delivery path for runner/cache secrets. Default: 'mmds' keeps secrets out of /proc/cmdline. */
+  secretDelivery?: 'mmds' | 'cmdline';
   /** When true, passes runner_ephemeral=1 as a boot arg so the init script runs the runner with --ephemeral. */
   runnerEphemeral?: boolean;
   /**
@@ -217,7 +219,7 @@ export class FirecrackerVM {
   /** Inject runner token and labels via MMDS so a paused (snapshot-restored) VM can resume. */
   async injectMmdsToken(runnerToken: string, runnerLabels: string): Promise<void> {
     await this.apiPatch('/mmds', {
-      latest: { 'meta-data': { 'runner-token': runnerToken, 'runner-labels': runnerLabels } },
+      latest: { 'meta-data': this.mmdsMetadata(runnerToken, runnerLabels) },
     });
   }
 
@@ -325,25 +327,25 @@ export class FirecrackerVM {
     const kernelPath = this.jailed ? '/vmlinux' : this.cfg.kernelPath;
     const rootfsPath = this.jailed ? '/rootfs.img' : (this.rootfsCopy ?? this.cfg.rootfsPath);
     const vsockPath = this.jailed ? '/vsock.sock' : path.join(this.sockDir, 'vsock.sock');
+    const bootBase = 'console=ttyS0 reboot=k panic=1 pci=off init_on_free=1 nomodule init=/sbin/burstgrid-init';
+    const useMmds = this.shouldUseMmds();
     // Base64 avoids spaces breaking the kernel cmdline's space-delimited tokenizing
     // (an SSH public key looks like "ssh-ed25519 AAAA... comment").
-    const sshArg = this.cfg.sshPublicKey
+    const sshArg = !useMmds && this.cfg.sshPublicKey
       ? ` SSH_PUBKEY_B64=${Buffer.from(this.cfg.sshPublicKey).toString('base64')}`
       : '';
 
-    if (this.cfg.mmdsMode) {
+    if (useMmds) {
       // MMDS mode: token injected after boot/restore via injectMmdsToken(); boot args are minimal
-      const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
-      const cacheArg = this.cfg.cacheServerUrl
-        ? ` ACTIONS_CACHE_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_URL=${this.cfg.cacheServerUrl} ACTIONS_RUNTIME_TOKEN=${this.cfg.workerToken ?? ''}`
-        : '';
       await this.apiPut('/boot-source', {
         kernel_image_path: kernelPath,
-        boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init MMDS_MODE=1 GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${mirrorArg}${cacheArg}${sshArg}`,
+        boot_args: `${bootBase} MMDS_MODE=1 GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}`,
       });
       // Pre-populate MMDS with empty token so guest poll doesn't 404 on first request
       await this.apiPut('/mmds/config', { ipv4_address: '169.254.169.254', network_interfaces: [] });
-      await this.apiPut('/mmds', { latest: { 'meta-data': { 'runner-token': '', 'runner-labels': '' } } });
+      await this.apiPut('/mmds', {
+        latest: { 'meta-data': this.cfg.mmdsMode ? this.mmdsMetadata('', '') : this.mmdsMetadata(this.cfg.runnerToken, this.cfg.runnerLabels) },
+      });
     } else {
       // Boot-arg mode (default): token + labels baked into kernel cmdline
       const mirrorArg = this.cfg.registryMirror ? ` REGISTRY_MIRROR=${this.cfg.registryMirror}` : '';
@@ -354,7 +356,7 @@ export class FirecrackerVM {
       const repoArg = this.cfg.repoUrl ? ` RUNNER_REPO_URL=${this.cfg.repoUrl}` : '';
       await this.apiPut('/boot-source', {
         kernel_image_path: kernelPath,
-        boot_args: `console=ttyS0 reboot=k panic=1 pci=off init=/sbin/burstgrid-init RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels} GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${repoArg}${mirrorArg}${ephemeralArg}${cacheArg}${sshArg}`,
+        boot_args: `${bootBase} RUNNER_TOKEN=${this.cfg.runnerToken} RUNNER_LABELS=${this.cfg.runnerLabels} GUEST_IP=${this.guestIp} GATEWAY=${this.hostIp}${repoArg}${mirrorArg}${ephemeralArg}${cacheArg}${sshArg}`,
       });
     }
     await this.apiPut('/drives/rootfs', {
@@ -378,6 +380,24 @@ export class FirecrackerVM {
       guest_cid: 3,
       uds_path: vsockPath,
     });
+  }
+
+  private shouldUseMmds(): boolean {
+    return this.cfg.mmdsMode === true || this.cfg.secretDelivery !== 'cmdline';
+  }
+
+  private mmdsMetadata(runnerToken: string, runnerLabels: string): Record<string, string> {
+    return {
+      'runner-token': runnerToken,
+      'runner-labels': runnerLabels,
+      'runner-repo-url': this.cfg.repoUrl ?? '',
+      'registry-mirror': this.cfg.registryMirror ?? '',
+      'actions-cache-url': this.cfg.cacheServerUrl ?? '',
+      'actions-runtime-url': this.cfg.cacheServerUrl ?? '',
+      'actions-runtime-token': this.cfg.workerToken ?? '',
+      'runner-ephemeral': this.cfg.runnerEphemeral ? '1' : '0',
+      'ssh-public-key-b64': this.cfg.sshPublicKey ? Buffer.from(this.cfg.sshPublicKey).toString('base64') : '',
+    };
   }
 
   /** Firecracker's management API is served over a Unix domain socket. */

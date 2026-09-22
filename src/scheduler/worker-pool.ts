@@ -17,6 +17,13 @@ interface WorkerState extends WorkerRegistration {
   idleSince: number | null;
 }
 
+export interface WorkerPlacementPolicy {
+  /** Target max vCPU utilization per worker before the scheduler prefers another host. Default: 0.8. */
+  maxPackUtilization?: number;
+  /** Hard cap on active jobs per worker, even if slots/vCPU remain. Unset = no cap beyond slots/resources. */
+  maxActiveJobsPerWorker?: number;
+}
+
 export class WorkerPool {
   private readonly workers = new Map<string, WorkerState>();
   private readonly inflightJobs = new Map<string, Map<string, Job>>();
@@ -30,7 +37,10 @@ export class WorkerPool {
     this.redisWorkers = backend;
   }
 
-  constructor(private readonly onJobsLost?: (jobs: Job[]) => void) {
+  constructor(
+    private readonly onJobsLost?: (jobs: Job[]) => void,
+    private readonly placement: WorkerPlacementPolicy = {},
+  ) {
     this.reapTimer = setInterval(() => {
       const lost = this.reapStale();
       if (lost.length > 0) this.onJobsLost?.(lost);
@@ -113,6 +123,17 @@ export class WorkerPool {
     return jobs;
   }
 
+  /** Drain and unregister the worker running on this EC2 instance ID. */
+  evictByEc2InstanceId(ec2InstanceId: string): { workerId: string; jobs: Job[] } | null {
+    for (const [workerId, worker] of this.workers) {
+      if (worker.ec2InstanceId !== ec2InstanceId && worker.instanceId !== ec2InstanceId) continue;
+      const jobs = this.drainWorkerJobs(workerId);
+      this.unregister(workerId);
+      return { workerId, jobs };
+    }
+    return null;
+  }
+
   /** Active inflight job count for a specific repo. */
   runningJobsFor(owner: string, repo: string): number {
     return this.repoInflight.get(`${owner}/${repo}`) ?? 0;
@@ -173,8 +194,6 @@ export class WorkerPool {
    * different worker instead of packing further, so one bare-metal host doesn't absorb
    * unbounded disk/network contention from too many co-located VMs.
    */
-  private static readonly MAX_PACK_UTILIZATION = 0.8;
-
   /**
    * Best-fit placement: among workers under the density cap, picks the tightest fit
    * (least free vCPUs) so load consolidates onto fewer hosts and idle ones can actually
@@ -188,14 +207,16 @@ export class WorkerPool {
     let packedFreeVcpus = Infinity;
     let overflowId: string | null = null;
     let overflowFreeVcpus = Infinity;
+    const maxPackUtilization = this.placement.maxPackUtilization ?? 0.8;
 
     for (const [id, w] of this.workers) {
       if (w.freeSlots <= 0 || !w.stream?.writable) continue;
+      if (!this.workerCanAcceptMoreJobs(id)) continue;
       if (w.freeVcpus < vcpus || w.freeMemoryMiB < memoryMiB) continue;
       if (!hasAll(w.capabilities, capLabels)) continue;
 
       const utilizationAfter = 1 - (w.freeVcpus - vcpus) / Math.max(w.totalVcpus, 1);
-      if (utilizationAfter <= WorkerPool.MAX_PACK_UTILIZATION) {
+      if (utilizationAfter <= maxPackUtilization) {
         if (w.freeVcpus < packedFreeVcpus) { packedFreeVcpus = w.freeVcpus; packedId = id; }
       } else if (w.freeVcpus < overflowFreeVcpus) {
         overflowFreeVcpus = w.freeVcpus; overflowId = id;
@@ -210,12 +231,14 @@ export class WorkerPool {
 
   get totalFreeVcpus(): number {
     return [...this.workers.values()]
-      .filter(w => w.stream?.writable)
+      .filter(w => w.stream?.writable && this.workerCanAcceptMoreJobs(w.workerId))
       .reduce((s, w) => s + w.freeVcpus, 0);
   }
 
   get totalFreeSlots(): number {
-    return [...this.workers.values()].reduce((s, w) => s + w.freeSlots, 0);
+    return [...this.workers.values()]
+      .filter(w => this.workerCanAcceptMoreJobs(w.workerId))
+      .reduce((s, w) => s + w.freeSlots, 0);
   }
 
   /** Free slots on workers that advertise the given capability tag (autoscaler fleet sizing). */
@@ -229,6 +252,12 @@ export class WorkerPool {
     return [...this.workers.values()]
       .filter(w => w.stream?.writable && (!tag || w.capabilities.includes(tag)))
       .length;
+  }
+
+  private workerCanAcceptMoreJobs(workerId: string): boolean {
+    const max = this.placement.maxActiveJobsPerWorker;
+    if (!max) return true;
+    return (this.inflightJobs.get(workerId)?.size ?? 0) < max;
   }
 
   /**

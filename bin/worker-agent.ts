@@ -3,7 +3,6 @@ import { WorkerAgent } from '../src/worker/agent.js';
 import { detectCapabilities, detectWorkerId } from '../src/worker/detect.js';
 import { loadConfig } from '../src/config/index.js';
 import { startWorkerHealthServer } from '../src/worker/health.js';
-import { SpotMonitor } from '../src/worker/spot.js';
 import { initTelemetry, logEvent } from '../src/telemetry/index.js';
 
 const cfg = loadConfig();
@@ -26,10 +25,9 @@ const {
   BURSTGRID_RUNNER_PATH,
   // Pull-through registry mirror — set to http://<host>:5000 to cache Docker Hub pulls
   BURSTGRID_REGISTRY_MIRROR = cfg.worker?.registryMirror,
+  BURSTGRID_SECRET_DELIVERY = cfg.worker?.secretDelivery ?? 'mmds',
   BURSTGRID_WORKER_TOKEN = '',
   BURSTGRID_HEALTH_PORT = '9090',
-  // SQS queue URL for EventBridge spot interruption warnings (optional)
-  BURSTGRID_SPOT_QUEUE_URL,
   // Run Firecracker through jailer (chroot + dropped-privilege uid/gid). Requires the
   // jailer binary + a writable chroot base dir on the host. Default: false.
   BURSTGRID_USE_JAILER,
@@ -60,21 +58,6 @@ const controller = new AbortController();
 process.once('SIGINT',  () => controller.abort());
 process.once('SIGTERM', () => controller.abort());
 
-if (BURSTGRID_SPOT_QUEUE_URL) {
-  const spotMonitor = new SpotMonitor(BURSTGRID_SPOT_QUEUE_URL);
-  spotMonitor.once('terminating', () => {
-    logEvent('worker-agent', 'warn', 'spot termination imminent — evicting jobs and draining');
-    // Proactively requeue inflight jobs now (2-min warning window).
-    // Falls back to the 30s heartbeat-stale requeue if the scheduler is unreachable.
-    void agent.evict().finally(() => controller.abort());
-  });
-  spotMonitor.on('error', err => logEvent('worker-agent', 'error', 'spot monitor error', err));
-  spotMonitor.start();
-  controller.signal.addEventListener('abort', () => spotMonitor.stop(), { once: true });
-} else {
-  logEvent('worker-agent', 'info', 'BURSTGRID_SPOT_QUEUE_URL not set — spot interruption handling disabled');
-}
-
 const agent = new WorkerAgent({
   schedulerUrl: BURSTGRID_SCHEDULER_URL,
   workerId,
@@ -88,6 +71,7 @@ const agent = new WorkerAgent({
   imageDir: BURSTGRID_IMAGE_DIR,
   runnerPath: BURSTGRID_RUNNER_PATH,
   registryMirror: BURSTGRID_REGISTRY_MIRROR,
+  secretDelivery: BURSTGRID_SECRET_DELIVERY as 'mmds' | 'cmdline',
   workerToken: BURSTGRID_WORKER_TOKEN,
   useJailer: BURSTGRID_USE_JAILER === 'true',
   sshPublicKey: BURSTGRID_SSH_PUBLIC_KEY,

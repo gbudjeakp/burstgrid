@@ -78,8 +78,9 @@ variable "fleets" {
 }
 
 # ── GitHub auth ────────────────────────────────────────────────────────────────
-# Provide EITHER github_token (PAT with repo scope) OR github_app_id + the SSM
-# parameter /burstgrid/github-app-private-key containing the PEM.
+# Provide EITHER github_token (PAT with repo scope) OR github_app_id + a private
+# key.  In the default SSM mode these are read by the scheduler at boot, never
+# rendered into Terraform state or EC2 user data.
 
 variable "github_token" {
   description = "GitHub PAT with repo scope — used to create runner registration tokens"
@@ -103,15 +104,53 @@ variable "scheduler_url_override" {
 }
 
 variable "github_webhook_secret" {
-  description = "HMAC secret for GitHub webhook payload verification"
+  description = "HMAC secret for GitHub webhook payload verification (required only when secret_source=terraform)"
   type        = string
   sensitive   = true
+  nullable    = true
+  default     = null
 }
 
 variable "worker_token" {
-  description = "Shared secret workers present on /v1/workers/* routes"
+  description = "Shared secret workers present on /v1/workers/* routes (required only when secret_source=terraform)"
   type        = string
   sensitive   = true
+  nullable    = true
+  default     = null
+}
+
+variable "secret_source" {
+  description = "Secret delivery mode: ssm (default, fetched by EC2 at boot) or terraform (legacy values rendered into user data)."
+  type        = string
+  default     = "ssm"
+
+  validation {
+    condition     = contains(["ssm", "terraform"], var.secret_source)
+    error_message = "secret_source must be either ssm or terraform."
+  }
+}
+
+variable "ssm_parameter_prefix" {
+  description = "Prefix containing pre-created SecureString parameters: webhook-secret, worker-token, github-token, and github-app-private-key."
+  type        = string
+  default     = "/burstgrid"
+
+  validation {
+    condition     = startswith(var.ssm_parameter_prefix, "/") && !endswith(var.ssm_parameter_prefix, "/")
+    error_message = "ssm_parameter_prefix must start with / and not end with /."
+  }
+}
+
+variable "otel_collector_enabled" {
+  description = "Start the bundled OpenTelemetry Collector on scheduler and workers. Requires the otel-collector-env SecureString under ssm_parameter_prefix."
+  type        = bool
+  default     = false
+}
+
+variable "otel_collector_version" {
+  description = "OpenTelemetry Collector Contrib version to install on non-baked hosts."
+  type        = string
+  default     = "0.116.0"
 }
 
 # ── S3 ─────────────────────────────────────────────────────────────────────────

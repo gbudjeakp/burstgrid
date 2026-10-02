@@ -109,6 +109,25 @@ export function recordSchedulerStart(): void {
     .add(1);
 }
 
+// ─── GitHub API quota (scheduler) ─────────────────────────────────────────────
+// Sampled from the x-ratelimit-* response headers on every GitHub API call. A GitHub App
+// installation's quota (commonly 15,000/hr) is shared across every call this scheduler makes
+// for that org, so this is the only way to see quota draining before a call actually gets rejected.
+
+export function recordGithubRateLimit(owner: string, remaining: number, limit: number): void {
+  const attrs = { owner };
+  getMeter().createGauge('burstgrid.github.rate_limit_remaining', { description: 'Remaining GitHub API calls in the current rate-limit window', unit: 'requests' })
+    .record(remaining, attrs);
+  getMeter().createGauge('burstgrid.github.rate_limit_limit', { description: 'Total GitHub API rate limit for the current window', unit: 'requests' })
+    .record(limit, attrs);
+}
+
+/** Fired when GitHub actually rejects a call for exceeding a rate limit — primary (quota exhausted) or secondary (abuse detection). */
+export function recordGithubRateLimitExceeded(owner: string, kind: 'primary' | 'secondary'): void {
+  getMeter().createCounter('burstgrid.github.rate_limit_exceeded', { description: 'GitHub API calls rejected for exceeding a rate limit', unit: 'requests' })
+    .add(1, { owner, kind });
+}
+
 // ─── Worker-side histograms ───────────────────────────────────────────────────
 
 export function recordVmBootDuration(ms: number): void {

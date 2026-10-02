@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { logEvent, logVmLine, recordSchedulerStart } from '../index.js';
+import { logEvent, logVmLine, recordSchedulerStart, recordGithubRateLimit, recordGithubRateLimitExceeded } from '../index.js';
 
 describe('logEvent', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -36,5 +36,18 @@ describe('logVmLine', () => {
 describe('recordSchedulerStart', () => {
   it('does not throw before initTelemetry() has run', () => {
     expect(() => recordSchedulerStart()).not.toThrow();
+  });
+});
+
+describe('recordGithubRateLimit', () => {
+  it('does not throw before initTelemetry() has run', () => {
+    expect(() => recordGithubRateLimit('acme', 4500, 5000)).not.toThrow();
+  });
+});
+
+describe('recordGithubRateLimitExceeded', () => {
+  it('does not throw before initTelemetry() has run', () => {
+    expect(() => recordGithubRateLimitExceeded('acme', 'primary')).not.toThrow();
+    expect(() => recordGithubRateLimitExceeded('acme', 'secondary')).not.toThrow();
   });
 });

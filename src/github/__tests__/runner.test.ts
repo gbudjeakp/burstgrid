@@ -1,8 +1,24 @@
-import { describe, it, expect, vi } from 'vitest';
-import { AppClient, AppClientRegistry } from '../runner.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { AppClient, AppClientRegistry, RateLimitError } from '../runner.js';
+
+vi.mock('../../telemetry/index.js', () => ({
+  logEvent: vi.fn(),
+  recordGithubRateLimit: vi.fn(),
+  recordGithubRateLimitExceeded: vi.fn(),
+}));
 
 function mockClient(label = 'default'): AppClient {
   return { createRunnerToken: vi.fn().mockResolvedValue(`token-${label}`) } as unknown as AppClient;
+}
+
+function mockResponse(status: number, body: unknown, headers: Record<string, string> = {}): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    headers: new Headers(headers),
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+  } as unknown as Response;
 }
 
 describe('AppClientRegistry', () => {
@@ -62,5 +78,73 @@ describe('AppClientRegistry', () => {
       registry.register('acme', second);
       expect(registry.clientFor('acme')).toBe(second);
     });
+  });
+});
+
+describe('AppClient rate limit handling (PAT mode)', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('reports remaining/limit from response headers on a successful call', async () => {
+    const { recordGithubRateLimit } = await import('../../telemetry/index.js');
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResponse(201, { token: 'tok-123' }, { 'x-ratelimit-remaining': '4999', 'x-ratelimit-limit': '5000' }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = AppClient.fromToken('pat-abc');
+    const token = await client.createRunnerToken('acme', 'repo');
+
+    expect(token).toBe('tok-123');
+    expect(recordGithubRateLimit).toHaveBeenCalledWith('acme', 4999, 5000);
+  });
+
+  it('throws a primary RateLimitError and does not retry once quota is exhausted', async () => {
+    const { recordGithubRateLimitExceeded } = await import('../../telemetry/index.js');
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResponse(403, { message: 'rate limit exceeded' }, {
+        'x-ratelimit-remaining': '0',
+        'x-ratelimit-limit': '5000',
+        'x-ratelimit-reset': '1700000000',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = AppClient.fromToken('pat-abc');
+    const err: unknown = await client.createRunnerToken('acme', 'repo').catch(e => e);
+
+    expect(err).toBeInstanceOf(RateLimitError);
+    expect((err as RateLimitError).kind).toBe('primary');
+    expect((err as RateLimitError).resetAt).toBe(1_700_000_000);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // RateLimitError skips the retry loop — no point burning more quota
+    expect(recordGithubRateLimitExceeded).toHaveBeenCalledWith('acme', 'primary');
+  });
+
+  it('throws a secondary RateLimitError when retry-after is present without remaining=0', async () => {
+    const { recordGithubRateLimitExceeded } = await import('../../telemetry/index.js');
+    const fetchMock = vi.fn().mockResolvedValue(
+      mockResponse(403, { message: 'secondary rate limit' }, {
+        'x-ratelimit-remaining': '100',
+        'x-ratelimit-limit': '5000',
+        'retry-after': '30',
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = AppClient.fromToken('pat-abc');
+    const err: unknown = await client.createRunnerToken('acme', 'repo').catch(e => e);
+
+    expect(err).toBeInstanceOf(RateLimitError);
+    expect((err as RateLimitError).kind).toBe('secondary');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(recordGithubRateLimitExceeded).toHaveBeenCalledWith('acme', 'secondary');
+  });
+
+  it('retries a plain 500 up to the normal attempt count', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(500, { message: 'boom' }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const client = AppClient.fromToken('pat-abc');
+    await expect(client.createRunnerToken('acme', 'repo')).rejects.toThrow('GitHub API 500');
+    expect(fetchMock).toHaveBeenCalledTimes(3); // unrelated failures still get the normal retry budget
   });
 });

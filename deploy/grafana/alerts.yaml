@@ -59,3 +59,15 @@ groups:
         labels: { severity: warning }
         annotations:
           summary: Runner or VM configuration is failing before jobs start.
+      - alert: BurstGridGithubQuotaLow
+        expr: (burstgrid_github_rate_limit_remaining / burstgrid_github_rate_limit_limit) < 0.1
+        for: 2m
+        labels: { severity: warning }
+        annotations:
+          summary: GitHub API quota for this org is below 10% of its window limit.
+      - alert: BurstGridGithubRateLimited
+        expr: increase(burstgrid_github_rate_limit_exceeded_total[5m]) > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: GitHub is actively rejecting API calls for exceeding a rate limit — job dispatch is degraded or stalled for this org.

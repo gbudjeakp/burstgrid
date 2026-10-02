@@ -55,6 +55,16 @@ Set via `runs-on` label: `burstgrid:size=2xlarge`
 | `4xlarge` | 32 | 64 GiB |
 | `8xlarge` | 64 | 128 GiB |
 
+Add a memory-tier axis independent of size with `burstgrid:family=`:
+
+| Label | Memory multiplier |
+|---|---|
+| `general` _(default)_ | 1× — the table above, unchanged |
+| `compute` | 0.5× — same vCPUs, less memory |
+| `memory` | 2× — same vCPUs, more memory |
+
+`runs-on: [self-hosted, burstgrid:size=xlarge, burstgrid:family=memory]` gets 8 vCPU / 16 GiB instead of the default 8 GiB.
+
 ## Worker modes
 
 | `BURSTGRID_MODE` | What happens |

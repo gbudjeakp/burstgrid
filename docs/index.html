@@ -388,6 +388,7 @@
           <a href="#config-env-reference" class="sidebar-link sub">Environment reference</a>
           <a href="#config-runtime" class="sidebar-link sub">Runtime safety</a>
           <a href="#config-spot" class="sidebar-link sub">Spot handling</a>
+          <a href="#config-shape-matrix" class="sidebar-link sub">Shape matrix</a>
           <a href="#config-cache" class="sidebar-link sub">Actions cache</a>
           <a href="#config-concurrency" class="sidebar-link sub">Per-repo limits</a>
           <a href="#config-dynamodb" class="sidebar-link sub">DynamoDB</a>
@@ -1018,6 +1019,15 @@ Next steps:
   <h2 style="margin-top:28px;">Optional feature examples</h2>
   <p class="section-desc">Each feature below activates with one environment variable or a small YAML block.</p>
   <div class="feat-grid">
+
+    <div class="feat-cell" id="config-shape-matrix">
+      <h3>Shape matrix (size &times; family)</h3>
+      <p><code>burstgrid:size=</code> picks the vCPU tier; <code>burstgrid:family=</code> picks an independent memory multiplier &mdash; <code>compute</code> (0.5&times;), <code>general</code> (1&times;, default), or <code>memory</code> (2&times;). Combine both for a full shape matrix without a dedicated size entry per combination.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">runs-on</span>: [self-hosted, <span class="s-str">burstgrid:size=xlarge</span>, <span class="s-str">burstgrid:family=memory</span>]
+<span class="s-cm"># 8 vCPU / 16 GiB instead of the default 8 vCPU / 8 GiB</span></div>
+      </div>
+    </div>
 
     <div class="feat-cell" id="config-cache">
       <h3>GitHub Actions cache (S3)</h3>

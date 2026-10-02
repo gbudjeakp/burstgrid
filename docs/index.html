@@ -1006,7 +1006,7 @@ Next steps:
     </div>
     <div class="feat-cell" id="config-spot">
       <h3>Spot interruption handling</h3>
-      <p>The scheduler consumes the EC2 spot interruption SQS queue centrally, finds the affected worker by EC2 instance ID, drains only that worker's tracked jobs, and requeues them. Workers do not race each other on the shared queue.</p>
+      <p>The scheduler consumes the EC2 spot SQS queue centrally and reacts to two signals, not one. A <strong>rebalance recommendation</strong> (soft, earlier, no guaranteed follow-up) cordons the worker &mdash; stop placing new jobs there, leave running jobs alone &mdash; and immediately asks the autoscaler for replacement capacity instead of waiting on a timer. The hard <strong>interruption warning</strong> (~2 min notice) still drains that worker's tracked jobs now and requeues them. <code>maxPackUtilization</code>/<code>maxActiveJobsPerWorker</code> are static density caps on top of that, not a substitute for it.</p>
       <div class="snippet" style="margin-top:14px;"><div class="snippet-body"><span class="s-key">scheduler</span>:
   <span class="s-key">maxPackUtilization</span>: <span class="s-num">0.7</span>
   <span class="s-key">maxActiveJobsPerWorker</span>: <span class="s-num">8</span>

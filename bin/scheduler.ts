@@ -175,7 +175,7 @@ if (autoscalerEnabled) autoscaler.start();
 else logEvent('scheduler', 'info', 'autoscaler disabled via config');
 
 const spotMonitor = BURSTGRID_SPOT_QUEUE_URL
-  ? new SpotInterruptionMonitor(BURSTGRID_SPOT_QUEUE_URL, pool, queue)
+  ? new SpotInterruptionMonitor(BURSTGRID_SPOT_QUEUE_URL, pool, queue, autoscaler)
   : null;
 spotMonitor?.start();
 

@@ -117,7 +117,8 @@ resource "aws_iam_instance_profile" "worker" {
 }
 
 # ── SQS queue: spot interruption warnings ─────────────────────────────────────
-# EC2 Spot interruption notice → EventBridge → SQS → worker-agent (graceful drain)
+# EC2 Spot interruption notice + rebalance recommendation → EventBridge → SQS →
+# scheduler (graceful drain; rebalance cordons ahead of the hard warning)
 
 resource "aws_sqs_queue" "spot_interruptions" {
   name                       = "burstgrid-spot-interruptions"
@@ -143,10 +144,13 @@ resource "aws_sqs_queue_policy" "spot_interruptions" {
 
 resource "aws_cloudwatch_event_rule" "spot_interruption" {
   name        = "burstgrid-spot-interruption"
-  description = "EC2 Spot Instance Interruption Warning → SQS"
+  description = "EC2 Spot Instance Interruption Warning + Rebalance Recommendation → SQS"
   event_pattern = jsonencode({
-    source      = ["aws.ec2"]
-    detail-type = ["EC2 Spot Instance Interruption Warning"]
+    source = ["aws.ec2"]
+    detail-type = [
+      "EC2 Spot Instance Interruption Warning",
+      "EC2 Instance Rebalance Recommendation",
+    ]
   })
   tags = var.tags
 }

@@ -96,6 +96,19 @@ export function recordRunnerSetupFailure(mode: string): void {
     .add(1, { mode });
 }
 
+/**
+ * Emitted once per process start. On its own this is a crash-loop detector
+ * (many starts in a short window under systemd Restart=always); combined with
+ * absent_over_time() on any always-on gauge (e.g. burstgrid.queue.depth) it also
+ * covers "the scheduler stopped reporting metrics at all" — neither failure mode
+ * is caught by the symptom-based alerts (queue depth, launch failures, etc.),
+ * which all assume the scheduler process is alive and exporting in the first place.
+ */
+export function recordSchedulerStart(): void {
+  getMeter().createCounter('burstgrid.scheduler.starts', { description: 'Scheduler process starts — spikes indicate a crash loop', unit: 'starts' })
+    .add(1);
+}
+
 // ─── Worker-side histograms ───────────────────────────────────────────────────
 
 export function recordVmBootDuration(ms: number): void {

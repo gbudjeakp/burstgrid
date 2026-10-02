@@ -2,6 +2,25 @@
 # group into Grafana Alerting (or Prometheus rule_files) and route the alerts to
 # the on-call receiver used by your organization.
 groups:
+  - name: burstgrid-scheduler-health
+    rules:
+      # The capacity/EC2 alerts below all assume the scheduler process is alive
+      # and still pushing metrics. Neither failure mode here is covered by them:
+      # a dead process emits nothing at all, so absent_over_time() is the only
+      # signal — and a fast crash loop can keep emitting just often enough that
+      # absence never trips, which is what burstgrid_scheduler_starts_total catches.
+      - alert: BurstGridSchedulerDown
+        expr: absent_over_time(burstgrid_queue_depth[5m])
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: No scheduler metrics received in 5 minutes — the process is likely down or disconnected from the OTel pipeline.
+      - alert: BurstGridSchedulerCrashLooping
+        expr: increase(burstgrid_scheduler_starts_total[10m]) > 3
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: Scheduler has restarted more than 3 times in 10 minutes — likely crash-looping.
   - name: burstgrid-capacity
     rules:
       - alert: BurstGridQueuedJobsTooOld

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { logEvent, logVmLine } from '../index.js';
+import { logEvent, logVmLine, recordSchedulerStart } from '../index.js';
 
 describe('logEvent', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -30,5 +30,11 @@ describe('logEvent', () => {
 describe('logVmLine', () => {
   it('no-ops before initTelemetry() has run', () => {
     expect(() => logVmLine({ jobId: 'j', vmId: 'v', workerId: 'w' }, 'boot line')).not.toThrow();
+  });
+});
+
+describe('recordSchedulerStart', () => {
+  it('does not throw before initTelemetry() has run', () => {
+    expect(() => recordSchedulerStart()).not.toThrow();
   });
 });

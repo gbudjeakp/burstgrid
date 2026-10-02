@@ -196,6 +196,25 @@ EIP otherwise, so nothing else changes.
 This covers failure recovery, not zero-downtime rolling deploys — a new
 launch template version still requires a manual ASG instance refresh.
 
+### Knowing when the scheduler itself is down
+
+The alerts in `deploy/grafana/alerts.yaml` mostly describe symptoms (queue
+backed up, no capable workers, VM boot slow) that assume the scheduler
+process is alive and still exporting metrics. Two alerts specifically detect
+the scheduler itself being unhealthy:
+
+- `BurstGridSchedulerDown` — fires on `absent_over_time()` of a core gauge;
+  a dead process or a broken OTel pipeline emits nothing at all, so absence
+  is the only signal available.
+- `BurstGridSchedulerCrashLooping` — fires on repeated process starts in a
+  short window (`burstgrid.scheduler.starts`, emitted once per boot), which
+  catches a crash loop fast enough to dodge the absence check above.
+
+Both depend on the scheduler's own OTel export path working at all. For a
+fully independent signal, add an external uptime check (e.g. Grafana
+Synthetic Monitoring, UptimeRobot, or a CloudWatch alarm on the HA mode's ALB
+target group) against `GET /health` from outside the VPC.
+
 ### 2. Bake the worker AMI (recommended)
 
 ```bash

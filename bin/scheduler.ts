@@ -8,7 +8,7 @@ import { AppClient, AppClientRegistry } from '../src/github/runner.js';
 import { registerWebhookRoute } from '../src/github/webhook.js';
 import { Autoscaler, type TierFleet } from '../src/fleet/autoscaler.js';
 import { loadConfig } from '../src/config/index.js';
-import { initTelemetry, registerSchedulerObservers, logEvent } from '../src/telemetry/index.js';
+import { initTelemetry, registerSchedulerObservers, recordSchedulerStart, logEvent } from '../src/telemetry/index.js';
 import { createBackends } from '../src/backends/index.js';
 import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
 import { JobWatchdog } from '../src/scheduler/watchdog.js';
@@ -19,6 +19,7 @@ import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../src/telemetry/
 import type { IJobHistoryBackend } from '../src/backends/types.js';
 
 await initTelemetry('burstgrid-scheduler');
+recordSchedulerStart();
 
 const cfg = loadConfig();
 

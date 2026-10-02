@@ -99,6 +99,13 @@ export class Autoscaler {
     await this.scaleUpGlobal();
   }
 
+  /** Run a scale-up/down pass immediately instead of waiting for the next timer tick —
+   *  used when an external signal (e.g. a spot rebalance recommendation) indicates capacity
+   *  may be lost soon, so a replacement can be requested before the deficit actually hits. */
+  async triggerEvaluation(): Promise<void> {
+    await this.evaluate();
+  }
+
   /**
    * Terminate workers that have been fully idle longer than the shortest
    * scaleDownAfterIdleSec across all fleets, plus any idle worker past its maxWorkerAgeSec

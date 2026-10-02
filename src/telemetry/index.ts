@@ -97,6 +97,16 @@ export function recordRunnerSetupFailure(mode: string): void {
 }
 
 /**
+ * Tracks how often each EC2 spot capacity signal fires. A rising rate of either kind, especially
+ * for one instance type/AZ, is a real early-warning indicator — unlike a static packing-density
+ * knob, this reflects actual observed risk instead of an operator's upfront guess at it.
+ */
+export function recordSpotSignal(kind: 'interruption' | 'rebalance'): void {
+  getMeter().createCounter('burstgrid.spot.signals', { description: 'EC2 spot interruption warnings and rebalance recommendations received', unit: 'signals' })
+    .add(1, { kind });
+}
+
+/**
  * Emitted once per process start. On its own this is a crash-loop detector
  * (many starts in a short window under systemd Restart=always); combined with
  * absent_over_time() on any always-on gauge (e.g. burstgrid.queue.depth) it also

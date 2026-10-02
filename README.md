@@ -258,7 +258,7 @@ Idle workers terminate automatically after 300 s. One warm standby is kept per f
 
 ### Spot interruption blast radius
 
-BurstGrid bin-packs by default so idle hosts can drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. For production, cap placement density and active jobs per worker:
+BurstGrid bin-packs by default so idle hosts can drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. `maxPackUtilization` and `maxActiveJobsPerWorker` are static operator-set caps for this — useful, but they're a manual guess at risk, not a response to it:
 
 ```yaml
 scheduler:
@@ -266,7 +266,12 @@ scheduler:
   maxActiveJobsPerWorker: 8   # even a 32-slot metal host only gets 8 active jobs
 ```
 
-The scheduler handles EC2 spot interruption warnings centrally and requeues jobs from the affected worker. Critical fleets can use `capacityType: on-demand`. See the [docs site](https://gbudjeakp.github.io/burstgrid/#config-spot) for the full tradeoff and checkpointing guidance.
+The scheduler also reacts automatically to two real-time signals AWS sends before capacity is actually lost, which is the closer thing to a failsafe:
+
+- **EC2 Instance Rebalance Recommendation** — a soft, earlier warning with no guaranteed follow-up. The scheduler cordons that worker (stops placing *new* jobs there, leaves jobs already running alone) and immediately asks the autoscaler for replacement capacity instead of waiting on a timer.
+- **EC2 Spot Instance Interruption Warning** — the hard ~2-minute notice. Handled as before: drain the worker's tracked jobs now and requeue them.
+
+Both arrive over the same SQS queue the scheduler already consumes centrally — no per-worker polling, no race on who gets to handle the message. Critical fleets can still use `capacityType: on-demand` to opt out of spot risk entirely. See the [docs site](https://gbudjeakp.github.io/burstgrid/#config-spot) for the full tradeoff and checkpointing guidance.
 
 See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
 The deploy command also uploads the collector configuration. Import

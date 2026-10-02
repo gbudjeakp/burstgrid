@@ -320,4 +320,51 @@ describe('WorkerPool', () => {
       ]));
     });
   });
+
+  describe('cordon', () => {
+    it('excludes a cordoned worker from bestWorker without touching its running jobs', () => {
+      pool.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool.setStream('w1', mockStream());
+      pool.trackJob('w1', job('already-running'));
+
+      expect(pool.cordon('w1')).toBe(true);
+      expect(pool.isCordoned('w1')).toBe(true);
+      expect(pool.bestWorker(['linux'], 2, 2_048)).toBeNull();
+      expect(pool.drainWorkerJobs('w1')).toHaveLength(1); // job tracking untouched by cordon
+    });
+
+    it('excludes cordoned capacity from totalFreeVcpus/totalFreeSlots so the autoscaler sees a deficit', () => {
+      pool.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool.setStream('w1', mockStream());
+      pool.cordon('w1');
+
+      expect(pool.totalFreeVcpus).toBe(0);
+      expect(pool.totalFreeSlots).toBe(0);
+    });
+
+    it('returns false when cordoning an unknown worker', () => {
+      expect(pool.cordon('ghost')).toBe(false);
+    });
+
+    it('findWorkerByEc2InstanceId resolves a worker without evicting it', () => {
+      pool.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool.setStream('w1', mockStream());
+
+      expect(pool.findWorkerByEc2InstanceId('i-abc123')).toBe('w1');
+      expect(pool.hasWorker('w1')).toBe(true);
+    });
+
+    it('findWorkerByEc2InstanceId returns null for an unknown instance', () => {
+      expect(pool.findWorkerByEc2InstanceId('i-missing')).toBeNull();
+    });
+
+    it('preserves cordoned state across re-registration', () => {
+      pool.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' });
+      pool.setStream('w1', mockStream());
+      pool.cordon('w1');
+
+      pool.register({ ...reg('w1'), ec2InstanceId: 'i-abc123' }); // e.g. heartbeat reconnect
+      expect(pool.isCordoned('w1')).toBe(true);
+    });
+  });
 });

@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.13.0](https://github.com/gbudjeakp/burstgrid/compare/v1.12.0...v1.13.0) (2026-10-02)
+
+
+### Features
+
+* add burstgrid:family shape-matrix axis (compute/general/memory) ([f052704](https://github.com/gbudjeakp/burstgrid/commit/f052704bfa71d7ea7508ee434443e0b14ffae12b))
+* alert on the scheduler itself being down, not just symptoms ([6ac1986](https://github.com/gbudjeakp/burstgrid/commit/6ac1986b65aa25c55184d6d8c3a2108df5bba8d4))
+* harden VM secret delivery and cap spot blast radius ([772e65a](https://github.com/gbudjeakp/burstgrid/commit/772e65ab18abb7ea153afc91dfacc6faa654bfec))
+* opt-in scheduler HA (ALB + self-healing ASG) ([3887aa1](https://github.com/gbudjeakp/burstgrid/commit/3887aa1116f409ede566bfec99917c7e140b85ef))
+
+
+### Bug Fixes
+
+* centralize spot interruption handling in scheduler ([e84769f](https://github.com/gbudjeakp/burstgrid/commit/e84769f863b5eef30158adcc9c8152db4e1c0ca1))
+* tflint coalesce() errors in main.tf ([32e6d61](https://github.com/gbudjeakp/burstgrid/commit/32e6d614d71da494505d34e0a5f1d98c55dacd91))
+
 ## [1.12.0](https://github.com/gbudjeakp/burstgrid/compare/v1.11.0...v1.12.0) (2026-09-08)
 
 

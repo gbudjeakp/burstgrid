@@ -82,12 +82,14 @@ module "nat" {
 module "worker_fleet" {
   source = "./modules/worker-fleet"
 
-  vpc_id                     = var.vpc_id
-  subnet_ids                 = [for s in aws_subnet.worker_private : s.id]
-  ami                        = var.worker_ami
-  scheduler_url              = coalesce(var.scheduler_url_override, module.scheduler.scheduler_url)
+  vpc_id     = var.vpc_id
+  subnet_ids = [for s in aws_subnet.worker_private : s.id]
+  ami        = var.worker_ami
+  # coalesce() errors if every argument is null/empty, which var.scheduler_url_override's
+  # default ("") plus an unresolved module output would trigger at lint/plan time.
+  scheduler_url              = var.scheduler_url_override != "" ? var.scheduler_url_override : module.scheduler.scheduler_url
   fleets                     = var.fleets
-  worker_token               = coalesce(var.worker_token, "")
+  worker_token               = var.worker_token != null ? var.worker_token : ""
   secret_source              = var.secret_source
   worker_token_ssm_parameter = "${var.ssm_parameter_prefix}/worker-token"
   otel_collector_enabled     = var.otel_collector_enabled
@@ -121,14 +123,16 @@ locals {
 module "scheduler" {
   source = "./modules/scheduler"
 
-  vpc_id                       = var.vpc_id
-  subnet_id                    = var.scheduler_subnet_id
-  ha_enabled                   = var.scheduler_ha_enabled
-  subnet_ids                   = var.scheduler_ha_enabled ? var.scheduler_subnet_ids : []
-  ami                          = var.scheduler_ami
-  instance_type                = var.scheduler_instance_type
-  webhook_secret               = coalesce(var.github_webhook_secret, "")
-  worker_token                 = coalesce(var.worker_token, "")
+  vpc_id        = var.vpc_id
+  subnet_id     = var.scheduler_subnet_id
+  ha_enabled    = var.scheduler_ha_enabled
+  subnet_ids    = var.scheduler_ha_enabled ? var.scheduler_subnet_ids : []
+  ami           = var.scheduler_ami
+  instance_type = var.scheduler_instance_type
+  # Same coalesce(x, "") pitfall as above — both args are empty/null when the
+  # var is unset (the default, SSM-backed path), which coalesce() treats as an error.
+  webhook_secret               = var.github_webhook_secret != null ? var.github_webhook_secret : ""
+  worker_token                 = var.worker_token != null ? var.worker_token : ""
   github_token                 = var.github_token
   github_app_id                = var.github_app_id
   secret_source                = var.secret_source

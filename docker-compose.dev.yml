@@ -1,4 +1,12 @@
 services:
+  # Local AWS emulator (DynamoDB/SQS/S3/etc.) for the optional backends in src/backends/ —
+  # point BURSTGRID_DYNAMODB_TABLE / BURSTGRID_SQS_QUEUE_URL and AWS_ENDPOINT_URL=http://floci:4566
+  # at it instead of real AWS when developing or testing those backends locally.
+  floci:
+    image: floci/floci:latest
+    ports:
+      - "4566:4566"
+
   # Pull-through cache for Docker Hub — VMs configure this as their registry mirror.
   # Add more proxy instances for ECR/GHCR/GCR if needed (registry:2 supports one upstream each).
   registry:

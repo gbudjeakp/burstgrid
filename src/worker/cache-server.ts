@@ -37,7 +37,9 @@ export class CacheServer {
   public port = 0;
 
   constructor(private readonly cfg: CacheServerConfig) {
-    this.s3 = new S3Client({ region: cfg.region });
+    // Path-style addressing works against every S3-compatible endpoint (real AWS, MinIO, local
+    // emulators); virtual-hosted-style depends on wildcard DNS/Host-header support we can't assume.
+    this.s3 = new S3Client({ region: cfg.region, forcePathStyle: true });
     this.bucket = cfg.bucketName;
     this.prefix = cfg.keyPrefix?.replace(/\/$/, '') ?? 'actions-cache';
     this.token = cfg.workerToken;

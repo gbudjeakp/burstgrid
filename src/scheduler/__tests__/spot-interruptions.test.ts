@@ -12,7 +12,7 @@ vi.mock('@aws-sdk/client-sqs', () => {
   return { SQSClient, ReceiveMessageCommand, DeleteMessageCommand };
 });
 
-vi.mock('../../telemetry/index.js', () => ({ logEvent: vi.fn() }));
+vi.mock('../../telemetry/index.js', () => ({ logEvent: vi.fn(), recordSpotSignal: vi.fn() }));
 
 function mockStream() {
   return { writable: true, writableEnded: false, write: vi.fn() } as unknown as ServerResponse;
@@ -23,7 +23,7 @@ function job(id: string): Job {
 }
 
 describe('SpotInterruptionMonitor', () => {
-  it('requeues jobs from the worker running on the interrupted EC2 instance', () => {
+  it('requeues jobs from the worker running on the interrupted EC2 instance', async () => {
     const pool = new WorkerPool();
     const queue = new JobQueue();
     pool.register({
@@ -42,7 +42,7 @@ describe('SpotInterruptionMonitor', () => {
     pool.trackJob('worker-1', job('job-b'));
 
     const monitor = new SpotInterruptionMonitor('https://sqs.us-east-1.amazonaws.com/123/spot', pool, queue);
-    (monitor as unknown as { handleMessage(body: string): void }).handleMessage(JSON.stringify({
+    await (monitor as unknown as { handleMessage(body: string): Promise<void> }).handleMessage(JSON.stringify({
       'detail-type': 'EC2 Spot Instance Interruption Warning',
       time: '2026-09-21T10:00:00Z',
       detail: { 'instance-id': 'i-spot123' },
@@ -52,13 +52,58 @@ describe('SpotInterruptionMonitor', () => {
     expect(pool.hasWorker('worker-1')).toBe(false);
   });
 
-  it('leaves the queue unchanged for an unknown interrupted instance', () => {
+  it('leaves the queue unchanged for an unknown interrupted instance', async () => {
     const pool = new WorkerPool();
     const queue = new JobQueue();
     const monitor = new SpotInterruptionMonitor('https://sqs.us-east-1.amazonaws.com/123/spot', pool, queue);
 
-    (monitor as unknown as { handleMessage(body: string): void }).handleMessage(JSON.stringify({
+    await (monitor as unknown as { handleMessage(body: string): Promise<void> }).handleMessage(JSON.stringify({
       'detail-type': 'EC2 Spot Instance Interruption Warning',
+      detail: { 'instance-id': 'i-missing' },
+    }));
+
+    expect(queue.depth).toBe(0);
+  });
+
+  it('cordons (not evicts) the worker on a rebalance recommendation and triggers an immediate autoscaler evaluation', async () => {
+    const pool = new WorkerPool();
+    const queue = new JobQueue();
+    pool.register({
+      workerId: 'worker-2',
+      instanceId: 'worker-2',
+      ec2InstanceId: 'i-rebalance1',
+      region: 'us-east-1',
+      availabilityZone: 'us-east-1a',
+      totalSlots: 4,
+      totalVcpus: 8,
+      totalMemoryMiB: 16_384,
+      capabilities: ['linux'],
+    });
+    pool.setStream('worker-2', mockStream());
+    pool.trackJob('worker-2', job('job-a'));
+
+    const triggerEvaluation = vi.fn().mockResolvedValue(undefined);
+    const autoscaler = { triggerEvaluation } as unknown as import('../../fleet/autoscaler.js').Autoscaler;
+    const monitor = new SpotInterruptionMonitor('https://sqs.us-east-1.amazonaws.com/123/spot', pool, queue, autoscaler);
+
+    await (monitor as unknown as { handleMessage(body: string): Promise<void> }).handleMessage(JSON.stringify({
+      'detail-type': 'EC2 Instance Rebalance Recommendation',
+      detail: { 'instance-id': 'i-rebalance1' },
+    }));
+
+    expect(pool.isCordoned('worker-2')).toBe(true);
+    expect(pool.hasWorker('worker-2')).toBe(true); // still registered — job keeps running
+    expect(queue.depth).toBe(0); // nothing requeued — the worker wasn't evicted
+    expect(triggerEvaluation).toHaveBeenCalledOnce();
+  });
+
+  it('no-ops a rebalance recommendation for an unknown instance', async () => {
+    const pool = new WorkerPool();
+    const queue = new JobQueue();
+    const monitor = new SpotInterruptionMonitor('https://sqs.us-east-1.amazonaws.com/123/spot', pool, queue);
+
+    await (monitor as unknown as { handleMessage(body: string): Promise<void> }).handleMessage(JSON.stringify({
+      'detail-type': 'EC2 Instance Rebalance Recommendation',
       detail: { 'instance-id': 'i-missing' },
     }));
 

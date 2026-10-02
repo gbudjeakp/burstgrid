@@ -15,6 +15,9 @@ interface WorkerState extends WorkerRegistration {
   stream: ServerResponse | null;
   /** Timestamp when the worker last became fully idle (freeSlots === totalSlots); null while busy. */
   idleSince: number | null;
+  /** True once AWS signals this instance may be reclaimed soon (rebalance recommendation) —
+   *  stops new job placement here without touching jobs already running. */
+  cordoned: boolean;
 }
 
 export interface WorkerPlacementPolicy {
@@ -59,6 +62,7 @@ export class WorkerPool {
       stream:        existing?.stream ?? null,
       idleSince:     existing?.idleSince ?? Date.now(),
       registeredAt:  existing?.registeredAt ?? Date.now(),
+      cordoned:      existing?.cordoned ?? false,
     };
     this.workers.set(reg.workerId, state);
     void this.redisWorkers?.upsert({
@@ -132,6 +136,31 @@ export class WorkerPool {
       return { workerId, jobs };
     }
     return null;
+  }
+
+  /** Look up a worker by EC2 instance ID without touching it — used to cordon ahead of an eviction. */
+  findWorkerByEc2InstanceId(ec2InstanceId: string): string | null {
+    for (const [workerId, worker] of this.workers) {
+      if (worker.ec2InstanceId === ec2InstanceId || worker.instanceId === ec2InstanceId) return workerId;
+    }
+    return null;
+  }
+
+  /**
+   * Stop placing new jobs on this worker without touching jobs already running on it —
+   * a soft response to an early "this capacity may be reclaimed soon" signal (e.g. an EC2
+   * rebalance recommendation), as opposed to evictByEc2InstanceId's hard, immediate drain
+   * for the actual 2-minute interruption warning.
+   */
+  cordon(workerId: string): boolean {
+    const w = this.workers.get(workerId);
+    if (!w) return false;
+    w.cordoned = true;
+    return true;
+  }
+
+  isCordoned(workerId: string): boolean {
+    return this.workers.get(workerId)?.cordoned ?? false;
   }
 
   /** Active inflight job count for a specific repo. */
@@ -210,7 +239,7 @@ export class WorkerPool {
     const maxPackUtilization = this.placement.maxPackUtilization ?? 0.8;
 
     for (const [id, w] of this.workers) {
-      if (w.freeSlots <= 0 || !w.stream?.writable) continue;
+      if (w.freeSlots <= 0 || !w.stream?.writable || w.cordoned) continue;
       if (!this.workerCanAcceptMoreJobs(id)) continue;
       if (w.freeVcpus < vcpus || w.freeMemoryMiB < memoryMiB) continue;
       if (!hasAll(w.capabilities, capLabels)) continue;
@@ -231,13 +260,13 @@ export class WorkerPool {
 
   get totalFreeVcpus(): number {
     return [...this.workers.values()]
-      .filter(w => w.stream?.writable && this.workerCanAcceptMoreJobs(w.workerId))
+      .filter(w => w.stream?.writable && !w.cordoned && this.workerCanAcceptMoreJobs(w.workerId))
       .reduce((s, w) => s + w.freeVcpus, 0);
   }
 
   get totalFreeSlots(): number {
     return [...this.workers.values()]
-      .filter(w => this.workerCanAcceptMoreJobs(w.workerId))
+      .filter(w => !w.cordoned && this.workerCanAcceptMoreJobs(w.workerId))
       .reduce((s, w) => s + w.freeSlots, 0);
   }
 

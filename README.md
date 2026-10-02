@@ -4,18 +4,16 @@
 
 Self-hosted GitHub Actions runners on Firecracker microVMs. A TypeScript scheduler receives `workflow_job` webhooks, dispatches jobs to EC2 bare-metal hosts over SSE, and each job boots into a dedicated microVM in under 200 ms — isolated kernel, isolated disk, destroyed on exit.
 
-**Good fit:** 20+ concurrent jobs, strict isolation (SOC 2/HIPAA), or mixed CPU + GPU pipelines.  
+**Good fit:** 20+ concurrent jobs, strict isolation (SOC 2/HIPAA), or mixed CPU + GPU pipelines.
 **Not a fit:** <50 jobs/day, already on Kubernetes (use [ARC](https://github.com/actions/actions-runner-controller)), or highly variable load.
 
-→ [Full docs](https://gbudjeakp.github.io/burstgrid/)
+→ **[Full docs](https://gbudjeakp.github.io/burstgrid/)** — setup guide, env var reference, production deploy, HA, spot handling, observability.
 
 ## Quick start
 
 ```bash
 # Docker (scheduler + simulated worker)
 docker compose -f docker-compose.dev.yml up
-
-# Inject test jobs
 node --import tsx/esm scripts/inject-job.ts --count 3
 ```
 
@@ -23,55 +21,13 @@ Without Docker:
 
 ```bash
 pnpm install
-
-# Terminal 1 — scheduler
 NODE_ENV=development BURSTGRID_WEBHOOK_SECRET="" GITHUB_TOKEN=dev \
-  node --import tsx/esm bin/scheduler.ts
-
-# Terminal 2 — simulate worker (no Firecracker needed)
-BURSTGRID_MODE=simulate node --import tsx/esm bin/worker-agent.ts
-
-# Terminal 3 — inject test jobs
-node --import tsx/esm scripts/inject-job.ts --count 5 --size large
+  node --import tsx/esm bin/scheduler.ts                      # terminal 1
+BURSTGRID_MODE=simulate node --import tsx/esm bin/worker-agent.ts  # terminal 2
+node --import tsx/esm scripts/inject-job.ts --count 5 --size large # terminal 3
 ```
 
-Forward real webhooks locally:
-
-```bash
-gh webhook forward --repo=owner/repo --events=workflow_job --url=http://localhost:8080/webhook/github
-```
-
-## VM sizes
-
-Set via `runs-on` label: `burstgrid:size=2xlarge`
-
-| Label | vCPU | Memory |
-|---|---|---|
-| `small` | 1 | 1 GiB |
-| `medium` _(default)_ | 2 | 2 GiB |
-| `large` | 4 | 4 GiB |
-| `xlarge` | 8 | 8 GiB |
-| `2xlarge` | 16 | 32 GiB |
-| `4xlarge` | 32 | 64 GiB |
-| `8xlarge` | 64 | 128 GiB |
-
-Add a memory-tier axis independent of size with `burstgrid:family=`:
-
-| Label | Memory multiplier |
-|---|---|
-| `general` _(default)_ | 1× — the table above, unchanged |
-| `compute` | 0.5× — same vCPUs, less memory |
-| `memory` | 2× — same vCPUs, more memory |
-
-`runs-on: [self-hosted, burstgrid:size=xlarge, burstgrid:family=memory]` gets 8 vCPU / 16 GiB instead of the default 8 GiB.
-
-## Worker modes
-
-| `BURSTGRID_MODE` | What happens |
-|---|---|
-| `firecracker` _(default)_ | Boots a Firecracker microVM per job |
-| `process` | Spawns the runner directly — for GPU hosts (no PCIe passthrough in Firecracker) |
-| `simulate` | 2 s no-op — local dev and testing, no KVM needed |
+Forward real webhooks locally: `gh webhook forward --repo=owner/repo --events=workflow_job --url=http://localhost:8080/webhook/github`
 
 ## Workflows
 
@@ -82,197 +38,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: pnpm test
-
-  ml-job:
-    runs-on: [self-hosted, linux, gpu, burstgrid:size=4xlarge]
-    steps:
-      - run: python train.py
 ```
+
+Size via `burstgrid:size=` (small → 8xlarge) and memory tier via `burstgrid:family=compute|general|memory` — see the [docs](https://gbudjeakp.github.io/burstgrid/#config-shape-matrix) for the full table.
 
 ## Configuration
 
-Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`). All YAML keys are **camelCase** and can also be set through environment variables.
+Config lives in `burstgrid.config.yaml` (or `BURSTGRID_CONFIG=/path/to/config.yaml`) — camelCase keys, every one also settable via env var. Full required/optional reference: [docs site](https://gbudjeakp.github.io/burstgrid/#configuration).
 
-For the complete required/optional environment variable reference, see the [docs site](https://gbudjeakp.github.io/burstgrid/#configuration).
+Run `npx burstgrid doctor` before a real test or production rollout — it checks local config and prints exact overrides for safer defaults.
 
-Before a real test or production rollout, run the preflight checker:
-
-```bash
-npx burstgrid doctor
-```
-
-It checks local config and prints exact env/config overrides for safer defaults: MMDS secret delivery, snapshot pool, placement density, and max active jobs per worker.
-
-### Per-repo concurrency limits
-
-Prevent any one repo from consuming all runners:
-
-```yaml
-scheduler:
-  defaultRepoConcurrency: 10    # fallback for any repo not listed below
-  concurrencyLimits:
-    myorg/*: 20                 # org-wide cap (all repos in myorg)
-    myorg/monorepo: 5           # repo-specific cap (takes priority over org wildcard)
-```
-
-Or via env var: `BURSTGRID_REPO_CONCURRENCY=10` (sets `defaultRepoConcurrency`).
-
-Jobs over the limit stay queued and are dispatched as running jobs complete — the autoscaler still scales up workers for them normally.
-
-## Production setup
-
-Workers run on stock Ubuntu 24.04 — no custom AMI required. They pull the agent binary from S3 at boot, install the Actions runner, and connect to the scheduler automatically.
-
-### 1. Configure Terraform
-
-Fill in `deploy/terraform/terraform.tfvars`:
-
-```hcl
-aws_region          = "us-east-1"
-vpc_id              = "vpc-xxxxxxxx"
-scheduler_subnet_id = "subnet-xxxxxxxx"   # public subnet (receives GitHub webhooks)
-nat_subnet_id       = "subnet-xxxxxxxx"
-scheduler_ami       = "ami-xxxxxxxx"       # stock Ubuntu 24.04 ARM64
-worker_ami          = "ami-xxxxxxxx"       # recommended: output of `npx burstgrid bake-ami` (stock Ubuntu also works, slower boot)
-s3_artifacts_bucket = "my-burstgrid-bucket"
-```
-
-By default, production secrets come from SSM Parameter Store instead of
-`terraform.tfvars` or EC2 user data. Before applying Terraform, create these
-`SecureString` parameters (adjust `ssm_parameter_prefix` if needed):
+## Production deploy
 
 ```bash
-aws ssm put-parameter --name /burstgrid/webhook-secret --type SecureString --value '...'
-aws ssm put-parameter --name /burstgrid/worker-token --type SecureString --value '...'
-aws ssm put-parameter --name /burstgrid/github-app-private-key --type SecureString --value "$(cat app.pem)"
-# Or, for PAT authentication:
-aws ssm put-parameter --name /burstgrid/github-token --type SecureString --value 'ghp_...'
+npx burstgrid setup      # detect VPC/AMI, generate secrets in SSM, write terraform.tfvars
+npx burstgrid bake-ami   # optional — pre-installs Firecracker/runner/rootfs for faster worker boot
+npx burstgrid deploy     # build, upload to S3, terraform apply
+npx burstgrid init       # write launch template IDs into burstgrid.config.yaml
 ```
 
-Set `secret_source = "terraform"` only if you explicitly accept secrets in
-Terraform state and launch user data; that compatibility mode requires
-`webhook_secret` and `worker_token` in `terraform.tfvars`.
+Then register a GitHub App (or PAT) webhook at `https://your-scheduler/webhook/github` for `workflow_job` events, and point workflows at `runs-on: [self-hosted, burstgrid:size=large]`.
 
-### OpenTelemetry collector
-
-The collector configuration already in `deploy/otel-collector/collector.yaml`
-is wired into both EC2 roles when enabled. Store its exporter environment as a
-multi-line SSM SecureString, then enable it in `terraform.tfvars`:
-
-```bash
-aws ssm put-parameter --name /burstgrid/otel-collector-env --type SecureString \
-  --value $'GRAFANA_OTLP_ENDPOINT=https://.../otlp\nGRAFANA_INSTANCE_ID=123\nGRAFANA_API_KEY=...'
-```
-
-```hcl
-otel_collector_enabled = true
-```
-
-On launch, the scheduler and workers run `otelcol-contrib` locally, load that
-environment without putting credentials in user data, and export app telemetry
-to `http://127.0.0.1:4318`. The setting defaults to `false` because the checked
-in collector pipeline requires exporter credentials.
-
-### Scheduler availability (HA)
-
-By default the scheduler is a single EC2 instance with a directly-associated
-Elastic IP. If that instance dies or is rebooting, webhooks fail outright
-until someone re-associates the EIP to a replacement.
-
-Set `scheduler_ha_enabled = true` to run it behind an ALB (stable DNS name)
-and a self-healing Auto Scaling Group (`desired=1`) instead:
-
-```hcl
-scheduler_ha_enabled = true
-scheduler_subnet_ids  = ["subnet-aaaa", "subnet-bbbb"]  # 2+ public subnets, different AZs
-```
-
-The ASG automatically relaunches the scheduler on an EC2 status-check or ALB
-`/health/ready` failure — no manual `terraform apply` or EIP reassociation.
-Point the GitHub webhook and `BURSTGRID_SCHEDULER_URL` at the `scheduler_url`
-Terraform output either way; it resolves to the ALB DNS name in HA mode or the
-EIP otherwise, so nothing else changes.
-
-This covers failure recovery, not zero-downtime rolling deploys — a new
-launch template version still requires a manual ASG instance refresh.
-
-### Knowing when the scheduler itself is down
-
-The alerts in `deploy/grafana/alerts.yaml` mostly describe symptoms (queue
-backed up, no capable workers, VM boot slow) that assume the scheduler
-process is alive and still exporting metrics. Two alerts specifically detect
-the scheduler itself being unhealthy:
-
-- `BurstGridSchedulerDown` — fires on `absent_over_time()` of a core gauge;
-  a dead process or a broken OTel pipeline emits nothing at all, so absence
-  is the only signal available.
-- `BurstGridSchedulerCrashLooping` — fires on repeated process starts in a
-  short window (`burstgrid.scheduler.starts`, emitted once per boot), which
-  catches a crash loop fast enough to dodge the absence check above.
-
-Both depend on the scheduler's own OTel export path working at all. For a
-fully independent signal, add an external uptime check (e.g. Grafana
-Synthetic Monitoring, UptimeRobot, or a CloudWatch alarm on the HA mode's ALB
-target group) against `GET /health` from outside the VPC.
-
-### 2. Bake the worker AMI (recommended)
-
-```bash
-# Upload rootfs + vmlinux to S3 first (see scripts/build-rootfs.sh), then:
-npx burstgrid bake-ami --source-ami ami-xxxxxxxx
-# Pre-installs Firecracker, the GitHub Actions runner, vmlinux, and rootfs.img
-# into a new AMI and writes it into terraform.tfvars' worker_ami automatically.
-# Skipping this step is fine too — workers fall back to downloading those
-# artifacts from S3 on every boot, just slower to reach "ready".
-```
-
-### 3. Deploy — one command
-
-```bash
-npx burstgrid deploy
-# builds dist/, uploads scheduler.mjs + worker-agent.mjs to S3, runs terraform apply
-
-# options
-npx burstgrid deploy --bucket my-bucket          # explicit bucket (skips tfvars detection)
-npx burstgrid deploy --no-terraform --dry-run    # preview without changing anything
-```
-
-### 4. Register the GitHub App (or PAT)
-
-Create a GitHub App with **Administration: read & write** + **Actions: read** permissions, subscribe to `workflow_job` events, and set the webhook URL to `https://your-scheduler:8080/webhook/github`.
-For single-repo testing a PAT (`GITHUB_TOKEN=ghp_xxx`) is fine.
-
-### 5. Point workflows
-
-```yaml
-jobs:
-  test:
-    runs-on: [self-hosted, linux, burstgrid:size=large]
-```
-
-That's the only change needed in your workflow files.
-
-### Scale-down
-
-Idle workers terminate automatically after 300 s. One warm standby is kept per fleet to eliminate cold-start latency. Set `scaleDownAfterIdleSec: 0` to disable.
-
-### Spot interruption blast radius
-
-BurstGrid bin-packs by default so idle hosts can drain and terminate. That saves money, but a spot interruption on a densely packed worker can requeue more jobs at once. For production, cap placement density and active jobs per worker:
-
-```yaml
-scheduler:
-  maxPackUtilization: 0.7     # stop packing a host once the next job would push it above 70% vCPU
-  maxActiveJobsPerWorker: 8   # even a 32-slot metal host only gets 8 active jobs
-```
-
-The scheduler handles EC2 spot interruption warnings centrally and requeues jobs from the affected worker. Critical fleets can use `capacityType: on-demand`. See the [docs site](https://gbudjeakp.github.io/burstgrid/#config-spot) for the full tradeoff and checkpointing guidance.
-
-See [`deploy/terraform/`](deploy/terraform/) for the full AWS module and [`deploy/otel-collector/`](deploy/otel-collector/) for metrics.
-The deploy command also uploads the collector configuration. Import
-[`deploy/grafana/alerts.yaml`](deploy/grafana/alerts.yaml) into Grafana Alerting
-or Prometheus to alert on queue age, unavailable capacity, launch failures,
-throttling, VM boot latency, and runner setup failures.
+See the docs for [Terraform variables](https://gbudjeakp.github.io/burstgrid/#configuration), [scheduler HA](https://gbudjeakp.github.io/burstgrid/#config-scheduler-ha), [spot interruption handling](https://gbudjeakp.github.io/burstgrid/#config-spot), and [metrics/alerts](https://gbudjeakp.github.io/burstgrid/#config-scheduler-down) — or [`deploy/terraform/`](deploy/terraform/) and [`deploy/grafana/alerts.yaml`](deploy/grafana/alerts.yaml) directly.
 
 ## Build & test
 

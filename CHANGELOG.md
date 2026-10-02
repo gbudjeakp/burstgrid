@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.0](https://github.com/gbudjeakp/burstgrid/compare/v1.14.0...v1.15.0) (2026-10-02)
+
+
+### Features
+
+* one-command local AWS dev environment with hot reload ([#55](https://github.com/gbudjeakp/burstgrid/issues/55)) ([c841069](https://github.com/gbudjeakp/burstgrid/commit/c84106970aab62ce65138930d3087eb7b19931f9))
+
 ## [1.14.0](https://github.com/gbudjeakp/burstgrid/compare/v1.13.0...v1.14.0) (2026-10-02)
 
 

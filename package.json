@@ -34,6 +34,7 @@
     "@aws-sdk/util-dynamodb": "^3.996.9",
     "@fastify/rate-limit": "^10.3.0",
     "@octokit/app": "^15.1.6",
+    "@octokit/core": "^7.0.8",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/api-logs": "^0.222.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.222.0",

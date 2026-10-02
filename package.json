@@ -21,6 +21,7 @@
     "lint": "oxlint src/ bin/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:integration": "vitest run -c vitest.integration.config.ts",
     "infra:init": "cd deploy/terraform && terraform init",
     "infra:plan": "cd deploy/terraform && terraform plan",
     "infra:apply": "cd deploy/terraform && terraform apply"
@@ -53,6 +54,7 @@
     "@aws-sdk/client-elastic-load-balancing-v2": "^3.1145.0",
     "@aws-sdk/client-iam": "^3.1145.0",
     "@aws-sdk/client-ssm": "^3.1145.0",
+    "@floci/testcontainers": "^0.1.0",
     "@types/node": "^22.20.4",
     "concurrently": "^10.0.5",
     "oxlint": "^0.18.1",
@@ -64,7 +66,9 @@
   },
   "pnpm": {
     "overrides": {
-      "esbuild": ">=0.28.1"
+      "esbuild": ">=0.28.1",
+      "undici": ">=6.28.0",
+      "uuid": ">=11.1.1"
     }
   }
 }

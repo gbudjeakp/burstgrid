@@ -173,6 +173,29 @@ environment without putting credentials in user data, and export app telemetry
 to `http://127.0.0.1:4318`. The setting defaults to `false` because the checked
 in collector pipeline requires exporter credentials.
 
+### Scheduler availability (HA)
+
+By default the scheduler is a single EC2 instance with a directly-associated
+Elastic IP. If that instance dies or is rebooting, webhooks fail outright
+until someone re-associates the EIP to a replacement.
+
+Set `scheduler_ha_enabled = true` to run it behind an ALB (stable DNS name)
+and a self-healing Auto Scaling Group (`desired=1`) instead:
+
+```hcl
+scheduler_ha_enabled = true
+scheduler_subnet_ids  = ["subnet-aaaa", "subnet-bbbb"]  # 2+ public subnets, different AZs
+```
+
+The ASG automatically relaunches the scheduler on an EC2 status-check or ALB
+`/health/ready` failure — no manual `terraform apply` or EIP reassociation.
+Point the GitHub webhook and `BURSTGRID_SCHEDULER_URL` at the `scheduler_url`
+Terraform output either way; it resolves to the ALB DNS name in HA mode or the
+EIP otherwise, so nothing else changes.
+
+This covers failure recovery, not zero-downtime rolling deploys — a new
+launch template version still requires a manual ASG instance refresh.
+
 ### 2. Bake the worker AMI (recommended)
 
 ```bash

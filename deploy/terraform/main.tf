@@ -85,7 +85,7 @@ module "worker_fleet" {
   vpc_id                     = var.vpc_id
   subnet_ids                 = [for s in aws_subnet.worker_private : s.id]
   ami                        = var.worker_ami
-  scheduler_url              = coalesce(var.scheduler_url_override, "http://${module.scheduler.public_ip}:8080")
+  scheduler_url              = coalesce(var.scheduler_url_override, module.scheduler.scheduler_url)
   fleets                     = var.fleets
   worker_token               = coalesce(var.worker_token, "")
   secret_source              = var.secret_source
@@ -123,6 +123,8 @@ module "scheduler" {
 
   vpc_id                       = var.vpc_id
   subnet_id                    = var.scheduler_subnet_id
+  ha_enabled                   = var.scheduler_ha_enabled
+  subnet_ids                   = var.scheduler_ha_enabled ? var.scheduler_subnet_ids : []
   ami                          = var.scheduler_ami
   instance_type                = var.scheduler_instance_type
   webhook_secret               = coalesce(var.github_webhook_secret, "")

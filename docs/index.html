@@ -388,6 +388,7 @@
           <a href="#config-env-reference" class="sidebar-link sub">Environment reference</a>
           <a href="#config-runtime" class="sidebar-link sub">Runtime safety</a>
           <a href="#config-spot" class="sidebar-link sub">Spot handling</a>
+          <a href="#config-scheduler-ha" class="sidebar-link sub">Scheduler HA</a>
           <a href="#config-shape-matrix" class="sidebar-link sub">Shape matrix</a>
           <a href="#config-cache" class="sidebar-link sub">Actions cache</a>
           <a href="#config-concurrency" class="sidebar-link sub">Per-repo limits</a>
@@ -1011,6 +1012,12 @@ Next steps:
   <span class="s-key">fleets</span>:
     - <span class="s-key">name</span>: <span class="s-str">critical</span>
       <span class="s-key">capacityType</span>: <span class="s-str">on-demand</span></div></div>
+    </div>
+    <div class="feat-cell" id="config-scheduler-ha">
+      <h3>Scheduler availability (HA)</h3>
+      <p>Default is a single EC2 instance with a directly-associated EIP &mdash; if it dies, webhooks fail until someone re-associates the EIP. Set <code>scheduler_ha_enabled = true</code> to put an ALB (stable DNS name) in front of a self-healing ASG (<code>desired=1</code>) instead. The ASG relaunches the scheduler automatically on an EC2 status-check or ALB <code>/health/ready</code> failure &mdash; no manual <code>terraform apply</code> or EIP reassociation. Covers failure recovery, not zero-downtime rolling deploys.</p>
+      <div class="snippet" style="margin-top:14px;"><div class="snippet-body"><span class="s-key">scheduler_ha_enabled</span> = <span class="s-str">true</span>
+<span class="s-key">scheduler_subnet_ids</span>  = [<span class="s-str">"subnet-aaaa"</span>, <span class="s-str">"subnet-bbbb"</span>] <span class="s-cm"># 2+ AZs, required by ALB</span></div></div>
     </div>
   </div>
 

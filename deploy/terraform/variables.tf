@@ -153,6 +153,25 @@ variable "otel_collector_version" {
   default     = "0.116.0"
 }
 
+# ── Scheduler availability ──────────────────────────────────────────────────────
+
+variable "scheduler_ha_enabled" {
+  description = "Run the scheduler behind an ALB + self-healing ASG (desired=1) instead of a single EC2 instance with a directly-associated EIP. Default false — identical behavior to the original single-instance design. The ASG relaunches the scheduler automatically on an EC2 status-check or ALB health-check failure, no manual terraform apply or EIP reassociation needed. Does not provide zero-downtime rolling deploys — only failure recovery."
+  type        = bool
+  default     = false
+}
+
+variable "scheduler_subnet_ids" {
+  description = "Public subnets (2+, different AZs) for the scheduler ALB. Required when scheduler_ha_enabled=true since ALB requires multi-AZ subnets. Ignored otherwise."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = !var.scheduler_ha_enabled || length(var.scheduler_subnet_ids) >= 2
+    error_message = "scheduler_subnet_ids must include at least 2 subnets in different AZs when scheduler_ha_enabled is true."
+  }
+}
+
 # ── S3 ─────────────────────────────────────────────────────────────────────────
 
 variable "s3_artifacts_bucket" {

@@ -1,5 +1,10 @@
+output "scheduler_url" {
+  description = "Base URL for the scheduler — ALB DNS name when scheduler_ha_enabled=true, the EIP otherwise"
+  value       = module.scheduler.scheduler_url
+}
+
 output "scheduler_public_ip" {
-  description = "Elastic IP of the BurstGrid scheduler (stable across instance replacements)"
+  description = "Elastic IP of the BurstGrid scheduler — null when scheduler_ha_enabled=true (traffic goes through the ALB instead)"
   value       = module.scheduler.public_ip
 }
 
@@ -7,12 +12,12 @@ output "scheduler_public_ip" {
 # events: workflow_job, secret: var.github_webhook_secret
 output "github_webhook_url" {
   description = "GitHub webhook URL — set events=[workflow_job], content-type=application/json"
-  value       = "http://${module.scheduler.public_ip}:8080/webhook/github"
+  value       = "${module.scheduler.scheduler_url}/webhook/github"
 }
 
 output "scheduler_health_url" {
   description = "Health check endpoint"
-  value       = "http://${module.scheduler.public_ip}:8080/health"
+  value       = "${module.scheduler.scheduler_url}/health"
 }
 
 output "launch_template_ids" {

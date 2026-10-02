@@ -396,6 +396,9 @@
           <a href="#config-redis" class="sidebar-link sub">Redis queue</a>
           <a href="#config-sqs" class="sidebar-link sub">SQS queue</a>
           <a href="#config-snapshot" class="sidebar-link sub">Snapshot pool</a>
+          <a href="#config-otel" class="sidebar-link sub">OTel collector</a>
+          <a href="#config-scale-down" class="sidebar-link sub">Scale-down</a>
+          <a href="#config-scheduler-down" class="sidebar-link sub">Scheduler-down alerts</a>
         </div>
       </div>
       <div class="sidebar-group">
@@ -1090,6 +1093,30 @@ Next steps:
       <div class="snippet" style="margin-top:14px;">
         <div class="snippet-body"><span class="s-key">BURSTGRID_SNAPSHOT_POOL_SIZE</span>=<span class="s-num">4</span>  <span class="s-cm"># set on the worker agent</span></div>
       </div>
+    </div>
+
+    <div class="feat-cell" id="config-otel">
+      <h3>OpenTelemetry collector</h3>
+      <p>The bundled collector (<code>deploy/otel-collector/collector.yaml</code>) is wired into both the scheduler and workers but off by default, since it needs exporter credentials. Store those as a multi-line SSM SecureString, then flip one Terraform variable &mdash; both roles run <code>otelcol-contrib</code> locally and export to it over loopback, no credentials in user data.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="t-p">$</span> <span class="t-cmd">aws ssm put-parameter --name /burstgrid/otel-collector-env --type SecureString \</span>
+  <span class="t-cmd">--value $'GRAFANA_OTLP_ENDPOINT=...\nGRAFANA_INSTANCE_ID=123\nGRAFANA_API_KEY=...'</span>
+
+<span class="s-key">otel_collector_enabled</span> = <span class="s-str">true</span>  <span class="s-cm"># terraform.tfvars</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-scale-down">
+      <h3>Scale-down</h3>
+      <p>Idle workers terminate automatically after 300&nbsp;s. One warm standby is kept per fleet by default to avoid a cold-start on the next job landing there. Disable the warm standby if you'd rather scale all the way to zero between bursts.</p>
+      <div class="snippet" style="margin-top:14px;">
+        <div class="snippet-body"><span class="s-key">scaleDownAfterIdleSec</span>: <span class="s-num">0</span>  <span class="s-cm"># per-fleet — disables the warm standby</span></div>
+      </div>
+    </div>
+
+    <div class="feat-cell" id="config-scheduler-down">
+      <h3>Knowing when the scheduler itself is down</h3>
+      <p>Most alerts in <code>deploy/grafana/alerts.yaml</code> describe symptoms (queue backed up, no capable workers) that assume the scheduler process is alive and exporting metrics. Two alerts specifically watch the scheduler's own health: <code>BurstGridSchedulerDown</code> fires on <code>absent_over_time()</code> of a core gauge &mdash; a dead process emits nothing, so absence is the only signal. <code>BurstGridSchedulerCrashLooping</code> fires on repeated process starts in a short window, catching a crash loop fast enough to dodge the absence check. Both still depend on the scheduler's own OTel export path working at all &mdash; add an external uptime check (Synthetic Monitoring, UptimeRobot, or a CloudWatch alarm on the HA mode's ALB target group) against <code>GET /health</code> for a fully independent signal.</p>
     </div>
 
   </div>

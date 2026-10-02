@@ -22,7 +22,9 @@ export class SQSJobPoller {
     private readonly opts: SQSPollerOptions,
     private readonly queue: JobQueue,
   ) {
-    this.client = new SQSClient({ region: opts.region });
+    // A custom endpoint (VPC endpoint, local emulator) can map to a different host/port than
+    // the one baked into a queue's own QueueUrl — don't let the SDK silently prefer the latter.
+    this.client = new SQSClient({ region: opts.region, useQueueUrlAsEndpoint: false });
   }
 
   start(): void {

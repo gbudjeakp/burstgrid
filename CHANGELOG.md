@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.14.0](https://github.com/gbudjeakp/burstgrid/compare/v1.13.0...v1.14.0) (2026-10-02)
+
+
+### Features
+
+* GitHub API rate-limit metrics and quota-aware retry ([#53](https://github.com/gbudjeakp/burstgrid/issues/53)) ([5bd1cd4](https://github.com/gbudjeakp/burstgrid/commit/5bd1cd409430010282c9996e7f7f9c011f64dbef))
+* react to EC2 rebalance recommendations as an automatic failsafe ([370c524](https://github.com/gbudjeakp/burstgrid/commit/370c5241ad681e4238e46ecaf53f3ccf4a5f30a2))
+* react to EC2 rebalance recommendations as an automatic failsafe ([54988e5](https://github.com/gbudjeakp/burstgrid/commit/54988e53163c5b9d5105b4f040047b94255b2b4a))
+
 ## [1.13.0](https://github.com/gbudjeakp/burstgrid/compare/v1.12.0...v1.13.0) (2026-10-02)
 
 

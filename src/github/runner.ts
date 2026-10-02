@@ -1,6 +1,12 @@
 import fs from 'node:fs';
 import { App } from '@octokit/app';
+import { Octokit } from '@octokit/core';
 import { logEvent, recordGithubRateLimit, recordGithubRateLimitExceeded } from '../telemetry/index.js';
+
+// Overridable so a local GitHub-compatible emulator (e.g. vercel-labs/emulate) can stand in for
+// api.github.com in dev — production always leaves this unset and talks to real GitHub.
+const GITHUB_API_URL = process.env.GITHUB_API_URL ?? 'https://api.github.com';
+const CustomOctokit = Octokit.defaults({ baseUrl: GITHUB_API_URL });
 
 export class CircuitOpenError extends Error {
   readonly isCircuitOpen = true;
@@ -121,12 +127,12 @@ export class AppClient {
 
   static fromGitHubApp(appId: number, privateKeyPath: string): AppClient {
     const privateKey = fs.readFileSync(privateKeyPath, 'utf8');
-    return new AppClient(new App({ appId, privateKey }), null);
+    return new AppClient(new App({ appId, privateKey, Octokit: CustomOctokit }), null);
   }
 
   /** Read PEM from env var directly — avoids writing a temp file from Secrets Manager/SSM. */
   static fromGitHubAppKey(appId: number, privateKey: string): AppClient {
-    return new AppClient(new App({ appId, privateKey }), null);
+    return new AppClient(new App({ appId, privateKey, Octokit: CustomOctokit }), null);
   }
 
   /** For local dev with a PAT — skips GitHub App auth entirely. */
@@ -162,7 +168,7 @@ export class AppClient {
     const fetchRuns = async (status: string): Promise<Array<{ id: number }>> => {
       if (this.token) {
         const res = await fetch(
-          `https://api.github.com/repos/${owner}/${repo}/actions/runs?status=${status}&per_page=50`,
+          `${GITHUB_API_URL}/repos/${owner}/${repo}/actions/runs?status=${status}&per_page=50`,
           { headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
         );
         trackRateLimit(owner, res.headers);
@@ -197,7 +203,7 @@ export class AppClient {
   private async _listJobsForRun(owner: string, repo: string, runId: number): Promise<Array<{ id: number; status: string; labels: string[] }>> {
     if (this.token) {
       const res = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`,
+        `${GITHUB_API_URL}/repos/${owner}/${repo}/actions/runs/${runId}/jobs?filter=latest&per_page=100`,
         { headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
       );
       trackRateLimit(owner, res.headers);
@@ -221,7 +227,7 @@ export class AppClient {
   private async _listRunners(owner: string, repo: string): Promise<Array<{ id: number; name: string; status: string }>> {
     if (this.token) {
       const res = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/actions/runners?per_page=100`,
+        `${GITHUB_API_URL}/repos/${owner}/${repo}/actions/runners?per_page=100`,
         { headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
       );
       trackRateLimit(owner, res.headers);
@@ -243,7 +249,7 @@ export class AppClient {
   private async _deleteRunner(owner: string, repo: string, runnerId: number): Promise<void> {
     if (this.token) {
       const res = await fetch(
-        `https://api.github.com/repos/${owner}/${repo}/actions/runners/${runnerId}`,
+        `${GITHUB_API_URL}/repos/${owner}/${repo}/actions/runners/${runnerId}`,
         { method: 'DELETE', headers: { Authorization: `Bearer ${this.token}`, 'X-GitHub-Api-Version': '2022-11-28' } },
       );
       trackRateLimit(owner, res.headers);
@@ -293,7 +299,7 @@ export class AppClient {
   private async createRunnerTokenWithPAT(owner: string, repo: string, token: string): Promise<string> {
 
     const res = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/actions/runners/registration-token`,
+      `${GITHUB_API_URL}/repos/${owner}/${repo}/actions/runners/registration-token`,
       {
         method: 'POST',
         headers: {

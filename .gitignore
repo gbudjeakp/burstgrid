@@ -8,6 +8,8 @@ deploy/terraform/*.tfvars
 deploy/terraform/*.tfvars.json
 deploy/terraform/.terraform/
 deploy/terraform/terraform.tfstate*
+deploy/terraform/floci/.terraform/
+deploy/terraform/floci/terraform.tfstate*
 deploy/burstgrid.config.prod.yaml
 *.pem
 *.key

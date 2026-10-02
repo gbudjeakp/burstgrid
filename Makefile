@@ -1,4 +1,4 @@
-.PHONY: build dev-scheduler dev-agent typecheck test install demo demo-stop
+.PHONY: build dev-scheduler dev-agent typecheck test install demo demo-stop dev-aws dev-aws-stop
 
 install:
 	pnpm install
@@ -17,6 +17,16 @@ typecheck:
 
 test:
 	pnpm test
+
+# One command: local AWS emulator (Floci) seeded with EC2/IAM/SSM/S3/SQS/DynamoDB/ALB/CloudTrail,
+# plus the scheduler and worker agent running as hot-reloaded local processes (tsx watch) —
+# edit source, see it reload, no rebuild/restart needed. Ctrl+C stops the Node processes;
+# Floci itself keeps running (`make dev-aws-stop` to tear it down).
+dev-aws:
+	pnpm run dev:aws
+
+dev-aws-stop:
+	pnpm run dev:aws:down
 
 # Run the full simulate-mode stack locally — no AWS, no KVM, no Firecracker needed.
 demo:

@@ -29,6 +29,14 @@ node --import tsx/esm scripts/inject-job.ts --count 5 --size large # terminal 3
 
 Forward real webhooks locally: `gh webhook forward --repo=owner/repo --events=workflow_job --url=http://localhost:8080/webhook/github`
 
+### Local AWS dev environment
+
+```bash
+make dev-aws   # or: pnpm dev:aws
+```
+
+One command: starts [Floci](https://github.com/floci-io/floci) (a local AWS emulator), seeds the same EC2/IAM/SSM/S3/SQS/DynamoDB resources Terraform creates in production, then runs the scheduler and worker agent with hot reload (`tsx watch` — edit code, see it restart automatically). Lets you confirm AWS-touching changes (autoscaling, SSM secrets, the S3 cache) actually work before paying for real AWS. `make dev-aws-stop` tears it down.
+
 ## Workflows
 
 ```yaml

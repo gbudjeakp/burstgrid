@@ -13,9 +13,11 @@
   },
   "scripts": {
     "build": "tsup",
-    "dev:scheduler": "tsx bin/scheduler.ts",
-    "dev:agent": "tsx bin/worker-agent.ts",
+    "dev:scheduler": "tsx watch bin/scheduler.ts",
+    "dev:agent": "tsx watch bin/worker-agent.ts",
     "dev:init": "tsx bin/init.ts",
+    "dev:aws": "tsx scripts/dev-aws.ts",
+    "dev:aws:down": "docker compose -f docker-compose.dev.yml down floci",
     "lint": "oxlint src/ bin/",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -46,7 +48,12 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudtrail": "^3.1145.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "^3.1145.0",
+    "@aws-sdk/client-iam": "^3.1145.0",
+    "@aws-sdk/client-ssm": "^3.1145.0",
     "@types/node": "^22.20.4",
+    "concurrently": "^10.0.5",
     "oxlint": "^0.18.1",
     "tsup": "^8.5.1",
     "tsx": "^4.23.15",

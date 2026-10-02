@@ -77,10 +77,34 @@ export const VM_SIZES: Record<string, { vcpus: number; memoryMiB: number }> = {
   '8xlarge': { vcpus: 64, memoryMiB: 131_072 },
 };
 
+/** Memory-tier axis, independent of the vCPU-tier `burstgrid:size=` axis — mirrors the
+ *  compute/general/memory-optimized EC2 instance family split (c/m/r) so operators can
+ *  request e.g. 4 vCPU + extra memory without a dedicated size entry for every combination. */
+export type VmFamily = 'compute' | 'general' | 'memory';
+
+const FAMILY_MEMORY_MULTIPLIER: Record<VmFamily, number> = {
+  compute: 0.5,
+  general: 1,
+  memory:  2,
+};
+
+export function vmFamilyFromLabels(labels: string[]): VmFamily {
+  const tag = labels.find(l => l.toLowerCase().startsWith('burstgrid:family='));
+  const key = tag?.slice('burstgrid:family='.length).toLowerCase();
+  return key === 'compute' || key === 'memory' ? key : 'general';
+}
+
 export function vmSizeFromLabels(labels: string[]): { vcpus: number; memoryMiB: number } {
   const tag = labels.find(l => l.toLowerCase().startsWith('burstgrid:size='));
   const key = tag?.slice('burstgrid:size='.length).toLowerCase() ?? 'medium';
-  return VM_SIZES[key] ?? VM_SIZES.medium;
+  const base = VM_SIZES[key] ?? VM_SIZES.medium;
+
+  const family = vmFamilyFromLabels(labels);
+  if (family === 'general') return base; // no family label — unchanged, fully backward compatible
+
+  // Round to the nearest 256 MiB — arbitrary sub-256 MiB precision isn't meaningful for VM sizing.
+  const memoryMiB = Math.max(256, Math.round(base.memoryMiB * FAMILY_MEMORY_MULTIPLIER[family] / 256) * 256);
+  return { vcpus: base.vcpus, memoryMiB };
 }
 
 export interface JobUpdate {

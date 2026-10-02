@@ -10,6 +10,7 @@ export default defineConfig({
     setup: 'bin/setup.ts',
     build: 'bin/build.ts',
     'bake-ami': 'bin/bake-ami.ts',
+    doctor: 'bin/doctor.ts',
     deploy: 'bin/deploy.ts',
   },
   format: ['esm'],

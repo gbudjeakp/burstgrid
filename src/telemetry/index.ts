@@ -49,6 +49,7 @@ export function registerSchedulerObservers(
   getQueueDepth: () => number,
   getConnected: () => number,
   getFreeSlots: () => number,
+  getOldestQueuedAgeSeconds: () => number = () => 0,
 ): void {
   const m = getMeter();
   m.createObservableGauge('burstgrid.queue.depth', { description: 'Current queued job count', unit: 'jobs' })
@@ -57,6 +58,8 @@ export function registerSchedulerObservers(
     .addCallback(r => r.observe(getConnected()));
   m.createObservableGauge('burstgrid.workers.free_slots', { description: 'Total free microVM slots', unit: 'slots' })
     .addCallback(r => r.observe(getFreeSlots()));
+  m.createObservableGauge('burstgrid.queue.oldest_age_seconds', { description: 'Age of the oldest queued job', unit: 's' })
+    .addCallback(r => r.observe(getOldestQueuedAgeSeconds()));
 }
 
 // ─── Counters ────────────────────────────────────────────────────────────────
@@ -79,6 +82,31 @@ export function recordJobDispatched(tier: string, queuedAt: Date): void {
     unit: 'ms',
     advice: { explicitBucketBoundaries: [100, 500, 1_000, 5_000, 30_000, 60_000] },
   }).record(Date.now() - queuedAt.getTime(), { tier });
+}
+
+/** EC2 launch failures are split out so capacity errors and API throttling alert independently. */
+export function recordWorkerLaunchFailure(reason: 'throttled' | 'error', fleet: string): void {
+  getMeter().createCounter('burstgrid.worker.launch_failures', { description: 'Failed EC2 worker launch attempts', unit: 'attempts' })
+    .add(1, { reason, fleet });
+}
+
+/** Runner/VM setup failures are distinct from a job failing after it started. */
+export function recordRunnerSetupFailure(mode: string): void {
+  getMeter().createCounter('burstgrid.runner.setup_failures', { description: 'Runner or VM setup failures before a job starts', unit: 'attempts' })
+    .add(1, { mode });
+}
+
+/**
+ * Emitted once per process start. On its own this is a crash-loop detector
+ * (many starts in a short window under systemd Restart=always); combined with
+ * absent_over_time() on any always-on gauge (e.g. burstgrid.queue.depth) it also
+ * covers "the scheduler stopped reporting metrics at all" — neither failure mode
+ * is caught by the symptom-based alerts (queue depth, launch failures, etc.),
+ * which all assume the scheduler process is alive and exporting in the first place.
+ */
+export function recordSchedulerStart(): void {
+  getMeter().createCounter('burstgrid.scheduler.starts', { description: 'Scheduler process starts — spikes indicate a crash loop', unit: 'starts' })
+    .add(1);
 }
 
 // ─── Worker-side histograms ───────────────────────────────────────────────────

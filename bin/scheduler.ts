@@ -8,16 +8,18 @@ import { AppClient, AppClientRegistry } from '../src/github/runner.js';
 import { registerWebhookRoute } from '../src/github/webhook.js';
 import { Autoscaler, type TierFleet } from '../src/fleet/autoscaler.js';
 import { loadConfig } from '../src/config/index.js';
-import { initTelemetry, registerSchedulerObservers, logEvent } from '../src/telemetry/index.js';
+import { initTelemetry, registerSchedulerObservers, recordSchedulerStart, logEvent } from '../src/telemetry/index.js';
 import { createBackends } from '../src/backends/index.js';
 import { JobMetaCache } from '../src/scheduler/job-meta-cache.js';
 import { JobWatchdog } from '../src/scheduler/watchdog.js';
 import { awaitDrain } from '../src/scheduler/drain.js';
 import { Reconciler } from '../src/scheduler/reconciler.js';
+import { SpotInterruptionMonitor } from '../src/scheduler/spot-interruptions.js';
 import { recordJobOutcome, addJobSpanEvent, endJobSpan } from '../src/telemetry/index.js';
 import type { IJobHistoryBackend } from '../src/backends/types.js';
 
 await initTelemetry('burstgrid-scheduler');
+recordSchedulerStart();
 
 const cfg = loadConfig();
 
@@ -30,6 +32,7 @@ const {
   BURSTGRID_LAUNCH_TEMPLATE_ID = '',
   BURSTGRID_SUBNET_IDS = '',
   BURSTGRID_FLEETS,
+  BURSTGRID_SPOT_QUEUE_URL,
   BURSTGRID_WATCHED_REPOS = '',
   GITHUB_APP_ID,
   GITHUB_PRIVATE_KEY_PATH,
@@ -52,6 +55,9 @@ const pool  = new WorkerPool((lostJobs) => {
     logEvent('scheduler', 'warn', `re-queuing job ${job.id} from reaped worker`);
     queue.requeue(job);
   }
+}, {
+  maxPackUtilization: cfg.scheduler?.maxPackUtilization,
+  maxActiveJobsPerWorker: cfg.scheduler?.maxActiveJobsPerWorker,
 });
 const router = new Router(queue, pool);
 const metaCache = new JobMetaCache();
@@ -94,6 +100,11 @@ registerSchedulerObservers(
   () => queue.depth,
   () => pool.connectedCount,
   () => pool.totalFreeSlots,
+  () => {
+    let oldest = 0;
+    for (const job of queue.jobs()) oldest = Math.max(oldest, Date.now() - job.queuedAt.getTime());
+    return oldest / 1_000;
+  },
 );
 
 const ghClient = GITHUB_TOKEN
@@ -163,6 +174,11 @@ const autoscaler = new Autoscaler(
 if (autoscalerEnabled) autoscaler.start();
 else logEvent('scheduler', 'info', 'autoscaler disabled via config');
 
+const spotMonitor = BURSTGRID_SPOT_QUEUE_URL
+  ? new SpotInterruptionMonitor(BURSTGRID_SPOT_QUEUE_URL, pool, queue)
+  : null;
+spotMonitor?.start();
+
 const drainTimeoutMs = cfg.scheduler?.drainTimeoutMs ?? 5 * 60 * 1_000;
 
 const shutdown = async () => {
@@ -177,6 +193,7 @@ const shutdown = async () => {
   }
   watchdog.stop();
   autoscaler.stop();
+  spotMonitor?.stop();
   reconciler.stop();
   metaCache.destroy();
   await app.close();

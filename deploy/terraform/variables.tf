@@ -78,8 +78,9 @@ variable "fleets" {
 }
 
 # ── GitHub auth ────────────────────────────────────────────────────────────────
-# Provide EITHER github_token (PAT with repo scope) OR github_app_id + the SSM
-# parameter /burstgrid/github-app-private-key containing the PEM.
+# Provide EITHER github_token (PAT with repo scope) OR github_app_id + a private
+# key.  In the default SSM mode these are read by the scheduler at boot, never
+# rendered into Terraform state or EC2 user data.
 
 variable "github_token" {
   description = "GitHub PAT with repo scope — used to create runner registration tokens"
@@ -103,15 +104,72 @@ variable "scheduler_url_override" {
 }
 
 variable "github_webhook_secret" {
-  description = "HMAC secret for GitHub webhook payload verification"
+  description = "HMAC secret for GitHub webhook payload verification (required only when secret_source=terraform)"
   type        = string
   sensitive   = true
+  nullable    = true
+  default     = null
 }
 
 variable "worker_token" {
-  description = "Shared secret workers present on /v1/workers/* routes"
+  description = "Shared secret workers present on /v1/workers/* routes (required only when secret_source=terraform)"
   type        = string
   sensitive   = true
+  nullable    = true
+  default     = null
+}
+
+variable "secret_source" {
+  description = "Secret delivery mode: ssm (default, fetched by EC2 at boot) or terraform (legacy values rendered into user data)."
+  type        = string
+  default     = "ssm"
+
+  validation {
+    condition     = contains(["ssm", "terraform"], var.secret_source)
+    error_message = "secret_source must be either ssm or terraform."
+  }
+}
+
+variable "ssm_parameter_prefix" {
+  description = "Prefix containing pre-created SecureString parameters: webhook-secret, worker-token, github-token, and github-app-private-key."
+  type        = string
+  default     = "/burstgrid"
+
+  validation {
+    condition     = startswith(var.ssm_parameter_prefix, "/") && !endswith(var.ssm_parameter_prefix, "/")
+    error_message = "ssm_parameter_prefix must start with / and not end with /."
+  }
+}
+
+variable "otel_collector_enabled" {
+  description = "Start the bundled OpenTelemetry Collector on scheduler and workers. Requires the otel-collector-env SecureString under ssm_parameter_prefix."
+  type        = bool
+  default     = false
+}
+
+variable "otel_collector_version" {
+  description = "OpenTelemetry Collector Contrib version to install on non-baked hosts."
+  type        = string
+  default     = "0.116.0"
+}
+
+# ── Scheduler availability ──────────────────────────────────────────────────────
+
+variable "scheduler_ha_enabled" {
+  description = "Run the scheduler behind an ALB + self-healing ASG (desired=1) instead of a single EC2 instance with a directly-associated EIP. Default false — identical behavior to the original single-instance design. The ASG relaunches the scheduler automatically on an EC2 status-check or ALB health-check failure, no manual terraform apply or EIP reassociation needed. Does not provide zero-downtime rolling deploys — only failure recovery."
+  type        = bool
+  default     = false
+}
+
+variable "scheduler_subnet_ids" {
+  description = "Public subnets (2+, different AZs) for the scheduler ALB. Required when scheduler_ha_enabled=true since ALB requires multi-AZ subnets. Ignored otherwise."
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition     = !var.scheduler_ha_enabled || length(var.scheduler_subnet_ids) >= 2
+    error_message = "scheduler_subnet_ids must include at least 2 subnets in different AZs when scheduler_ha_enabled is true."
+  }
 }
 
 # ── S3 ─────────────────────────────────────────────────────────────────────────

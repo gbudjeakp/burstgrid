@@ -6,6 +6,8 @@ scheduler:
   maxQueueDepth: 500        # 503 returned above this; GitHub retries for 72 h
   rateLimitMax: 1000        # max webhook requests per window
   rateLimitWindow: "1 minute"
+  maxPackUtilization: 0.7   # lower = spread jobs across more workers; higher = cheaper bin-packing
+  maxActiveJobsPerWorker: 8 # caps spot interruption blast radius per host, even if slots remain
 
 autoscaler:
   enabled: true             # set to false to disable all EC2 auto-scaling
@@ -96,6 +98,11 @@ autoscaler:
 
 # ── Worker config ──────────────────────────────────────────────────────────────
 # worker:
+#   # Keep runner/cache tokens out of /proc/cmdline inside the guest. Use cmdline only
+#   # for emergency rollback with old rootfs images that do not have MMDS-aware vm-init.sh.
+#   # Env: BURSTGRID_SECRET_DELIVERY=mmds|cmdline
+#   secretDelivery: mmds
+
 #   # Pull-through registry mirror — VMs receive this as a REGISTRY_MIRROR boot arg.
 #   # The rootfs init must read /proc/cmdline and write /etc/docker/daemon.json.
 #   # For AWS: use an ECR pull-through cache endpoint or a registry:2 sidecar.

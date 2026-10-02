@@ -61,3 +61,5 @@ function parseArgs(argv: string[]): Record<string, string> {
   }
   return out;
 }
+
+export {};

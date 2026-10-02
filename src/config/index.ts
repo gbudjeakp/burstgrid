@@ -44,6 +44,8 @@ const ConfigSchema = z.object({
     rateLimitMax: z.number().int().positive().optional(),
     rateLimitWindow: z.string().optional(),
     drainTimeoutMs: z.number().int().positive().optional(),
+    maxPackUtilization: z.number().positive().max(1).optional(),
+    maxActiveJobsPerWorker: z.number().int().positive().optional(),
     /** Max concurrent jobs per repo. Key is 'owner/repo' or 'owner/*' for org-wide. */
     concurrencyLimits: z.record(z.string(), z.number().int().positive()).optional(),
     /** Default max concurrent jobs for any repo not matched by concurrencyLimits. Unlimited if absent. */
@@ -63,6 +65,7 @@ const ConfigSchema = z.object({
       size: z.number().int().positive().optional(),
       snapshotDir: z.string().optional(),
     }).strict().optional(),
+    secretDelivery: z.enum(['mmds', 'cmdline']).optional(),
   }).strict().optional(),
   autoscaler: z.object({
     enabled: z.boolean().optional(),
@@ -86,6 +89,10 @@ export interface BurstGridConfig {
     rateLimitWindow?: string;
     /** Max ms to wait for in-flight jobs to finish during graceful shutdown. Default: 300_000 (5 min). */
     drainTimeoutMs?: number;
+    /** Max host vCPU utilization targeted by best-fit placement. Lower values spread jobs to reduce spot interruption blast radius. Default: 0.8. */
+    maxPackUtilization?: number;
+    /** Max active jobs placed on one worker, even if slots/vCPU remain. Useful to cap spot interruption blast radius. */
+    maxActiveJobsPerWorker?: number;
     /** Per-repo job concurrency caps. Key: 'owner/repo' or 'owner/*' (org-wide). */
     concurrencyLimits?: Record<string, number>;
     /** Global default max concurrent jobs per repo when no specific limit matches. */
@@ -102,6 +109,8 @@ export interface BurstGridConfig {
     s3Cache?: { bucketName: string; region?: string; keyPrefix?: string };
     /** Pre-warmed Firecracker snapshot pool for ~5ms VM restore instead of ~150ms cold boot. */
     snapshotPool?: { size?: number; snapshotDir?: string };
+    /** How runner/cache secrets are delivered to Firecracker guests. Default: 'mmds'. */
+    secretDelivery?: 'mmds' | 'cmdline';
   };
   autoscaler?: {
     enabled?: boolean;
@@ -165,6 +174,9 @@ export function loadConfig(configPath?: string): BurstGridConfig {
  *   BURSTGRID_S3_CACHE_BUCKET    → worker.s3Cache.bucketName
  *   BURSTGRID_S3_CACHE_REGION    → worker.s3Cache.region
  *   BURSTGRID_SNAPSHOT_POOL_SIZE → worker.snapshotPool.size
+ *   BURSTGRID_SECRET_DELIVERY    → worker.secretDelivery (mmds|cmdline)
+ *   BURSTGRID_MAX_PACK_UTILIZATION → scheduler.maxPackUtilization (0-1)
+ *   BURSTGRID_MAX_JOBS_PER_WORKER  → scheduler.maxActiveJobsPerWorker
  */
 export function mergeEnvOverrides(cfg: BurstGridConfig): BurstGridConfig {
   const e = process.env;
@@ -196,10 +208,25 @@ export function mergeEnvOverrides(cfg: BurstGridConfig): BurstGridConfig {
       cfg.worker = { ...cfg.worker, snapshotPool: { ...cfg.worker?.snapshotPool, size } };
     }
   }
+  if (e.BURSTGRID_SECRET_DELIVERY === 'mmds' || e.BURSTGRID_SECRET_DELIVERY === 'cmdline') {
+    cfg.worker = { ...cfg.worker, secretDelivery: e.BURSTGRID_SECRET_DELIVERY };
+  }
   if (e.BURSTGRID_REPO_CONCURRENCY) {
     const limit = parseInt(e.BURSTGRID_REPO_CONCURRENCY, 10);
     if (!isNaN(limit) && limit > 0) {
       cfg.scheduler = { ...cfg.scheduler, defaultRepoConcurrency: limit };
+    }
+  }
+  if (e.BURSTGRID_MAX_PACK_UTILIZATION) {
+    const utilization = Number(e.BURSTGRID_MAX_PACK_UTILIZATION);
+    if (Number.isFinite(utilization) && utilization > 0 && utilization <= 1) {
+      cfg.scheduler = { ...cfg.scheduler, maxPackUtilization: utilization };
+    }
+  }
+  if (e.BURSTGRID_MAX_JOBS_PER_WORKER) {
+    const maxJobs = parseInt(e.BURSTGRID_MAX_JOBS_PER_WORKER, 10);
+    if (!isNaN(maxJobs) && maxJobs > 0) {
+      cfg.scheduler = { ...cfg.scheduler, maxActiveJobsPerWorker: maxJobs };
     }
   }
 

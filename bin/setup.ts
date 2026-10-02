@@ -3,14 +3,15 @@
  * burstgrid setup — scaffold deploy/terraform/terraform.tfvars from live AWS resources.
  *
  * Auto-detects your default VPC, first public subnet, and the latest Ubuntu 24.04
- * ARM64 AMI. Generates webhook_secret and worker_token. Writes terraform.tfvars
- * ready for `burstgrid deploy`.
+ * ARM64 AMI. Generates webhook and worker secrets, storing them in SSM by
+ * default. Writes terraform.tfvars ready for `burstgrid deploy`.
  *
  * Usage:
  *   npx burstgrid setup                     # bucket name derived from account ID
  *   npx burstgrid setup --bucket my-bucket
  *   npx burstgrid setup --region us-west-2
  *   npx burstgrid setup --ami ami-0abc123456789   # skip detection, use this AMI
+ *   npx burstgrid setup --secret-source terraform # legacy: write secrets to tfvars
  *   npx burstgrid setup --force             # overwrite existing terraform.tfvars
  */
 
@@ -33,6 +34,10 @@ function opt(name: string): string | undefined {
 const force  = flag('force');
 const region = opt('region') ?? process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION;
 const amiOverride = opt('ami');
+const secretSource = opt('secret-source') ?? 'ssm';
+if (secretSource !== 'ssm' && secretSource !== 'terraform') {
+  bail('--secret-source must be either "ssm" or "terraform".');
+}
 
 // ── AWS CLI helper ────────────────────────────────────────────────────────────
 
@@ -181,11 +186,25 @@ if (!amiOverride) {
     ok('Ubuntu 24.04 x86_64 AMI', x86AmiId);
   }
 }
-// 7. Generate secrets
+// 7. Generate secrets. SSM is the production default: instance bootstrap reads
+// these with its IAM role, keeping both state and launch-template user data clean.
 const webhookSecret = crypto.randomBytes(24).toString('hex');
 const workerToken   = crypto.randomBytes(24).toString('hex');
 ok('Webhook secret', '(generated)');
 ok('Worker token',   '(generated)');
+
+if (secretSource === 'ssm') {
+  const overwrite = force ? ['--overwrite'] : [];
+  awsCli(
+    ['ssm', 'put-parameter', '--name', '/burstgrid/webhook-secret', '--type', 'SecureString', '--value', webhookSecret, ...overwrite],
+    'Could not store webhook secret in SSM. Use --force to replace an existing parameter.',
+  );
+  awsCli(
+    ['ssm', 'put-parameter', '--name', '/burstgrid/worker-token', '--type', 'SecureString', '--value', workerToken, ...overwrite],
+    'Could not store worker token in SSM. Use --force to replace an existing parameter.',
+  );
+  ok('Secret source', 'SSM Parameter Store (/burstgrid)');
+}
 
 // ── Write terraform.tfvars ────────────────────────────────────────────────────
 
@@ -210,8 +229,11 @@ fs.writeFileSync(out, [
   `worker_ami          = "${amiId}"`,
   ...(x86AmiId ? [`worker_ami_x86     = "${x86AmiId}"  # x86_64 fleet AMI`] : []),
   `s3_artifacts_bucket = "${bucket}"`,
-  `webhook_secret      = "${webhookSecret}"`,
-  `worker_token        = "${workerToken}"`,
+  ...(secretSource === 'terraform' ? [
+    `secret_source      = "terraform"`,
+    `webhook_secret     = "${webhookSecret}"`,
+    `worker_token       = "${workerToken}"`,
+  ] : []),
   '',
 ].join('\n'), 'utf-8');
 
@@ -254,6 +276,6 @@ console.log('  7. Register GitHub webhook:');
 console.log('       GitHub repo → Settings → Webhooks → Add webhook');
 console.log(`       Payload URL:   http://<scheduler-ip>:8080/webhook`);
 console.log('       Content type:  application/json');
-console.log(`       Secret:        <webhook_secret from deploy/terraform/terraform.tfvars>`);
+console.log(`       Secret:        ${secretSource === 'ssm' ? '<value in SSM /burstgrid/webhook-secret>' : '<webhook_secret from deploy/terraform/terraform.tfvars>'}`);
 console.log('       Events:        select "Workflow jobs" (workflow_job)');
 console.log('');

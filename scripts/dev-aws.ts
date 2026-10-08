@@ -11,7 +11,7 @@
  */
 import { spawn, execSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { EC2Client, DescribeSubnetsCommand, CreateSecurityGroupCommand, AuthorizeSecurityGroupIngressCommand, CreateLaunchTemplateCommand } from '@aws-sdk/client-ec2';
+import { EC2Client, DescribeSubnetsCommand, CreateSecurityGroupCommand, AuthorizeSecurityGroupIngressCommand, CreateLaunchTemplateCommand, DescribeLaunchTemplatesCommand } from '@aws-sdk/client-ec2';
 import { IAMClient, CreateRoleCommand, CreateInstanceProfileCommand, AddRoleToInstanceProfileCommand } from '@aws-sdk/client-iam';
 import { SSMClient, PutParameterCommand } from '@aws-sdk/client-ssm';
 import { S3Client, CreateBucketCommand } from '@aws-sdk/client-s3';
@@ -124,7 +124,7 @@ async function seedResources() {
       ],
     })));
   }
-  await createIfMissing('launch template burstgrid-dev-worker-template', () => ec2.send(new CreateLaunchTemplateCommand({
+  const lt = await createIfMissing('launch template burstgrid-dev-worker-template', () => ec2.send(new CreateLaunchTemplateCommand({
     LaunchTemplateName: 'burstgrid-dev-worker-template',
     LaunchTemplateData: {
       ImageId: 'ami-alpine', // smallest catalog image — fast to pull
@@ -133,6 +133,14 @@ async function seedResources() {
       ...(sgId ? { SecurityGroupIds: [sgId] } : {}),
     },
   })));
+  // createIfMissing returns null on "already exists" (reruns) — look the existing one up instead.
+  let launchTemplateId = lt?.LaunchTemplate?.LaunchTemplateId;
+  if (!launchTemplateId) {
+    const { LaunchTemplates } = await ec2.send(new DescribeLaunchTemplatesCommand({
+      LaunchTemplateNames: ['burstgrid-dev-worker-template'],
+    }));
+    launchTemplateId = LaunchTemplates?.[0]?.LaunchTemplateId;
+  }
 
   // S3 / SQS / DynamoDB — the backends BurstGrid's own code talks to directly.
   await createIfMissing('S3 bucket burstgrid-dev-cache', () => s3.send(new CreateBucketCommand({ Bucket: 'burstgrid-dev-cache' })));
@@ -182,6 +190,8 @@ async function seedResources() {
   return {
     sqsQueueUrl: jobsQueue!.QueueUrl!,
     spotQueueUrl: spotQueue!.QueueUrl!,
+    launchTemplateId: launchTemplateId!,
+    subnetIds,
   };
 }
 
@@ -192,7 +202,7 @@ async function main() {
   console.log('Waiting for Floci to be ready...');
   await waitForFloci();
 
-  const { sqsQueueUrl, spotQueueUrl } = await seedResources();
+  const { sqsQueueUrl, spotQueueUrl, launchTemplateId, subnetIds } = await seedResources();
 
   Object.assign(process.env, {
     BURSTGRID_SQS_QUEUE_URL: sqsQueueUrl,
@@ -204,6 +214,10 @@ async function main() {
     GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? 'local-dev-placeholder-token',
     BURSTGRID_SCHEDULER_URL: 'http://localhost:8080',
     BURSTGRID_MODE: process.env.BURSTGRID_MODE ?? 'simulate',
+    // Without these the autoscaler has zero fleets and can never launch a worker in Floci,
+    // no matter how much queue demand builds up.
+    BURSTGRID_LAUNCH_TEMPLATE_ID: launchTemplateId,
+    BURSTGRID_SUBNET_IDS: subnetIds.join(','),
   });
 
   console.log('\nResources ready. Launching scheduler + worker agent (hot reload)...\n');

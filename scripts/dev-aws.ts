@@ -134,6 +134,13 @@ async function seedResources() {
       InstanceType: 't3.micro',
       IamInstanceProfile: { Name: 'burstgrid-worker-profile' },
       ...(sgId ? { SecurityGroupIds: [sgId] } : {}),
+      // Autoscaler.tryLaunch() doesn't tag instances itself — production relies on the real
+      // launch template's tag_specifications for this; mirror that here so Floci's UI can tell
+      // a launched worker apart from anything else instead of showing a bare instance ID.
+      TagSpecifications: [{
+        ResourceType: 'instance',
+        Tags: [{ Key: 'Name', Value: 'burstgrid-worker-default' }],
+      }],
     },
   })));
   // createIfMissing returns null on "already exists" (reruns) — look the existing one up instead.

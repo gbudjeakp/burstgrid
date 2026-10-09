@@ -33,8 +33,11 @@ async function createIfMissing<T>(label: string, fn: () => Promise<T>): Promise<
     console.log(`  created: ${label}`);
     return result;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (/already exists|AlreadyExists|EntityAlreadyExists|BucketAlreadyOwnedByYou|QueueAlreadyExists|ResourceInUse|TrailAlreadyExists/i.test(msg)) {
+    // AWS error shapes vary by service — "already exists" isn't the only phrasing (EC2 uses
+    // "already in use" for launch templates) — check the error code too, not just the message.
+    const e = err as { name?: string; message?: string; Code?: string };
+    const text = [e.name, e.message, e.Code].filter(Boolean).join(' ');
+    if (/already exists|AlreadyExists|EntityAlreadyExists|BucketAlreadyOwnedByYou|QueueAlreadyExists|ResourceInUse|TrailAlreadyExists|already in use/i.test(text)) {
       console.log(`  exists:  ${label}`);
       return null;
     }
@@ -214,10 +217,19 @@ async function main() {
     GITHUB_TOKEN: process.env.GITHUB_TOKEN ?? 'local-dev-placeholder-token',
     BURSTGRID_SCHEDULER_URL: 'http://localhost:8080',
     BURSTGRID_MODE: process.env.BURSTGRID_MODE ?? 'simulate',
-    // Without these the autoscaler has zero fleets and can never launch a worker in Floci,
-    // no matter how much queue demand builds up.
-    BURSTGRID_LAUNCH_TEMPLATE_ID: launchTemplateId,
-    BURSTGRID_SUBNET_IDS: subnetIds.join(','),
+    // BURSTGRID_FLEETS wins over burstgrid.config.yaml's autoscaler.fleets (which ships with
+    // placeholder lt-REPLACE_ME IDs for `npx burstgrid init`) — without this override the
+    // autoscaler tries to launch against a launch template that doesn't exist in Floci.
+    BURSTGRID_FLEETS: JSON.stringify([{
+      name: 'default',
+      sizeTag: '',
+      launchTemplateId,
+      subnetIds,
+      maxWorkers: 2,
+      slotsPerWorker: 4,
+      scaleUpThreshold: 1,
+      capacityType: 'on-demand',
+    }]),
   });
 
   console.log('\nResources ready. Launching scheduler + worker agent (hot reload)...\n');

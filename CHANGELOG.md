@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.15.1](https://github.com/gbudjeakp/burstgrid/compare/v1.15.0...v1.15.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* dev-aws.ts idempotency check and fleet override ([#59](https://github.com/gbudjeakp/burstgrid/issues/59)) ([4719af2](https://github.com/gbudjeakp/burstgrid/commit/4719af2531f9c60b326fbcaf2640b90b3e7f8647))
+* wire launch template + subnets into the scheduler env in dev-aws.ts ([#57](https://github.com/gbudjeakp/burstgrid/issues/57)) ([ac1217e](https://github.com/gbudjeakp/burstgrid/commit/ac1217e7f0a28cc673b00c90dd90b952d688f36c))
+
 ## [1.15.0](https://github.com/gbudjeakp/burstgrid/compare/v1.14.0...v1.15.0) (2026-10-02)
 
 

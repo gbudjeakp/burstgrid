@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.15.2](https://github.com/gbudjeakp/burstgrid/compare/v1.15.1...v1.15.2) (2026-10-09)
+
+
+### Bug Fixes
+
+* tag dev-aws.ts's worker launch template so instances are identifiable ([#60](https://github.com/gbudjeakp/burstgrid/issues/60)) ([1625206](https://github.com/gbudjeakp/burstgrid/commit/1625206c622bea40f1d000f2c2aaf05dd6e16190))
+
 ## [1.15.1](https://github.com/gbudjeakp/burstgrid/compare/v1.15.0...v1.15.1) (2026-10-09)
 
 
